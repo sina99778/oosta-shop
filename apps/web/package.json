@@ -1,0 +1,8 @@
+{
+  "name": "@oosta/web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "node -e \"console.log('web placeholder — Next.js is bootstrapped in Phase 7')\""
+  }
+}

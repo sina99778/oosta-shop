@@ -1,0 +1,23 @@
+# Local development services.
+# Usage: npm run db:up   (start Postgres)   /   npm run db:down   (stop)
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: oosta-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: oosta
+      POSTGRES_PASSWORD: oosta
+      POSTGRES_DB: oosta
+    ports:
+      - "5432:5432"
+    volumes:
+      - oosta_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oosta -d oosta"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  oosta_pgdata:
