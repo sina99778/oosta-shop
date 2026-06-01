@@ -1,15 +1,24 @@
-// Placeholder entry point for the API.
-// The real Express server (config, security middleware, routes) is built in Phase 2.
+// API entry point. Loads environment variables first (dotenv), then boots the
+// HTTP server with graceful shutdown.
 
-export const appInfo = {
-  name: "oosta-api",
-  status: "scaffold",
-} as const;
+import "dotenv/config";
+import { env } from "./config/env";
+import { createApp } from "./app";
+import { prisma } from "./lib/prisma";
 
-function main(): void {
-  console.log(`[${appInfo.name}] scaffold ready (${appInfo.status})`);
+const app = createApp();
+
+const server = app.listen(env.API_PORT, () => {
+  console.log(`[oosta-api] listening on http://localhost:${env.API_PORT} (${env.NODE_ENV})`);
+});
+
+async function shutdown(signal: string): Promise<void> {
+  console.log(`\n[oosta-api] ${signal} received — shutting down...`);
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await prisma.$disconnect();
+  console.log("[oosta-api] shutdown complete");
+  process.exit(0);
 }
 
-if (require.main === module) {
-  main();
-}
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
