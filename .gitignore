@@ -17,6 +17,10 @@ out/
 # Local DB backups created by ./oosta.sh backup
 backups/
 
+# TLS certs / state written by ./oosta.sh ssl (never commit private keys)
+deploy/nginx/certs/*.pem
+deploy/nginx/.ssl-domain
+
 # Logs
 *.log
 npm-debug.log*

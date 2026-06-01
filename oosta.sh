@@ -218,13 +218,116 @@ cmd_restore() {
   if [ "$rc" -eq 0 ]; then ok "Restore complete."; else err "Restore failed (exit $rc)."; fi
 }
 
+# Write an HTTPS nginx config (HTTP->HTTPS redirect + TLS termination on origin).
+write_https_conf() {
+  local domain="$1"
+  cat >deploy/nginx/default.conf <<EOF
+server {
+  listen 80;
+  server_name ${domain} www.${domain};
+  location / { return 301 https://\$host\$request_uri; }
+}
+
+server {
+  listen 443 ssl;
+  http2 on;
+  server_name ${domain} www.${domain};
+
+  ssl_certificate     /etc/nginx/certs/fullchain.pem;
+  ssl_certificate_key /etc/nginx/certs/privkey.pem;
+  client_max_body_size 2m;
+
+  location /api/ {
+    proxy_pass http://api:4000/;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+  }
+  location / {
+    proxy_pass http://web:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+  }
+}
+EOF
+}
+
+install_renew_cron() {
+  local line
+  line="0 3 * * 1 cd $SCRIPT_DIR && ./oosta.sh renew-ssl >> /var/log/oosta-ssl.log 2>&1 # oosta-ssl"
+  { $SUDO crontab -l 2>/dev/null | grep -v 'oosta-ssl'; echo "$line"; } | $SUDO crontab - &&
+    ok "Weekly auto-renew cron installed."
+}
+
+# Obtain a Let's Encrypt cert (standalone) and switch nginx to HTTPS.
+# Requires the domain to point directly at this server (ArvanCloud proxy OFF).
+cmd_ssl() {
+  local domain="${1:-}" email="${2:-}" c
+  if [ -z "$domain" ]; then read_tty domain "Domain (e.g. oostaai.store): " || { err "No domain."; return; }; fi
+  if [ -z "$email" ]; then read_tty email "Email (Let's Encrypt notices): " || { err "No email."; return; }; fi
+
+  echo
+  warn "Let's Encrypt validates over port 80 of THIS server. First, in ArvanCloud:"
+  warn "  • turn the cloud/proxy OFF (DNS-only / grey) for @ and www so $domain points here"
+  warn "  • open ports 80 and 443 (sudo ufw allow 80/tcp && sudo ufw allow 443/tcp)"
+  read_tty c "Type 'yes' when DNS points directly to this server: " || return
+  [ "$c" = "yes" ] || { info "Cancelled."; return; }
+
+  if ! command -v certbot >/dev/null 2>&1; then
+    info "Installing certbot…"
+    $SUDO apt-get update -y && $SUDO apt-get install -y certbot
+  fi
+
+  info "Stopping nginx to free port 80…"
+  dc stop nginx >/dev/null 2>&1 || true
+  if $SUDO certbot certonly --standalone --non-interactive --agree-tos -m "$email" -d "$domain" -d "www.$domain"; then
+    mkdir -p deploy/nginx/certs
+    $SUDO cp "/etc/letsencrypt/live/$domain/fullchain.pem" deploy/nginx/certs/fullchain.pem
+    $SUDO cp "/etc/letsencrypt/live/$domain/privkey.pem" deploy/nginx/certs/privkey.pem
+    $SUDO chmod 600 deploy/nginx/certs/privkey.pem 2>/dev/null || true
+    printf '%s\n' "$domain" >deploy/nginx/.ssl-domain
+    write_https_conf "$domain"
+    info "Starting nginx with HTTPS…"
+    dc up -d nginx
+    install_renew_cron
+    ok "HTTPS is live at https://$domain"
+    warn "Now set PUBLIC_ORIGIN=https://$domain in .env.production, then run: ./oosta.sh up"
+  else
+    err "certbot failed — confirm $domain resolves to this server and 80/443 are open."
+    dc up -d nginx >/dev/null 2>&1 || true
+  fi
+}
+
+cmd_renew_ssl() {
+  local domain=""
+  [ -f deploy/nginx/.ssl-domain ] && domain=$(cat deploy/nginx/.ssl-domain)
+  info "Renewing certificates…"
+  dc stop nginx >/dev/null 2>&1 || true
+  $SUDO certbot renew --quiet || warn "certbot renew returned non-zero"
+  if [ -n "$domain" ] && [ -f "/etc/letsencrypt/live/$domain/fullchain.pem" ]; then
+    $SUDO cp "/etc/letsencrypt/live/$domain/fullchain.pem" deploy/nginx/certs/fullchain.pem
+    $SUDO cp "/etc/letsencrypt/live/$domain/privkey.pem" deploy/nginx/certs/privkey.pem
+    $SUDO chmod 600 deploy/nginx/certs/privkey.pem 2>/dev/null || true
+  fi
+  dc up -d nginx
+  ok "Renew cycle complete."
+}
+
 usage() {
   cat <<EOF
 oostaAI manager
   ./oosta.sh                 interactive menu
   ./oosta.sh doctor [fix]    diagnose (and optionally auto-fix)
+  ./oosta.sh ssl <domain> <email>   set up Let's Encrypt HTTPS on this server
   ./oosta.sh up | down | status | logs | seed | update | config
-  ./oosta.sh backup | restore <file.sql[.gz]>
+  ./oosta.sh backup | restore <file.sql[.gz]> | renew-ssl
 EOF
 }
 
@@ -234,30 +337,32 @@ menu() {
     echo "${BOLD}oostaAI — setup menu${RESET}"
     echo "   1) Install / start  (build & launch)"
     echo "   2) Configure .env.production (guided)"
-    echo "   3) Doctor (diagnose)"
-    echo "   4) Doctor + auto-fix"
-    echo "   5) Status"
-    echo "   6) Logs (api + web)"
-    echo "   7) Seed sample data"
-    echo "   8) Backup database (save locally)"
-    echo "   9) Restore database (from a file)"
-    echo "  10) Update (git pull + rebuild)"
-    echo "  11) Stop"
+    echo "   3) Set up HTTPS (Let's Encrypt)"
+    echo "   4) Doctor (diagnose)"
+    echo "   5) Doctor + auto-fix"
+    echo "   6) Status"
+    echo "   7) Logs (api + web)"
+    echo "   8) Seed sample data"
+    echo "   9) Backup database (save locally)"
+    echo "  10) Restore database (from a file)"
+    echo "  11) Update (git pull + rebuild)"
+    echo "  12) Stop"
     echo "   0) Exit"
     local choice=""
-    read_tty choice "Choose [0-11]: " || { warn "No terminal available — run ./oosta.sh from an interactive shell, or use a subcommand (./oosta.sh doctor)."; return 0; }
+    read_tty choice "Choose [0-12]: " || { warn "No terminal available — run ./oosta.sh from an interactive shell, or use a subcommand (./oosta.sh doctor)."; return 0; }
     case "$choice" in
       1) cmd_up ;;
       2) cmd_config ;;
-      3) doctor ;;
-      4) doctor fix ;;
-      5) cmd_status ;;
-      6) cmd_logs ;;
-      7) cmd_seed ;;
-      8) cmd_backup ;;
-      9) cmd_restore ;;
-      10) cmd_update ;;
-      11) cmd_down ;;
+      3) cmd_ssl ;;
+      4) doctor ;;
+      5) doctor fix ;;
+      6) cmd_status ;;
+      7) cmd_logs ;;
+      8) cmd_seed ;;
+      9) cmd_backup ;;
+      10) cmd_restore ;;
+      11) cmd_update ;;
+      12) cmd_down ;;
       0) exit 0 ;;
       *) warn "Unknown option: ${choice:-（empty）}" ;;
     esac
@@ -273,6 +378,8 @@ case "${1:-menu}" in
   seed) cmd_seed ;;
   backup) cmd_backup ;;
   restore) cmd_restore "${2:-}" ;;
+  ssl) cmd_ssl "${2:-}" "${3:-}" ;;
+  renew-ssl) cmd_renew_ssl ;;
   update) cmd_update ;;
   config) cmd_config ;;
   menu | "") menu ;;
