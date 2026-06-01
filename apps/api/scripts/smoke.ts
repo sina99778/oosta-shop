@@ -184,8 +184,87 @@ function testRoleGuard(): void {
   );
 }
 
+async function testCatalog(): Promise<void> {
+  const cats = await get("/categories");
+  const catList = body(cats).categories as Array<Record<string, unknown>> | undefined;
+  record("GET /categories -> 200", cats.statusCode === 200, `status=${cats.statusCode}`);
+  record(
+    "categories: 3 with productCount",
+    Array.isArray(catList) && catList.length === 3 && typeof catList[0]?.productCount === "number",
+    JSON.stringify(catList?.map((c) => c.slug)),
+  );
+
+  const all = await get("/products");
+  const allBody = body(all) as { items?: unknown[]; pagination?: Record<string, unknown> };
+  record(
+    "GET /products -> total 4",
+    all.statusCode === 200 && allBody.pagination?.total === 4,
+    JSON.stringify(allBody.pagination),
+  );
+
+  const ai = await get("/products?category=ai-accounts");
+  const aiBody = body(ai) as { pagination?: Record<string, unknown> };
+  record(
+    "filter category=ai-accounts -> total 2",
+    aiBody.pagination?.total === 2,
+    JSON.stringify(aiBody.pagination),
+  );
+
+  const asc = await get("/products?sort=price_asc&pageSize=50");
+  const ascItems = (body(asc).items as Array<Record<string, unknown>>) ?? [];
+  const firstPrice = Number(ascItems[0]?.priceFrom);
+  const lastPrice = Number(ascItems[ascItems.length - 1]?.priceFrom);
+  record(
+    "sort=price_asc ascending",
+    ascItems.length > 1 && firstPrice <= lastPrice,
+    `first=${firstPrice} last=${lastPrice}`,
+  );
+
+  const paged = await get("/products?pageSize=2&page=1");
+  const pagedBody = body(paged) as { items?: unknown[]; pagination?: Record<string, unknown> };
+  record(
+    "pagination pageSize=2 -> 2 items / totalPages 2",
+    pagedBody.items?.length === 2 && pagedBody.pagination?.totalPages === 2,
+    JSON.stringify(pagedBody.pagination),
+  );
+
+  const best = await get("/products/bestselling?limit=2");
+  const bestList = body(best).products as unknown[] | undefined;
+  record(
+    "GET /products/bestselling -> 1..2 items",
+    best.statusCode === 200 &&
+      Array.isArray(bestList) &&
+      bestList.length > 0 &&
+      bestList.length <= 2,
+    `len=${bestList?.length}`,
+  );
+
+  const detail = await get("/products/chatgpt-plus-account");
+  const product = body(detail).product as Record<string, unknown> | undefined;
+  const plans = product?.plans as Array<Record<string, unknown>> | undefined;
+  record(
+    "GET /products/:slug -> 200 with 2 plans",
+    detail.statusCode === 200 && plans?.length === 2,
+    `status=${detail.statusCode} plans=${plans?.length}`,
+  );
+  record(
+    "plan exposes live stock (availableStock>0 & inStock)",
+    Boolean(plans?.[0] && Number(plans[0].availableStock) > 0 && plans[0].inStock === true),
+    JSON.stringify(plans?.map((p) => ({ label: p.label, stock: p.availableStock }))),
+  );
+  record(
+    "product priceFrom = 350000",
+    Number(product?.priceFrom) === 350000,
+    String(product?.priceFrom),
+  );
+
+  const missing = await get("/products/nope-not-real");
+  record("unknown product -> 404", missing.statusCode === 404, `status=${missing.statusCode}`);
+}
+
 async function main(): Promise<void> {
   await testFoundation();
+  await testCatalog();
   await testAuth();
   testRoleGuard();
 
