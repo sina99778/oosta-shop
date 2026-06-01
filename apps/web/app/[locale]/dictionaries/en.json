@@ -1,0 +1,46 @@
+{
+  "nav": {
+    "home": "Home",
+    "products": "Products",
+    "dashboard": "Dashboard",
+    "admin": "Admin",
+    "login": "Log in",
+    "signup": "Sign up",
+    "logout": "Log out",
+    "account": "Account"
+  },
+  "common": {
+    "loading": "Loading…",
+    "buyNow": "Buy now",
+    "inStock": "In stock",
+    "outOfStock": "Out of stock",
+    "price": "Price",
+    "from": "From",
+    "viewAll": "View all",
+    "selectPlan": "Select a plan"
+  },
+  "home": {
+    "heroTitle": "Digital products, delivered instantly",
+    "heroSubtitle": "AI accounts, licenses, and gift cards — delivered the moment your payment is confirmed.",
+    "browse": "Browse products",
+    "categories": "Categories",
+    "bestsellers": "Bestsellers"
+  },
+  "auth": {
+    "loginTitle": "Welcome back",
+    "signupTitle": "Create your account",
+    "emailOrPhone": "Email or phone",
+    "email": "Email",
+    "phone": "Phone",
+    "password": "Password",
+    "name": "Name",
+    "loginCta": "Log in",
+    "signupCta": "Sign up",
+    "haveAccount": "Already have an account?",
+    "noAccount": "Don't have an account?"
+  },
+  "footer": {
+    "tagline": "Instant digital goods delivery",
+    "rights": "All rights reserved."
+  }
+}

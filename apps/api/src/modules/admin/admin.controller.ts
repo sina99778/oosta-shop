@@ -51,11 +51,9 @@ export async function deleteProduct(req: Request, res: Response): Promise<void> 
 
 // Plans
 export async function createPlan(req: Request, res: Response): Promise<void> {
-  res
-    .status(201)
-    .json({
-      plan: await admin.createPlan(String(req.params.productId), req.body as CreatePlanInput),
-    });
+  res.status(201).json({
+    plan: await admin.createPlan(String(req.params.productId), req.body as CreatePlanInput),
+  });
 }
 export async function updatePlan(req: Request, res: Response): Promise<void> {
   res.json({ plan: await admin.updatePlan(String(req.params.id), req.body as UpdatePlanInput) });
