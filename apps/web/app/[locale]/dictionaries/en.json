@@ -71,6 +71,33 @@
     "backToStore": "Back to store",
     "missingParams": "Missing payment information."
   },
+  "dashboard": {
+    "orders": "Your orders",
+    "noOrders": "You haven't placed any orders yet.",
+    "orderNo": "Order",
+    "items": "items",
+    "viewDetails": "View details",
+    "vault": "Account vault",
+    "noCredentials": "Credentials appear here once payment is confirmed.",
+    "reveal": "Reveal",
+    "hide": "Hide",
+    "copy": "Copy",
+    "copied": "Copied",
+    "backToDashboard": "Back to dashboard",
+    "fields": {
+      "accountEmail": "Email",
+      "accountPassword": "Password",
+      "licenseKey": "License key",
+      "giftCardCode": "Gift card code"
+    },
+    "status": {
+      "PENDING": "Pending",
+      "PAID": "Paid",
+      "FAILED": "Failed",
+      "REFUNDED": "Refunded",
+      "EXPIRED": "Expired"
+    }
+  },
   "footer": {
     "tagline": "Instant digital goods delivery",
     "rights": "All rights reserved."

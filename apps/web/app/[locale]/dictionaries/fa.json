@@ -71,6 +71,33 @@
     "backToStore": "بازگشت به فروشگاه",
     "missingParams": "اطلاعات پرداخت ناقص است."
   },
+  "dashboard": {
+    "orders": "سفارش‌های شما",
+    "noOrders": "هنوز سفارشی ثبت نکرده‌اید.",
+    "orderNo": "سفارش",
+    "items": "آیتم",
+    "viewDetails": "مشاهده جزئیات",
+    "vault": "گاوصندوق حساب",
+    "noCredentials": "اطلاعات پس از تأیید پرداخت اینجا نمایش داده می‌شود.",
+    "reveal": "نمایش",
+    "hide": "پنهان",
+    "copy": "کپی",
+    "copied": "کپی شد",
+    "backToDashboard": "بازگشت به داشبورد",
+    "fields": {
+      "accountEmail": "ایمیل",
+      "accountPassword": "رمز عبور",
+      "licenseKey": "کلید لایسنس",
+      "giftCardCode": "کد گیفت‌کارت"
+    },
+    "status": {
+      "PENDING": "در انتظار",
+      "PAID": "پرداخت‌شده",
+      "FAILED": "ناموفق",
+      "REFUNDED": "بازگشت داده‌شده",
+      "EXPIRED": "منقضی‌شده"
+    }
+  },
   "footer": {
     "tagline": "تحویل آنی محصولات دیجیتال",
     "rights": "تمامی حقوق محفوظ است."
