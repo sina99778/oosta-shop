@@ -320,12 +320,44 @@ cmd_renew_ssl() {
   ok "Renew cycle complete."
 }
 
+# Get a Let's Encrypt cert via DNS-01 (works even when a CDN like ArvanCloud
+# proxies the domain). You add a TXT record, certbot issues the cert, and we print
+# it so you can upload it to the CDN edge as a custom certificate.
+cmd_ssl_dns() {
+  local domain="${1:-}" email="${2:-}"
+  if [ -z "$domain" ]; then read_tty domain "Domain (e.g. oostaai.store): " || { err "No domain."; return; }; fi
+  if [ -z "$email" ]; then read_tty email "Email (Let's Encrypt notices): " || { err "No email."; return; }; fi
+  if ! command -v certbot >/dev/null 2>&1; then
+    info "Installing certbot…"; $SUDO apt-get update -y && $SUDO apt-get install -y certbot
+  fi
+  echo
+  info "certbot will print a TXT record to add in your ArvanCloud DNS panel."
+  info "Record name: _acme-challenge   (type TXT).  Add it, then verify with:"
+  info "  dig +short TXT _acme-challenge.$domain"
+  info "Once it resolves, press Enter in certbot to continue."
+  echo
+  if ! $SUDO certbot certonly --manual --preferred-challenges dns --agree-tos -m "$email" -d "$domain" -d "www.$domain"; then
+    err "certbot failed."
+    return
+  fi
+  echo
+  ok "Certificate issued. Upload these in ArvanCloud → SSL → custom certificate:"
+  echo "${BOLD}----- CERTIFICATE (fullchain.pem) -----${RESET}"
+  $SUDO cat "/etc/letsencrypt/live/$domain/fullchain.pem"
+  echo "${BOLD}----- PRIVATE KEY (privkey.pem) -----${RESET}"
+  $SUDO cat "/etc/letsencrypt/live/$domain/privkey.pem"
+  echo
+  warn "In ArvanCloud: keep the cloud/proxy ON, set origin protocol to HTTP, force HTTPS on."
+  warn "Renew every ~90 days: re-run this command and re-upload the new certificate."
+}
+
 usage() {
   cat <<EOF
 oostaAI manager
   ./oosta.sh                 interactive menu
   ./oosta.sh doctor [fix]    diagnose (and optionally auto-fix)
-  ./oosta.sh ssl <domain> <email>   set up Let's Encrypt HTTPS on this server
+  ./oosta.sh ssl <domain> <email>       Let's Encrypt on this server (direct / CDN proxy OFF)
+  ./oosta.sh ssl-dns <domain> <email>   Let's Encrypt via DNS-01 (works behind ArvanCloud CDN)
   ./oosta.sh up | down | status | logs | seed | update | config
   ./oosta.sh backup | restore <file.sql[.gz]> | renew-ssl
 EOF
@@ -379,6 +411,7 @@ case "${1:-menu}" in
   backup) cmd_backup ;;
   restore) cmd_restore "${2:-}" ;;
   ssl) cmd_ssl "${2:-}" "${3:-}" ;;
+  ssl-dns) cmd_ssl_dns "${2:-}" "${3:-}" ;;
   renew-ssl) cmd_renew_ssl ;;
   update) cmd_update ;;
   config) cmd_config ;;
