@@ -1,0 +1,12 @@
+// Password hashing helpers (bcrypt via bcryptjs — pure JS, no native build).
+
+import bcrypt from "bcryptjs";
+import { env } from "../config/env";
+
+export function hashPassword(plain: string): Promise<string> {
+  return bcrypt.hash(plain, env.BCRYPT_SALT_ROUNDS);
+}
+
+export function verifyPassword(plain: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(plain, hash);
+}

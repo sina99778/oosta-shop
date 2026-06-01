@@ -9,6 +9,7 @@ import { env } from "./config/env";
 import { globalRateLimiter } from "./middleware/rateLimit";
 import { errorHandler, notFoundHandler } from "./middleware/error";
 import { healthRouter } from "./routes/health";
+import { authRouter } from "./modules/auth/auth.routes";
 
 export function createApp() {
   const app = express();
@@ -30,7 +31,8 @@ export function createApp() {
 
   // Routes
   app.use("/health", healthRouter);
-  // Future routers (auth, catalog, orders, admin) mount here in later phases.
+  app.use("/auth", authRouter);
+  // Future routers (catalog, orders, admin) mount here in later phases.
 
   // 404 + error handling (must be last)
   app.use(notFoundHandler);
