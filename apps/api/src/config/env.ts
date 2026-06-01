@@ -36,6 +36,28 @@ function loadEnv() {
   }
 
   const data = parsed.data;
+
+  // Production safety guards: refuse to boot with insecure placeholder values.
+  if (data.NODE_ENV === "production") {
+    const problems: string[] = [];
+    if (data.JWT_SECRET === "dev-only-secret-change-me") {
+      problems.push("JWT_SECRET must be set to a strong, unique value in production");
+    }
+    if (
+      data.PAYMENT_PROVIDER === "zarinpal" &&
+      data.ZARINPAL_MERCHANT_ID === "00000000-0000-0000-0000-000000000000"
+    ) {
+      problems.push(
+        "ZARINPAL_MERCHANT_ID must be set when PAYMENT_PROVIDER=zarinpal in production",
+      );
+    }
+    if (problems.length > 0) {
+      throw new Error(
+        `Unsafe production configuration:\n${problems.map((p) => `  - ${p}`).join("\n")}`,
+      );
+    }
+  }
+
   return {
     ...data,
     isProduction: data.NODE_ENV === "production",

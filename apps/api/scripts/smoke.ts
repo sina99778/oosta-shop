@@ -604,12 +604,95 @@ async function testAdmin(): Promise<void> {
   await prisma.user.delete({ where: { id: userId } });
 }
 
+async function testSecurity(): Promise<void> {
+  ip = "10.10.0.4";
+  const suffix = Math.floor(Math.random() * 1e9)
+    .toString()
+    .padStart(9, "0");
+
+  const signupA = await post("/auth/signup", {
+    name: "Sec A",
+    email: `seca_${suffix}@example.com`,
+    password: "Sec@12345",
+  });
+  const signupB = await post("/auth/signup", {
+    name: "Sec B",
+    email: `secb_${suffix}@example.com`,
+    password: "Sec@12345",
+  });
+  const tokenA = String(body(signupA).token);
+  const tokenB = String(body(signupB).token);
+  const userAId = String(obj(body(signupA).user).id);
+  const userBId = String(obj(body(signupB).user).id);
+
+  // Isolated product with one unit
+  const category = await prisma.category.findUnique({ where: { slug: "ai-accounts" } });
+  const product = await prisma.product.create({
+    data: {
+      name: `Sec ${suffix}`,
+      slug: `sec-${suffix}`,
+      description: "Security test product.",
+      type: "ACCOUNT",
+      categoryId: category!.id,
+    },
+  });
+  const plan = await prisma.productPlan.create({
+    data: { productId: product.id, label: "P", price: 100000 },
+  });
+  await prisma.inventoryItem.create({
+    data: {
+      productId: product.id,
+      planId: plan.id,
+      type: "ACCOUNT",
+      accountEmail: `x_${suffix}@s.local`,
+      accountPassword: "p",
+    },
+  });
+
+  // A creates an order
+  const createA = await post("/orders", { items: [{ planId: plan.id, quantity: 1 }] }, tokenA);
+  const orderAId = String(obj(body(createA).order).id);
+
+  // B cannot read A's order
+  const cross = await get(`/orders/${orderAId}`, tokenB);
+  record("cross-user order access -> 404", cross.statusCode === 404, `status=${cross.statusCode}`);
+
+  // Unknown payment authority
+  const badVerify = await post("/payments/verify", {
+    authority: `nonexistent_${suffix}`,
+    status: "OK",
+  });
+  record(
+    "verify unknown authority -> 404",
+    badVerify.statusCode === 404,
+    `status=${badVerify.statusCode}`,
+  );
+
+  // Invalid order payloads
+  const q0 = await post("/orders", { items: [{ planId: plan.id, quantity: 0 }] }, tokenA);
+  record("order quantity 0 -> 400", q0.statusCode === 400, `status=${q0.statusCode}`);
+  const emptyItems = await post("/orders", { items: [] }, tokenA);
+  record(
+    "order empty items -> 400",
+    emptyItems.statusCode === 400,
+    `status=${emptyItems.statusCode}`,
+  );
+
+  // Cleanup
+  await prisma.order.deleteMany({ where: { userId: { in: [userAId, userBId] } } });
+  await prisma.inventoryItem.deleteMany({ where: { productId: product.id } });
+  await prisma.productPlan.deleteMany({ where: { productId: product.id } });
+  await prisma.product.delete({ where: { id: product.id } });
+  await prisma.user.deleteMany({ where: { id: { in: [userAId, userBId] } } });
+}
+
 async function main(): Promise<void> {
   await testFoundation();
   await testCatalog();
   await testAuth();
   await testOrders();
   await testAdmin();
+  await testSecurity();
   testRoleGuard();
 
   let allPass = true;
