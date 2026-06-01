@@ -181,12 +181,50 @@ cmd_logs() { dc logs --tail=120 api web; }
 cmd_seed() { dc exec api npm run db:seed; }
 cmd_update() { info "Updating…"; git pull --ff-only && dc up -d --build && ok "Updated and restarted."; }
 
+cmd_backup() {
+  mkdir -p backups
+  local ts user db f
+  ts=$(date +%Y%m%d-%H%M%S)
+  user=$(get_env POSTGRES_USER); user=${user:-oosta}
+  db=$(get_env POSTGRES_DB); db=${db:-oosta}
+  f="backups/oosta-$ts.sql.gz"
+  info "Dumping database to $f …"
+  if dc exec -T postgres pg_dump --clean --if-exists --no-owner -U "$user" "$db" | gzip -9 >"$f"; then
+    ok "Backup saved: $f ($(du -h "$f" 2>/dev/null | cut -f1))"
+  else
+    err "Backup failed (is the stack running?)"; rm -f "$f"
+  fi
+}
+
+cmd_restore() {
+  local file="${1:-}"
+  if [ -z "$file" ]; then read_tty file "Path to backup (.sql or .sql.gz): " || { err "No file given."; return; }; fi
+  [ -f "$file" ] || { err "File not found: $file"; return; }
+  warn "This OVERWRITES the current database with: $file"
+  local confirm=""
+  read_tty confirm "Type 'yes' to continue: " || return
+  [ "$confirm" = "yes" ] || { info "Cancelled."; return; }
+  local user db rc
+  user=$(get_env POSTGRES_USER); user=${user:-oosta}
+  db=$(get_env POSTGRES_DB); db=${db:-oosta}
+  info "Stopping api during restore…"; dc stop api >/dev/null 2>&1 || true
+  if [ "${file##*.}" = "gz" ]; then
+    gunzip -c "$file" | dc exec -T postgres psql -v ON_ERROR_STOP=1 -U "$user" -d "$db"
+  else
+    dc exec -T postgres psql -v ON_ERROR_STOP=1 -U "$user" -d "$db" <"$file"
+  fi
+  rc=$?
+  info "Restarting api…"; dc start api >/dev/null 2>&1 || true
+  if [ "$rc" -eq 0 ]; then ok "Restore complete."; else err "Restore failed (exit $rc)."; fi
+}
+
 usage() {
   cat <<EOF
 oostaAI manager
   ./oosta.sh                 interactive menu
   ./oosta.sh doctor [fix]    diagnose (and optionally auto-fix)
   ./oosta.sh up | down | status | logs | seed | update | config
+  ./oosta.sh backup | restore <file.sql[.gz]>
 EOF
 }
 
@@ -194,18 +232,20 @@ menu() {
   while true; do
     echo
     echo "${BOLD}oostaAI — setup menu${RESET}"
-    echo "  1) Install / start  (build & launch)"
-    echo "  2) Configure .env.production (guided)"
-    echo "  3) Doctor (diagnose)"
-    echo "  4) Doctor + auto-fix"
-    echo "  5) Status"
-    echo "  6) Logs (api + web)"
-    echo "  7) Seed sample data"
-    echo "  8) Update (git pull + rebuild)"
-    echo "  9) Stop"
-    echo "  0) Exit"
+    echo "   1) Install / start  (build & launch)"
+    echo "   2) Configure .env.production (guided)"
+    echo "   3) Doctor (diagnose)"
+    echo "   4) Doctor + auto-fix"
+    echo "   5) Status"
+    echo "   6) Logs (api + web)"
+    echo "   7) Seed sample data"
+    echo "   8) Backup database (save locally)"
+    echo "   9) Restore database (from a file)"
+    echo "  10) Update (git pull + rebuild)"
+    echo "  11) Stop"
+    echo "   0) Exit"
     local choice=""
-    read_tty choice "Choose [0-9]: " || { warn "No terminal available — run ./oosta.sh from an interactive shell, or use a subcommand (./oosta.sh doctor)."; return 0; }
+    read_tty choice "Choose [0-11]: " || { warn "No terminal available — run ./oosta.sh from an interactive shell, or use a subcommand (./oosta.sh doctor)."; return 0; }
     case "$choice" in
       1) cmd_up ;;
       2) cmd_config ;;
@@ -214,8 +254,10 @@ menu() {
       5) cmd_status ;;
       6) cmd_logs ;;
       7) cmd_seed ;;
-      8) cmd_update ;;
-      9) cmd_down ;;
+      8) cmd_backup ;;
+      9) cmd_restore ;;
+      10) cmd_update ;;
+      11) cmd_down ;;
       0) exit 0 ;;
       *) warn "Unknown option: ${choice:-（empty）}" ;;
     esac
@@ -229,6 +271,8 @@ case "${1:-menu}" in
   status) cmd_status ;;
   logs) cmd_logs ;;
   seed) cmd_seed ;;
+  backup) cmd_backup ;;
+  restore) cmd_restore "${2:-}" ;;
   update) cmd_update ;;
   config) cmd_config ;;
   menu | "") menu ;;

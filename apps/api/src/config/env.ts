@@ -31,6 +31,13 @@ const EnvSchema = z.object({
     (value) => (value === "" || value === undefined ? undefined : value),
     z.coerce.number().int().positive().optional(),
   ),
+
+  // Automatic Telegram DB backups: send a dump every N hours (0 disables).
+  // Only runs when the bot is enabled.
+  BACKUP_INTERVAL_HOURS: z.preprocess(
+    (value) => (value === "" || value === undefined ? undefined : value),
+    z.coerce.number().int().min(0).max(168).default(24),
+  ),
 });
 
 function loadEnv() {

@@ -15,6 +15,10 @@ RUN npm run prisma:generate -w @oosta/api \
 FROM node:24-alpine AS runtime
 WORKDIR /app/apps/api
 ENV NODE_ENV=production
+# Postgres client (pg_dump/psql) for the Telegram backup/restore feature.
+RUN apk add --no-cache postgresql16-client \
+  || apk add --no-cache postgresql17-client \
+  || apk add --no-cache postgresql-client
 # Full node_modules (incl. Prisma CLI for migrate deploy) hoisted at the repo root.
 COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/apps/api/dist ./dist

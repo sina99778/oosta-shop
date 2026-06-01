@@ -40,6 +40,7 @@ services:
       ZARINPAL_CURRENCY: ${ZARINPAL_CURRENCY:-IRR}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_ADMIN_ID: ${TELEGRAM_ADMIN_ID:-}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,0 +1,43 @@
+// Database backup & restore helpers (used by the Telegram admin bot).
+// Requires pg_dump / psql + gzip in the runtime image (see apps/api/Dockerfile).
+
+import { spawn } from "node:child_process";
+import { mkdtemp } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { env } from "../config/env";
+
+function run(command: string, extraEnv: Record<string, string>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("sh", ["-c", command], { env: { ...process.env, ...extraEnv } });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(stderr.trim() || `process exited with code ${code}`));
+    });
+  });
+}
+
+// Creates a gzipped SQL snapshot and returns its file path (caller deletes it).
+export async function createBackup(): Promise<string> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "oosta-backup-"));
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const file = path.join(dir, `oosta-${stamp}.sql.gz`);
+  await run(
+    `pg_dump --clean --if-exists --no-owner --no-privileges "$DATABASE_URL" | gzip -9 > "$OUT"`,
+    { DATABASE_URL: env.DATABASE_URL, OUT: file },
+  );
+  return file;
+}
+
+// Restores a .sql or .sql.gz dump, replacing current data with the snapshot.
+export async function restoreFromFile(file: string): Promise<void> {
+  const command = file.endsWith(".gz")
+    ? `gunzip -c "$IN" | psql --set ON_ERROR_STOP=on "$DATABASE_URL"`
+    : `psql --set ON_ERROR_STOP=on -f "$IN" "$DATABASE_URL"`;
+  await run(command, { DATABASE_URL: env.DATABASE_URL, IN: file });
+}
