@@ -1,7 +1,7 @@
 // Telegram admin bot (Telegraf). Disabled unless TELEGRAM_BOT_TOKEN and
 // TELEGRAM_ADMIN_ID are set. Access is restricted strictly to the admin id.
 // Features: stats, recent orders, on-demand + scheduled DB backups, and restore
-// (admin sends a backup file captioned "restore"). Inline buttons + /commands.
+// (admin sends a backup file captioned "restore"). Fully button-driven; /start opens the menu.
 
 import { Telegraf, Markup } from "telegraf";
 import { message } from "telegraf/filters";
@@ -21,7 +21,10 @@ function mainMenu() {
       Markup.button.callback("📊 Stats", "stats"),
       Markup.button.callback("🧾 Last 5 orders", "orders"),
     ],
-    [Markup.button.callback("💾 Backup now", "backup")],
+    [
+      Markup.button.callback("💾 Backup now", "backup"),
+      Markup.button.callback("♻️ Restore", "restore"),
+    ],
   ]);
 }
 
@@ -83,21 +86,9 @@ export function startBot(): void {
     return next();
   });
 
+  // /start is the only command — it opens the button menu. Everything else is a button.
   bot.start((ctx) => ctx.reply("👋 oostaAI admin panel — choose an option:", mainMenu()));
 
-  // Text commands
-  bot.command("stats", async (ctx) => {
-    await ctx.reply(await statsMessage(), mainMenu());
-  });
-  bot.command("orders", async (ctx) => {
-    await ctx.reply(await ordersMessage(), mainMenu());
-  });
-  bot.command("backup", async (ctx) => {
-    await ctx.reply("📦 Creating backup…");
-    await sendBackup(ctx.chat?.id ?? adminId);
-  });
-
-  // Button taps
   bot.action("stats", async (ctx) => {
     await ctx.answerCbQuery();
     await ctx.reply(await statsMessage(), mainMenu());
@@ -109,6 +100,13 @@ export function startBot(): void {
   bot.action("backup", async (ctx) => {
     await ctx.answerCbQuery("Creating backup…");
     await sendBackup(ctx.chat?.id ?? adminId);
+  });
+  bot.action("restore", async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.reply(
+      "♻️ To restore, send me a backup file (.sql or .sql.gz) with the caption: restore",
+      mainMenu(),
+    );
   });
 
   // Restore: admin sends a .sql/.sql.gz dump with the caption "restore".
