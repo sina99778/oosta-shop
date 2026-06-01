@@ -13,7 +13,9 @@ import { requireRole } from "../src/middleware/auth";
 import { AppError } from "../src/utils/httpError";
 
 const app = createApp();
-const ip = "127.0.0.1";
+// Per-actor IP, reassigned at the start of each test group so their auth rate-limit
+// buckets stay independent (the limiter keys on client IP).
+let ip = "127.0.0.1";
 
 type Check = { name: string; pass: boolean; info: string };
 const checks: Check[] = [];
@@ -42,6 +44,17 @@ function get(url: string, token?: string): Promise<LightResponse> {
   const headers: Record<string, string> = {};
   if (token) headers.authorization = `Bearer ${token}`;
   return inject(app, { method: "GET", url, headers, remoteAddress: ip });
+}
+function patch(url: string, payload: unknown, token?: string): Promise<LightResponse> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (token) headers.authorization = `Bearer ${token}`;
+  return inject(app, {
+    method: "PATCH",
+    url,
+    headers,
+    payload: JSON.stringify(payload),
+    remoteAddress: ip,
+  });
 }
 
 async function testFoundation(): Promise<void> {
@@ -76,6 +89,7 @@ async function testFoundation(): Promise<void> {
 }
 
 async function testAuth(): Promise<void> {
+  ip = "10.10.0.1";
   const suffix = Math.floor(Math.random() * 1e9)
     .toString()
     .padStart(9, "0");
@@ -156,6 +170,23 @@ async function testAuth(): Promise<void> {
     invalid.statusCode === 400 && invErr?.code === "VALIDATION_ERROR",
     invalid.body,
   );
+
+  // Auth rate limiter trips after the limit (dedicated IP so other actors are unaffected)
+  let limited = false;
+  for (let i = 0; i < 12; i++) {
+    const attempt = await inject(app, {
+      method: "POST",
+      url: "/auth/login",
+      headers: { "content-type": "application/json" },
+      payload: JSON.stringify({ identifier: "nobody@example.com", password: "x" }),
+      remoteAddress: "10.99.0.1",
+    });
+    if (attempt.statusCode === 429) {
+      limited = true;
+      break;
+    }
+  }
+  record("auth rate limiter trips (429)", limited, "");
 }
 
 function testRoleGuard(): void {
@@ -266,6 +297,7 @@ async function testCatalog(): Promise<void> {
 }
 
 async function testOrders(): Promise<void> {
+  ip = "10.10.0.2";
   const suffix = Math.floor(Math.random() * 1e9)
     .toString()
     .padStart(9, "0");
@@ -430,11 +462,154 @@ async function testOrders(): Promise<void> {
   await prisma.user.delete({ where: { id: userId } });
 }
 
+async function testAdmin(): Promise<void> {
+  ip = "10.10.0.3";
+  const suffix = Math.floor(Math.random() * 1e9)
+    .toString()
+    .padStart(9, "0");
+
+  // Seeded admin
+  const adminLogin = await post("/auth/login", {
+    identifier: "admin@oosta.local",
+    password: "Admin@12345",
+  });
+  record("admin login -> 200", adminLogin.statusCode === 200, `status=${adminLogin.statusCode}`);
+  const adminToken = String(body(adminLogin).token);
+
+  // Plain user (for authz)
+  const userSignup = await post("/auth/signup", {
+    name: "Plain User",
+    email: `plain_${suffix}@example.com`,
+    password: "Plain@12345",
+  });
+  const userToken = String(body(userSignup).token);
+  const userId = String(obj(body(userSignup).user).id);
+
+  // Authorization
+  const noAuth = await get("/admin/products");
+  record("admin route no token -> 401", noAuth.statusCode === 401, `status=${noAuth.statusCode}`);
+  const asUser = await get("/admin/products", userToken);
+  record("admin route as USER -> 403", asUser.statusCode === 403, `status=${asUser.statusCode}`);
+
+  // Category
+  const catRes = await post(
+    "/admin/categories",
+    { name: `Smoke Cat ${suffix}`, slug: `smoke-cat-${suffix}` },
+    adminToken,
+  );
+  const categoryId = String(obj(body(catRes).category).id);
+  record("create category -> 201", catRes.statusCode === 201, `status=${catRes.statusCode}`);
+
+  // Product (LICENSE)
+  const slug = `smoke-admin-${suffix}`;
+  const prodRes = await post(
+    "/admin/products",
+    {
+      name: `Smoke Admin ${suffix}`,
+      slug,
+      description: "Admin-created product.",
+      type: "LICENSE",
+      categoryId,
+    },
+    adminToken,
+  );
+  const productId = String(obj(body(prodRes).product).id);
+  record("create product -> 201", prodRes.statusCode === 201, `status=${prodRes.statusCode}`);
+
+  // Plan
+  const planRes = await post(
+    `/admin/products/${productId}/plans`,
+    { label: "Lifetime", price: 500000 },
+    adminToken,
+  );
+  const planId = String(obj(body(planRes).plan).id);
+  record("create plan -> 201", planRes.statusCode === 201, `status=${planRes.statusCode}`);
+
+  // Bulk import (LICENSE -> licenseKey)
+  const bulkRes = await post(
+    "/admin/inventory/bulk",
+    {
+      planId,
+      items: [
+        { licenseKey: `KEY-${suffix}-1` },
+        { licenseKey: `KEY-${suffix}-2` },
+        { licenseKey: `KEY-${suffix}-3` },
+      ],
+    },
+    adminToken,
+  );
+  record(
+    "bulk import -> created 3",
+    bulkRes.statusCode === 201 && body(bulkRes).created === 3,
+    `status=${bulkRes.statusCode}`,
+  );
+
+  // Bulk import with wrong credential type -> 400
+  const badBulk = await post(
+    "/admin/inventory/bulk",
+    { planId, items: [{ accountEmail: "x@y.com", accountPassword: "p" }] },
+    adminToken,
+  );
+  record(
+    "bulk import wrong type -> 400",
+    badBulk.statusCode === 400,
+    `status=${badBulk.statusCode}`,
+  );
+
+  // List inventory
+  const invList = await get(`/admin/inventory?planId=${planId}&status=AVAILABLE`, adminToken);
+  const invBody = body(invList) as { pagination?: Record<string, unknown> };
+  record(
+    "list inventory -> total 3",
+    invList.statusCode === 200 && invBody.pagination?.total === 3,
+    JSON.stringify(invBody.pagination),
+  );
+
+  // Public catalog reflects the new product + live stock
+  const publicDetail = await get(`/products/${slug}`);
+  const pdPlans = (obj(body(publicDetail).product).plans as Array<Record<string, unknown>>) ?? [];
+  record(
+    "public catalog shows new product (stock 3)",
+    publicDetail.statusCode === 200 && Number(pdPlans[0]?.availableStock) === 3,
+    `status=${publicDetail.statusCode}`,
+  );
+
+  // Deactivate -> disappears from public catalog
+  const deact = await patch(`/admin/products/${productId}`, { isActive: false }, adminToken);
+  record(
+    "update product isActive=false -> 200",
+    deact.statusCode === 200,
+    `status=${deact.statusCode}`,
+  );
+  const publicAfter = await get(`/products/${slug}`);
+  record(
+    "inactive product -> 404 on public catalog",
+    publicAfter.statusCode === 404,
+    `status=${publicAfter.statusCode}`,
+  );
+
+  // Orders overview
+  const overview = await get("/admin/orders", adminToken);
+  record(
+    "admin orders overview -> 200",
+    overview.statusCode === 200 && Array.isArray((body(overview) as { items?: unknown[] }).items),
+    `status=${overview.statusCode}`,
+  );
+
+  // Cleanup
+  await prisma.inventoryItem.deleteMany({ where: { productId } });
+  await prisma.productPlan.deleteMany({ where: { productId } });
+  await prisma.product.delete({ where: { id: productId } });
+  await prisma.category.delete({ where: { id: categoryId } });
+  await prisma.user.delete({ where: { id: userId } });
+}
+
 async function main(): Promise<void> {
   await testFoundation();
   await testCatalog();
   await testAuth();
   await testOrders();
+  await testAdmin();
   testRoleGuard();
 
   let allPass = true;

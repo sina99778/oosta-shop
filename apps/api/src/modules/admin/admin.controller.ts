@@ -1,0 +1,81 @@
+// HTTP handlers for admin endpoints. Auth + ADMIN role are enforced by the router.
+
+import type { Request, Response } from "express";
+import * as admin from "./admin.service";
+import type {
+  BulkInventoryInput,
+  CreateCategoryInput,
+  CreatePlanInput,
+  CreateProductInput,
+  InventoryQuery,
+  OrdersQuery,
+  UpdateCategoryInput,
+  UpdatePlanInput,
+  UpdateProductInput,
+} from "./admin.schemas";
+
+// Categories
+export async function listCategories(_req: Request, res: Response): Promise<void> {
+  res.json({ categories: await admin.listCategories() });
+}
+export async function createCategory(req: Request, res: Response): Promise<void> {
+  res.status(201).json({ category: await admin.createCategory(req.body as CreateCategoryInput) });
+}
+export async function updateCategory(req: Request, res: Response): Promise<void> {
+  res.json({
+    category: await admin.updateCategory(String(req.params.id), req.body as UpdateCategoryInput),
+  });
+}
+export async function deleteCategory(req: Request, res: Response): Promise<void> {
+  res.json(await admin.deleteCategory(String(req.params.id)));
+}
+
+// Products
+export async function listProducts(_req: Request, res: Response): Promise<void> {
+  res.json({ products: await admin.listProducts() });
+}
+export async function createProduct(req: Request, res: Response): Promise<void> {
+  res.status(201).json({ product: await admin.createProduct(req.body as CreateProductInput) });
+}
+export async function getProduct(req: Request, res: Response): Promise<void> {
+  res.json({ product: await admin.getProduct(String(req.params.id)) });
+}
+export async function updateProduct(req: Request, res: Response): Promise<void> {
+  res.json({
+    product: await admin.updateProduct(String(req.params.id), req.body as UpdateProductInput),
+  });
+}
+export async function deleteProduct(req: Request, res: Response): Promise<void> {
+  res.json(await admin.deleteProduct(String(req.params.id)));
+}
+
+// Plans
+export async function createPlan(req: Request, res: Response): Promise<void> {
+  res
+    .status(201)
+    .json({
+      plan: await admin.createPlan(String(req.params.productId), req.body as CreatePlanInput),
+    });
+}
+export async function updatePlan(req: Request, res: Response): Promise<void> {
+  res.json({ plan: await admin.updatePlan(String(req.params.id), req.body as UpdatePlanInput) });
+}
+export async function deletePlan(req: Request, res: Response): Promise<void> {
+  res.json(await admin.deletePlan(String(req.params.id)));
+}
+
+// Inventory
+export async function bulkInventory(req: Request, res: Response): Promise<void> {
+  res.status(201).json(await admin.bulkImportInventory(req.body as BulkInventoryInput));
+}
+export async function listInventory(_req: Request, res: Response): Promise<void> {
+  res.json(await admin.listInventory(res.locals.query as InventoryQuery));
+}
+
+// Orders overview
+export async function listOrders(_req: Request, res: Response): Promise<void> {
+  res.json(await admin.listOrders(res.locals.query as OrdersQuery));
+}
+export async function getOrder(req: Request, res: Response): Promise<void> {
+  res.json({ order: await admin.getOrder(String(req.params.id)) });
+}
