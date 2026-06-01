@@ -23,6 +23,9 @@ function record(name: string, pass: boolean, info: string): void {
 function body(res: LightResponse): Record<string, unknown> {
   return JSON.parse(res.body) as Record<string, unknown>;
 }
+function obj(value: unknown): Record<string, unknown> {
+  return (value ?? {}) as Record<string, unknown>;
+}
 
 function post(url: string, payload: unknown, token?: string): Promise<LightResponse> {
   const headers: Record<string, string> = { "content-type": "application/json" };
@@ -262,10 +265,176 @@ async function testCatalog(): Promise<void> {
   record("unknown product -> 404", missing.statusCode === 404, `status=${missing.statusCode}`);
 }
 
+async function testOrders(): Promise<void> {
+  const suffix = Math.floor(Math.random() * 1e9)
+    .toString()
+    .padStart(9, "0");
+
+  // Buyer
+  const signup = await post("/auth/signup", {
+    name: "Order Tester",
+    email: `ord_${suffix}@example.com`,
+    password: "Order@12345",
+  });
+  const token = String(body(signup).token);
+  const userId = String(obj(body(signup).user).id);
+
+  // Isolated catalog data — 1 unit per plan keeps concurrent claims single-row & deterministic.
+  const category = await prisma.category.findUnique({ where: { slug: "ai-accounts" } });
+  const product = await prisma.product.create({
+    data: {
+      name: `Smoke Product ${suffix}`,
+      slug: `smoke-product-${suffix}`,
+      description: "Ephemeral product for delivery-engine tests.",
+      type: "ACCOUNT",
+      categoryId: category!.id,
+    },
+  });
+  const mkPlan = (label: string, price: number) =>
+    prisma.productPlan.create({ data: { productId: product.id, label, durationDays: 30, price } });
+  const planA = await mkPlan("A", 100000);
+  const planB = await mkPlan("B", 150000);
+  const planC = await mkPlan("C", 120000);
+  const mkItem = (planId: string) => ({
+    productId: product.id,
+    planId,
+    type: "ACCOUNT" as const,
+    accountEmail: `acct_${planId}@smoke.local`,
+    accountPassword: `pw_${planId}`,
+  });
+  await prisma.inventoryItem.createMany({
+    data: [mkItem(planA.id), mkItem(planB.id), mkItem(planC.id)],
+  });
+
+  const soldCount = (planId: string) =>
+    prisma.inventoryItem.count({ where: { planId, status: "SOLD" } });
+  const availCount = (planId: string) =>
+    prisma.inventoryItem.count({ where: { planId, status: "AVAILABLE" } });
+
+  // Auth required
+  const noAuth = await post("/orders", { items: [{ planId: planA.id, quantity: 1 }] });
+  record(
+    "POST /orders without token -> 401",
+    noAuth.statusCode === 401,
+    `status=${noAuth.statusCode}`,
+  );
+
+  // Happy path
+  const create1 = await post("/orders", { items: [{ planId: planA.id, quantity: 1 }] }, token);
+  const payment1 = obj(body(create1).payment);
+  record("create order -> 201", create1.statusCode === 201, `status=${create1.statusCode}`);
+  record(
+    "order returns authority + redirectUrl",
+    typeof payment1.authority === "string" && typeof payment1.redirectUrl === "string",
+    JSON.stringify(payment1),
+  );
+  const authority1 = String(payment1.authority);
+  const orderId1 = String(obj(body(create1).order).id);
+
+  const verify1 = await post("/payments/verify", { authority: authority1, status: "OK" });
+  record(
+    "verify -> paid",
+    verify1.statusCode === 200 && body(verify1).status === "paid",
+    `status=${verify1.statusCode}`,
+  );
+
+  const detail1 = await get(`/orders/${orderId1}`, token);
+  const ord1 = obj(body(detail1).order);
+  const items1 = (ord1.items as Array<Record<string, unknown>>) ?? [];
+  const creds1 = (items1[0]?.credentials as Array<Record<string, unknown>>) ?? [];
+  record("order detail PAID", ord1.paymentStatus === "PAID", String(ord1.paymentStatus));
+  record(
+    "vault: credential delivered (accountEmail)",
+    creds1.length === 1 && typeof creds1[0]?.accountEmail === "string",
+    JSON.stringify(creds1.map((c) => c.type)),
+  );
+  record(
+    "planA: 1 sold / 0 available",
+    (await soldCount(planA.id)) === 1 && (await availCount(planA.id)) === 0,
+    `sold=${await soldCount(planA.id)}`,
+  );
+
+  // Idempotent re-verify
+  const reverify = await post("/payments/verify", { authority: authority1, status: "OK" });
+  record(
+    "re-verify idempotent (paid, no extra delivery)",
+    reverify.statusCode === 200 &&
+      body(reverify).status === "paid" &&
+      (await soldCount(planA.id)) === 1,
+    `sold=${await soldCount(planA.id)}`,
+  );
+
+  // Cancelled payment (Status != OK) — no delivery
+  const createC = await post("/orders", { items: [{ planId: planC.id, quantity: 1 }] }, token);
+  const authC = String(obj(body(createC).payment).authority);
+  const verifyC = await post("/payments/verify", { authority: authC, status: "NOK" });
+  record(
+    "verify NOK -> failed, no delivery",
+    verifyC.statusCode === 200 &&
+      body(verifyC).status === "failed" &&
+      (await soldCount(planC.id)) === 0,
+    `sold=${await soldCount(planC.id)}`,
+  );
+
+  // Oversell: two concurrent paid orders for the single planB unit
+  const createB1 = await post("/orders", { items: [{ planId: planB.id, quantity: 1 }] }, token);
+  const createB2 = await post("/orders", { items: [{ planId: planB.id, quantity: 1 }] }, token);
+  const authB1 = String(obj(body(createB1).payment).authority);
+  const authB2 = String(obj(body(createB2).payment).authority);
+  const [vB1, vB2] = await Promise.all([
+    post("/payments/verify", { authority: authB1, status: "OK" }),
+    post("/payments/verify", { authority: authB2, status: "OK" }),
+  ]);
+  const paidCount = [vB1, vB2].filter(
+    (v) => v.statusCode === 200 && body(v).status === "paid",
+  ).length;
+  const oosCount = [vB1, vB2].filter((v) => v.statusCode === 409).length;
+  record(
+    "oversell: exactly one paid",
+    paidCount === 1,
+    `codes=${vB1.statusCode},${vB2.statusCode}`,
+  );
+  record(
+    "oversell: exactly one 409 out-of-stock",
+    oosCount === 1,
+    `codes=${vB1.statusCode},${vB2.statusCode}`,
+  );
+  record(
+    "no oversell: planB 1 sold / 0 available",
+    (await soldCount(planB.id)) === 1 && (await availCount(planB.id)) === 0,
+    `sold=${await soldCount(planB.id)} avail=${await availCount(planB.id)}`,
+  );
+
+  // Creation-time stock pre-check (planB now depleted)
+  const createB3 = await post("/orders", { items: [{ planId: planB.id, quantity: 1 }] }, token);
+  record(
+    "order creation out-of-stock -> 409",
+    createB3.statusCode === 409,
+    `status=${createB3.statusCode}`,
+  );
+
+  // List my orders
+  const list = await get("/orders", token);
+  const myOrders = body(list).orders as unknown[] | undefined;
+  record(
+    "GET /orders lists my orders",
+    list.statusCode === 200 && Array.isArray(myOrders) && myOrders.length >= 4,
+    `count=${myOrders?.length}`,
+  );
+
+  // Cleanup (FK-safe)
+  await prisma.order.deleteMany({ where: { userId } });
+  await prisma.inventoryItem.deleteMany({ where: { productId: product.id } });
+  await prisma.productPlan.deleteMany({ where: { productId: product.id } });
+  await prisma.product.delete({ where: { id: product.id } });
+  await prisma.user.delete({ where: { id: userId } });
+}
+
 async function main(): Promise<void> {
   await testFoundation();
   await testCatalog();
   await testAuth();
+  await testOrders();
   testRoleGuard();
 
   let allPass = true;

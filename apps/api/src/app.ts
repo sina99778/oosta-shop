@@ -11,6 +11,8 @@ import { errorHandler, notFoundHandler } from "./middleware/error";
 import { healthRouter } from "./routes/health";
 import { authRouter } from "./modules/auth/auth.routes";
 import { catalogRouter } from "./modules/catalog/catalog.routes";
+import { ordersRouter } from "./modules/orders/orders.routes";
+import { paymentsRouter } from "./modules/payments/payments.routes";
 
 export function createApp() {
   const app = express();
@@ -34,7 +36,9 @@ export function createApp() {
   app.use("/health", healthRouter);
   app.use("/auth", authRouter);
   app.use(catalogRouter);
-  // Future routers (orders, admin) mount here in later phases.
+  app.use("/orders", ordersRouter);
+  app.use("/payments", paymentsRouter);
+  // Future routers (admin) mount here in later phases.
 
   // 404 + error handling (must be last)
   app.use(notFoundHandler);

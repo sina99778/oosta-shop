@@ -15,6 +15,15 @@ const EnvSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("7d"),
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(4).max(15).default(12),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
+
+  PAYMENT_PROVIDER: z.enum(["mock", "zarinpal"]).default("mock"),
+  ZARINPAL_MERCHANT_ID: z.string().default("00000000-0000-0000-0000-000000000000"),
+  ZARINPAL_SANDBOX: z
+    .string()
+    .default("true")
+    .transform((v) => v.toLowerCase() === "true"),
+  ZARINPAL_CURRENCY: z.enum(["IRR", "IRT"]).default("IRR"),
+  WEB_BASE_URL: z.string().default("http://localhost:3000"),
 });
 
 function loadEnv() {
