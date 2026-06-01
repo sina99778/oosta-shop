@@ -24,6 +24,13 @@ const EnvSchema = z.object({
     .transform((v) => v.toLowerCase() === "true"),
   ZARINPAL_CURRENCY: z.enum(["IRR", "IRT"]).default("IRR"),
   WEB_BASE_URL: z.string().default("http://localhost:3000"),
+
+  // Telegram admin bot (optional; the bot stays disabled unless both are set).
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_ADMIN_ID: z.preprocess(
+    (value) => (value === "" || value === undefined ? undefined : value),
+    z.coerce.number().int().positive().optional(),
+  ),
 });
 
 function loadEnv() {
