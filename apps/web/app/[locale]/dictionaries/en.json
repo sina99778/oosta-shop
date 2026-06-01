@@ -17,27 +17,59 @@
     "price": "Price",
     "from": "From",
     "viewAll": "View all",
-    "selectPlan": "Select a plan"
+    "selectPlan": "Select a plan",
+    "retry": "Try again",
+    "all": "All",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page",
+    "somethingWrong": "Something went wrong."
   },
   "home": {
     "heroTitle": "Digital products, delivered instantly",
     "heroSubtitle": "AI accounts, licenses, and gift cards — delivered the moment your payment is confirmed.",
     "browse": "Browse products",
     "categories": "Categories",
-    "bestsellers": "Bestsellers"
+    "bestsellers": "Bestsellers",
+    "shopByCategory": "Shop by category",
+    "noProducts": "No products yet."
+  },
+  "products": {
+    "title": "Products",
+    "empty": "No products found.",
+    "results": "products"
+  },
+  "product": {
+    "notFound": "Product not found.",
+    "loginToBuy": "Log in to buy",
+    "purchasing": "Redirecting to payment…",
+    "perPlan": "Choose your plan",
+    "soldOut": "This product is currently sold out."
   },
   "auth": {
     "loginTitle": "Welcome back",
     "signupTitle": "Create your account",
     "emailOrPhone": "Email or phone",
     "email": "Email",
-    "phone": "Phone",
+    "phone": "Phone (optional)",
     "password": "Password",
     "name": "Name",
     "loginCta": "Log in",
     "signupCta": "Sign up",
     "haveAccount": "Already have an account?",
-    "noAccount": "Don't have an account?"
+    "noAccount": "Don't have an account?",
+    "submitting": "Please wait…",
+    "contactHint": "Provide an email or a phone number."
+  },
+  "checkout": {
+    "verifying": "Confirming your payment…",
+    "successTitle": "Payment successful",
+    "successBody": "Your purchase is ready — view the delivered details in your dashboard.",
+    "failTitle": "Payment failed",
+    "failBody": "Your payment was not completed. You have not been charged.",
+    "viewOrders": "Go to dashboard",
+    "backToStore": "Back to store",
+    "missingParams": "Missing payment information."
   },
   "footer": {
     "tagline": "Instant digital goods delivery",

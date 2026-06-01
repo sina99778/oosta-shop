@@ -1,0 +1,142 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useApi } from "@/lib/use-api";
+import { useAuth } from "@/lib/auth";
+import { api, ApiError } from "@/lib/api";
+import { Container } from "@/components/ui/container";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/cn";
+import { formatPrice } from "@/lib/format";
+import type { Locale } from "@/lib/i18n";
+import type { CreateOrderResponse, ProductDetail } from "@/lib/types";
+import type { Dictionary } from "@/app/[locale]/dictionaries";
+
+export function ProductDetailView({
+  locale,
+  slug,
+  dict,
+}: {
+  locale: Locale;
+  slug: string;
+  dict: Dictionary;
+}) {
+  const { data, loading, error } = useApi<{ product: ProductDetail }>(`/products/${slug}`);
+  const { user, token } = useAuth();
+  const router = useRouter();
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [buying, setBuying] = useState(false);
+  const [buyError, setBuyError] = useState<string | null>(null);
+
+  if (loading) {
+    return (
+      <Container className="py-20 text-center">
+        <Spinner className="size-6" />
+      </Container>
+    );
+  }
+  if (error || !data) {
+    return <Container className="py-20 text-center text-muted">{dict.product.notFound}</Container>;
+  }
+
+  const product = data.product;
+  const activePlanId =
+    selectedPlan ?? product.plans.find((p) => p.inStock)?.id ?? product.plans[0]?.id ?? null;
+  const plan = product.plans.find((p) => p.id === activePlanId) ?? null;
+
+  async function buy() {
+    if (!plan) return;
+    if (!user || !token) {
+      router.push(`/${locale}/login?next=${encodeURIComponent(`/${locale}/products/${slug}`)}`);
+      return;
+    }
+    setBuying(true);
+    setBuyError(null);
+    try {
+      const res = await api.post<CreateOrderResponse>(
+        "/orders",
+        { items: [{ planId: plan.id, quantity: 1 }] },
+        token,
+      );
+      window.location.href = res.payment.redirectUrl;
+    } catch (e) {
+      setBuyError(e instanceof ApiError ? e.message : dict.common.somethingWrong);
+      setBuying(false);
+    }
+  }
+
+  return (
+    <Container className="py-10">
+      <div className="grid gap-8 lg:grid-cols-2">
+        <div>
+          <Badge tone="muted">{product.category.name}</Badge>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight">{product.name}</h1>
+          <p className="mt-4 whitespace-pre-line leading-relaxed text-muted">
+            {product.description}
+          </p>
+        </div>
+
+        <Card className="h-fit">
+          <h2 className="font-semibold">{dict.product.perPlan}</h2>
+          <div className="mt-4 space-y-2">
+            {product.plans.map((pl) => (
+              <label
+                key={pl.id}
+                className={cn(
+                  "flex cursor-pointer items-center justify-between rounded-lg border p-3 transition-colors",
+                  activePlanId === pl.id ? "border-primary bg-surface" : "border-border",
+                  !pl.inStock && "cursor-not-allowed opacity-50",
+                )}
+              >
+                <span className="flex items-center gap-3">
+                  <input
+                    type="radio"
+                    name="plan"
+                    className="accent-primary"
+                    checked={activePlanId === pl.id}
+                    disabled={!pl.inStock}
+                    onChange={() => setSelectedPlan(pl.id)}
+                  />
+                  <span className="font-medium">{pl.label}</span>
+                </span>
+                <span className="flex items-center gap-3">
+                  <span className="font-semibold">
+                    {formatPrice(pl.price, pl.currency, locale)}
+                  </span>
+                  <Badge tone={pl.inStock ? "success" : "danger"}>
+                    {pl.inStock ? dict.common.inStock : dict.common.outOfStock}
+                  </Badge>
+                </span>
+              </label>
+            ))}
+          </div>
+
+          {buyError && <p className="mt-3 text-sm text-danger">{buyError}</p>}
+
+          <Button
+            className="mt-4 w-full"
+            size="lg"
+            disabled={!plan || !plan.inStock || buying}
+            onClick={buy}
+          >
+            {buying ? (
+              <>
+                <Spinner /> {dict.product.purchasing}
+              </>
+            ) : !product.inStock ? (
+              dict.product.soldOut
+            ) : !user ? (
+              dict.product.loginToBuy
+            ) : (
+              dict.common.buyNow
+            )}
+          </Button>
+        </Card>
+      </div>
+    </Container>
+  );
+}
