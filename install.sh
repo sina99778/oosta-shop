@@ -48,8 +48,8 @@ else
 fi
 
 cd "$TARGET_DIR"
-chmod +x setup.sh 2>/dev/null || true
+chmod +x oosta.sh setup.sh 2>/dev/null || true
 
-# 4) Hand off to the in-repo setup (env scaffold on first run, then build & launch)
-echo "==> Running setup.sh ..."
-exec bash setup.sh
+# 4) Hand off to the in-repo manager (interactive setup menu + doctor).
+echo "==> Launching the oostaAI setup menu ..."
+exec bash oosta.sh
