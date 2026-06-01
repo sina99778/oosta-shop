@@ -1,0 +1,2 @@
+# Place TLS certificates here (fullchain.pem, privkey.pem) to enable the HTTPS
+# server block in default.conf. This file just keeps the directory in git.
