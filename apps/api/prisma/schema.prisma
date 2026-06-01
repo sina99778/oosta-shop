@@ -1,0 +1,190 @@
+// Prisma schema for the oostaAI digital products platform.
+// Payment fields are intentionally gateway-agnostic (Zarinpal / Stripe / manual)
+// so the Phase 5 payment integration requires no schema change.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ────────────────────────────────────────────────────────────
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum ProductType {
+  ACCOUNT
+  LICENSE
+  GIFTCARD
+}
+
+enum InventoryStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  EXPIRED
+}
+
+enum PaymentProvider {
+  ZARINPAL
+  STRIPE
+  MANUAL
+}
+
+// ── Models ───────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  phone        String?  @unique
+  passwordHash String
+  role         Role     @default(USER)
+  orders       Order[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String
+  slug      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("categories")
+}
+
+model Product {
+  id          String          @id @default(cuid())
+  name        String
+  slug        String          @unique
+  description String
+  image       String?
+  type        ProductType
+  isActive    Boolean         @default(true)
+  categoryId  String
+  category    Category        @relation(fields: [categoryId], references: [id])
+  plans       ProductPlan[]
+  inventory   InventoryItem[]
+  orderItems  OrderItem[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([categoryId])
+  @@map("products")
+}
+
+// A purchasable "time-plan" / variant of a product (the price lives here).
+model ProductPlan {
+  id           String          @id @default(cuid())
+  productId    String
+  product      Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  label        String // e.g. "1 Month", "3 Months", "Lifetime"
+  durationDays Int? // null = perpetual (license / gift card)
+  price        Decimal         @db.Decimal(12, 2)
+  currency     String          @default("IRR")
+  isActive     Boolean         @default(true)
+  inventory    InventoryItem[]
+  orderItems   OrderItem[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([productId])
+  @@map("product_plans")
+}
+
+// A single deliverable unit of stock. The flexible credential payload holds
+// whichever fields are relevant to `type` (account, license, or gift card).
+model InventoryItem {
+  id     String          @id @default(cuid())
+  type   ProductType
+  status InventoryStatus @default(AVAILABLE)
+
+  productId String
+  product   Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  planId    String?
+  plan      ProductPlan? @relation(fields: [planId], references: [id])
+
+  // Credential payload (only the fields matching `type` are populated)
+  accountEmail    String?
+  accountPassword String?
+  licenseKey      String?
+  giftCardCode    String?
+
+  // Fulfillment linkage — set atomically when the owning order is paid
+  orderItemId String?
+  orderItem   OrderItem? @relation(fields: [orderItemId], references: [id])
+  soldAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, planId, status])
+  @@index([status])
+  @@index([orderItemId])
+  @@map("inventory_items")
+}
+
+model Order {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  items         OrderItem[]
+  totalAmount   Decimal       @db.Decimal(12, 2)
+  currency      String        @default("IRR")
+  paymentStatus PaymentStatus @default(PENDING)
+
+  // Gateway-agnostic payment references:
+  //   paymentAuthority = pre-payment token  (Stripe session id / Zarinpal Authority)
+  //   paymentRefId     = post-verify ref     (Stripe payment_intent / Zarinpal RefID)
+  paymentProvider  PaymentProvider?
+  paymentAuthority String?          @unique
+  paymentRefId     String?
+
+  paidAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([paymentStatus])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  planId    String
+  plan      ProductPlan @relation(fields: [planId], references: [id])
+
+  quantity  Int     @default(1)
+  unitPrice Decimal @db.Decimal(12, 2)
+  lineTotal Decimal @db.Decimal(12, 2)
+
+  // Inventory units assigned to fulfill this line (one per quantity)
+  fulfilledItems InventoryItem[]
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@map("order_items")
+}
