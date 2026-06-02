@@ -6,8 +6,13 @@ import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/httpError";
 import type { ListProductsQuery } from "./catalog.schemas";
 
+// imageData (Bytes) is deliberately omitted from list/detail reads so we never load
+// image blobs for catalog pages; it is only selected by getProductImage().
+const omitImageData = { imageData: true } as const;
+
 type ProductWithRelations = Prisma.ProductGetPayload<{
   include: { category: true; plans: true };
+  omit: { imageData: true };
 }>;
 
 type ProductSummary = {
@@ -15,6 +20,7 @@ type ProductSummary = {
   name: string;
   slug: string;
   image: string | null;
+  hasImage: boolean;
   type: ProductWithRelations["type"];
   category: { id: string; name: string; slug: string };
   priceFrom: number | null;
@@ -31,6 +37,7 @@ function toSummary(product: ProductWithRelations, availableStock: number): Produ
     name: product.name,
     slug: product.slug,
     image: product.image,
+    hasImage: product.imageMimeType != null,
     type: product.type,
     category: {
       id: product.category.id,
@@ -79,6 +86,7 @@ export async function listProducts(query: ListProductsQuery) {
   const products = await prisma.product.findMany({
     where,
     include: { category: true, plans: { where: { isActive: true } } },
+    omit: omitImageData,
     orderBy: { createdAt: "desc" },
   });
 
@@ -107,6 +115,7 @@ export async function getBestselling(limit: number) {
   const products = await prisma.product.findMany({
     where: { isActive: true },
     include: { category: true, plans: { where: { isActive: true } } },
+    omit: omitImageData,
   });
   const ids = products.map((p) => p.id);
 
@@ -136,6 +145,7 @@ export async function getProductBySlug(slug: string) {
   const product = await prisma.product.findFirst({
     where: { slug, isActive: true },
     include: { category: true, plans: { where: { isActive: true }, orderBy: { price: "asc" } } },
+    omit: omitImageData,
   });
   if (!product) {
     throw new AppError(404, "NOT_FOUND", "Product not found");
@@ -169,6 +179,7 @@ export async function getProductBySlug(slug: string) {
     slug: product.slug,
     description: product.description,
     image: product.image,
+    hasImage: product.imageMimeType != null,
     type: product.type,
     category: {
       id: product.category.id,
@@ -182,4 +193,16 @@ export async function getProductBySlug(slug: string) {
     plans,
     createdAt: product.createdAt,
   };
+}
+
+// Public: raw bytes of a product's uploaded image (the only query that selects imageData).
+export async function getProductImage(id: string) {
+  const product = await prisma.product.findUnique({
+    where: { id },
+    select: { imageData: true, imageMimeType: true },
+  });
+  if (!product?.imageData || !product.imageMimeType) {
+    throw new AppError(404, "NOT_FOUND", "Image not found");
+  }
+  return { data: Buffer.from(product.imageData), mimeType: product.imageMimeType };
 }

@@ -16,6 +16,7 @@ export type ProductSummary = {
   name: string;
   slug: string;
   image: string | null;
+  hasImage: boolean;
   type: ProductType;
   category: CategoryRef;
   priceFrom: number | null;

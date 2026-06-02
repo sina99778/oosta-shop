@@ -3,6 +3,7 @@
 import { Router } from "express";
 import { authenticate, requireRole } from "../../middleware/auth";
 import { validate } from "../../middleware/validate";
+import { uploadProductImage } from "../../middleware/upload";
 import * as schemas from "./admin.schemas";
 import * as ctrl from "./admin.controller";
 
@@ -41,6 +42,18 @@ adminRouter.delete(
   "/products/:id",
   validate({ params: schemas.idParamSchema }),
   ctrl.deleteProduct,
+);
+// Product image (multipart field "image"): upload/replace + remove
+adminRouter.post(
+  "/products/:id/image",
+  validate({ params: schemas.idParamSchema }),
+  uploadProductImage,
+  ctrl.setProductImage,
+);
+adminRouter.delete(
+  "/products/:id/image",
+  validate({ params: schemas.idParamSchema }),
+  ctrl.removeProductImage,
 );
 
 // Plans

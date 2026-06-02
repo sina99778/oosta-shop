@@ -22,3 +22,10 @@ export async function bestselling(_req: Request, res: Response): Promise<void> {
 export async function productBySlug(req: Request, res: Response): Promise<void> {
   res.json({ product: await catalog.getProductBySlug(String(req.params.slug)) });
 }
+
+export async function productImage(req: Request, res: Response): Promise<void> {
+  const { data, mimeType } = await catalog.getProductImage(String(req.params.id));
+  res.setHeader("Content-Type", mimeType);
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.send(data);
+}

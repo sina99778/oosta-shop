@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/lib/use-api";
 import { useAuth } from "@/lib/auth";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, productImageUrl } from "@/lib/api";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -83,6 +83,14 @@ export function ProductDetailView({
     <Container className="py-10">
       <div className="grid gap-8 lg:grid-cols-2">
         <div>
+          {productImageUrl(product) && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={productImageUrl(product)!}
+              alt={product.name}
+              className="mb-5 aspect-[16/10] w-full rounded-xl border border-border object-cover"
+            />
+          )}
           <Badge tone="muted">{product.category.name}</Badge>
           <h1 className="mt-3 text-3xl font-bold tracking-tight">{product.name}</h1>
           <p className="mt-4 whitespace-pre-line leading-relaxed text-muted">

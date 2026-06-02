@@ -2,6 +2,23 @@
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
+// Absolute URL for a public API asset (e.g. a product image) usable in <img src>.
+export function assetUrl(path: string): string {
+  return `${BASE_URL}${path}`;
+}
+
+// Resolve a product's display image: explicit URL wins, else the uploaded image
+// endpoint when present, else null (caller renders a placeholder).
+export function productImageUrl(p: {
+  id: string;
+  image: string | null;
+  hasImage?: boolean;
+}): string | null {
+  if (p.image) return p.image;
+  if (p.hasImage) return assetUrl(`/products/${p.id}/image`);
+  return null;
+}
+
 export class ApiError extends Error {
   status: number;
   code?: string;

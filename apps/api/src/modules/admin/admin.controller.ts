@@ -50,6 +50,13 @@ export async function updateProduct(req: Request, res: Response): Promise<void> 
 export async function deleteProduct(req: Request, res: Response): Promise<void> {
   res.json(await admin.deleteProduct(String(req.params.id)));
 }
+export async function setProductImage(req: Request, res: Response): Promise<void> {
+  const file = req.file ? { buffer: req.file.buffer, mimetype: req.file.mimetype } : undefined;
+  res.json(await admin.setProductImage(String(req.params.id), file));
+}
+export async function removeProductImage(req: Request, res: Response): Promise<void> {
+  res.json(await admin.removeProductImage(String(req.params.id)));
+}
 
 // Plans
 export async function createPlan(req: Request, res: Response): Promise<void> {

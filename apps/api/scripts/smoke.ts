@@ -567,12 +567,18 @@ async function testAdmin(): Promise<void> {
 
   // Public catalog reflects the new product + live stock
   const publicDetail = await get(`/products/${slug}`);
-  const pdPlans = (obj(body(publicDetail).product).plans as Array<Record<string, unknown>>) ?? [];
+  const pd = obj(body(publicDetail).product);
+  const pdPlans = (pd.plans as Array<Record<string, unknown>>) ?? [];
   record(
     "public catalog shows new product (stock 3)",
     publicDetail.statusCode === 200 && Number(pdPlans[0]?.availableStock) === 3,
     `status=${publicDetail.statusCode}`,
   );
+  record("product detail exposes hasImage=false", pd.hasImage === false, String(pd.hasImage));
+
+  // No image uploaded yet -> image endpoint 404
+  const noImg = await get(`/products/${productId}/image`);
+  record("product image (none) -> 404", noImg.statusCode === 404, `status=${noImg.statusCode}`);
 
   // Deactivate -> disappears from public catalog
   const deact = await patch(`/admin/products/${productId}`, { isActive: false }, adminToken);

@@ -73,6 +73,7 @@ export async function listProducts() {
   const products = await prisma.product.findMany({
     orderBy: { createdAt: "desc" },
     include: { category: true, _count: { select: { plans: true, inventory: true } } },
+    omit: { imageData: true },
   });
   return products.map((p) => ({
     id: p.id,
@@ -105,6 +106,7 @@ export async function getProduct(id: string) {
   const product = await prisma.product.findUnique({
     where: { id },
     include: { category: true, plans: { orderBy: { price: "asc" } } },
+    omit: { imageData: true },
   });
   if (!product) throw new AppError(404, "NOT_FOUND", "Product not found");
   const avail = await prisma.inventoryItem.groupBy({
@@ -119,6 +121,7 @@ export async function getProduct(id: string) {
     slug: product.slug,
     description: product.description,
     image: product.image,
+    hasImage: product.imageMimeType != null,
     type: product.type,
     isActive: product.isActive,
     category: { id: product.category.id, name: product.category.name, slug: product.category.slug },
@@ -155,6 +158,31 @@ export async function deleteProduct(id: string) {
   }
   await prisma.product.delete({ where: { id } }); // cascades plans + inventory
   return { id };
+}
+
+export async function setProductImage(
+  id: string,
+  file: { buffer: Buffer; mimetype: string } | undefined,
+) {
+  if (!file) throw new AppError(400, "NO_FILE", "An image file is required");
+  if (!file.mimetype.startsWith("image/")) {
+    throw new AppError(400, "BAD_FILE_TYPE", "Product image must be an image (JPG/PNG/WebP)");
+  }
+  await ensureProduct(id);
+  await prisma.product.update({
+    where: { id },
+    data: { imageData: new Uint8Array(file.buffer), imageMimeType: file.mimetype },
+  });
+  return { ok: true, hasImage: true };
+}
+
+export async function removeProductImage(id: string) {
+  await ensureProduct(id);
+  await prisma.product.update({
+    where: { id },
+    data: { imageData: null, imageMimeType: null },
+  });
+  return { ok: true, hasImage: false };
 }
 
 // ---------------- Plans ----------------

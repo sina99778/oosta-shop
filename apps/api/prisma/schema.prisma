@@ -86,6 +86,10 @@ model Product {
   slug        String          @unique
   description String
   image       String?
+  // Uploaded image stored in the DB (so it is included in backups). imageMimeType
+  // is kept light for listings; imageData is only selected by the image endpoint.
+  imageData     Bytes?
+  imageMimeType String?
   type        ProductType
   isActive    Boolean         @default(true)
   categoryId  String
