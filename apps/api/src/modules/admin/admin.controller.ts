@@ -12,6 +12,7 @@ import type {
   ReceiptsQuery,
   ReviewReceiptInput,
   ReviewsQuery,
+  SeoGenerateInput,
   TicketReplyInput,
   TicketStatusInput,
   TicketsQuery,
@@ -103,6 +104,14 @@ export async function setTicketStatus(req: Request, res: Response): Promise<void
   res.json({
     ticket: await admin.setTicketStatus(String(req.params.id), req.body as TicketStatusInput),
   });
+}
+
+// AI SEO assistant
+export function aiStatus(_req: Request, res: Response): void {
+  res.json(admin.aiStatus());
+}
+export async function generateSeo(req: Request, res: Response): Promise<void> {
+  res.json(await admin.generateProductSeo(req.body as SeoGenerateInput));
 }
 
 // Sales dashboard

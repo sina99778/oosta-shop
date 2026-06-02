@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { formatPrice } from "@/lib/format";
+import { SeoAssistant } from "@/components/admin/seo-assistant";
 import type { Locale } from "@/lib/i18n";
 import type { Category, ProductType, SpecRow } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
@@ -546,6 +547,31 @@ export function AdminProductDetail({
           </form>
         </Card>
       </div>
+
+      {/* SEO assistant */}
+      <SeoAssistant
+        locale={locale}
+        dict={dict}
+        token={token ?? undefined}
+        values={{
+          name,
+          slug,
+          shortDescription: shortDesc,
+          description: desc,
+          metaTitle,
+          metaDescription,
+          hasImage: product.hasImage,
+          planCount: product.plans.length,
+          specCount: specs.filter((s) => s.label.trim() || s.value.trim()).length,
+          category: product.category.name,
+          type,
+        }}
+        onApply={(r) => {
+          setMetaTitle(r.metaTitle);
+          setMetaDescription(r.metaDescription);
+          if (r.shortDescription) setShortDesc(r.shortDescription);
+        }}
+      />
 
       {/* Plans with sale price */}
       <Card>

@@ -14,6 +14,10 @@ adminRouter.use(authenticate, requireRole("ADMIN"));
 // Dashboard
 adminRouter.get("/stats", ctrl.stats);
 
+// AI SEO assistant
+adminRouter.get("/ai/status", ctrl.aiStatus);
+adminRouter.post("/seo/generate", validate({ body: schemas.seoGenerateSchema }), ctrl.generateSeo);
+
 // Categories
 adminRouter.get("/categories", ctrl.listCategories);
 adminRouter.post(

@@ -114,6 +114,16 @@ export const ticketsQuerySchema = z.object({
 export const ticketReplySchema = z.object({ body: z.string().trim().min(1).max(5000) });
 export const ticketStatusSchema = z.object({ status: z.enum(["OPEN", "ANSWERED", "CLOSED"]) });
 
+// AI SEO generation
+export const seoGenerateSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  category: z.string().trim().max(100).optional(),
+  type: z.string().trim().max(50).optional(),
+  description: z.string().trim().max(20000).optional(),
+  locale: z.enum(["en", "fa"]).optional(),
+  focusKeyword: z.string().trim().max(100).optional(),
+});
+
 export const idParamSchema = z.object({ id: z.string().min(1) });
 export const productIdParamSchema = z.object({ productId: z.string().min(1) });
 export const imageIdParamSchema = z.object({ imageId: z.string().min(1) });
@@ -133,3 +143,4 @@ export type ReviewsQuery = z.infer<typeof reviewsQuerySchema>;
 export type TicketsQuery = z.infer<typeof ticketsQuerySchema>;
 export type TicketReplyInput = z.infer<typeof ticketReplySchema>;
 export type TicketStatusInput = z.infer<typeof ticketStatusSchema>;
+export type SeoGenerateInput = z.infer<typeof seoGenerateSchema>;

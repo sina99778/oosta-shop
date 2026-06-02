@@ -269,6 +269,27 @@
     "metaTitle": "Meta title",
     "metaDescription": "Meta description",
     "seoHint": "Leave empty to use the product name and short description.",
+    "seoAssistant": {
+      "title": "SEO assistant",
+      "score": "SEO score",
+      "focusKeyword": "Focus keyword (optional)",
+      "generate": "Generate with AI",
+      "generating": "Generating…",
+      "aiDisabled": "AI is not configured (set GEMINI_API_KEY).",
+      "keywords": "Suggested keywords",
+      "applied": "Applied to the form.",
+      "checks": {
+        "title": "Meta title length",
+        "metaDesc": "Meta description length",
+        "shortDesc": "Short description",
+        "content": "Content length",
+        "image": "Product image",
+        "slug": "Clean URL slug",
+        "plans": "Has a priced plan",
+        "specs": "Specifications",
+        "keyword": "Focus keyword usage"
+      }
+    },
     "reviews": {
       "tab": "Reviews",
       "title": "Reviews",

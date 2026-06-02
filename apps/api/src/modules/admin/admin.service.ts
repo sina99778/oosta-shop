@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/httpError";
 import { deliverOrder } from "../orders/orders.service";
+import { generateSeo, isAiEnabled } from "../../lib/gemini";
 import type {
   BulkInventoryInput,
   CreateCategoryInput,
@@ -15,6 +16,7 @@ import type {
   ReceiptsQuery,
   ReviewReceiptInput,
   ReviewsQuery,
+  SeoGenerateInput,
   TicketReplyInput,
   TicketStatusInput,
   TicketsQuery,
@@ -697,6 +699,15 @@ export async function replyTicket(id: string, adminId: string, input: TicketRepl
 export async function setTicketStatus(id: string, input: TicketStatusInput) {
   await prisma.ticket.update({ where: { id }, data: { status: input.status } });
   return getTicket(id);
+}
+
+// ---------------- AI SEO assistant ----------------
+export function aiStatus() {
+  return { enabled: isAiEnabled() };
+}
+
+export function generateProductSeo(input: SeoGenerateInput) {
+  return generateSeo(input);
 }
 
 // ---------------- Sales dashboard / analytics ----------------

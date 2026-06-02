@@ -602,6 +602,16 @@ async function testAdmin(): Promise<void> {
     `status=${overview.statusCode}`,
   );
 
+  // AI SEO assistant status (disabled in tests — no GEMINI_API_KEY)
+  const aiStatus = await get("/admin/ai/status", adminToken);
+  record(
+    "admin ai status -> 200 enabled=false",
+    aiStatus.statusCode === 200 && body(aiStatus).enabled === false,
+    `status=${aiStatus.statusCode}`,
+  );
+  const aiGen = await post("/admin/seo/generate", { name: "Test product" }, adminToken);
+  record("seo generate without key -> 400", aiGen.statusCode === 400, `status=${aiGen.statusCode}`);
+
   // Sales dashboard stats
   const statsRes = await get("/admin/stats", adminToken);
   const statsBody = body(statsRes);

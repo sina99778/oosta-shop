@@ -35,6 +35,11 @@ const EnvSchema = z.object({
   CARD_HOLDER: z.string().optional(),
   CARD_BANK: z.string().optional(),
 
+  // AI SEO assistant (Google Gemini). Optional — the deterministic analyzer always
+  // works; AI generation is enabled only when GEMINI_API_KEY is set.
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default("gemini-2.5-pro"),
+
   // Telegram admin bot (optional; the bot stays disabled unless both are set).
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_ADMIN_ID: z.preprocess(

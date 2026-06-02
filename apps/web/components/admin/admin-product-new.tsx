@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { SeoAssistant } from "@/components/admin/seo-assistant";
 import type { Locale } from "@/lib/i18n";
 import type { Category, ProductType, SpecRow } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
@@ -385,6 +386,30 @@ export function AdminProductNew({ locale, dict }: { locale: Locale; dict: Dictio
             />
           </div>
         </SectionCard>
+
+        <SeoAssistant
+          locale={locale}
+          dict={dict}
+          token={token ?? undefined}
+          values={{
+            name,
+            slug,
+            shortDescription: shortDesc,
+            description: desc,
+            metaTitle,
+            metaDescription,
+            hasImage: primaryFile != null,
+            planCount: plans.filter((p) => p.label.trim() && Number(p.price) > 0).length,
+            specCount: specs.filter((s) => s.label.trim() || s.value.trim()).length,
+            category: categories.data?.categories.find((c) => c.id === catId)?.name ?? "",
+            type,
+          }}
+          onApply={(r) => {
+            setMetaTitle(r.metaTitle);
+            setMetaDescription(r.metaDescription);
+            if (r.shortDescription) setShortDesc(r.shortDescription);
+          }}
+        />
 
         {err && <p className="text-sm text-danger">{err}</p>}
         <div className="flex justify-end">
