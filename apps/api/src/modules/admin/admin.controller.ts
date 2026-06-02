@@ -9,6 +9,8 @@ import type {
   CreateProductInput,
   InventoryQuery,
   OrdersQuery,
+  ReceiptsQuery,
+  ReviewReceiptInput,
   UpdateCategoryInput,
   UpdatePlanInput,
   UpdateProductInput,
@@ -76,4 +78,25 @@ export async function listOrders(_req: Request, res: Response): Promise<void> {
 }
 export async function getOrder(req: Request, res: Response): Promise<void> {
   res.json({ order: await admin.getOrder(String(req.params.id)) });
+}
+
+// Card-to-card receipts
+export async function listReceipts(_req: Request, res: Response): Promise<void> {
+  res.json(await admin.listReceipts(res.locals.query as ReceiptsQuery));
+}
+export async function getReceiptImage(req: Request, res: Response): Promise<void> {
+  const { data, mimeType } = await admin.getReceiptImage(String(req.params.id));
+  res.setHeader("Content-Type", mimeType);
+  res.setHeader("Cache-Control", "private, no-store");
+  res.send(data);
+}
+export async function approveReceipt(req: Request, res: Response): Promise<void> {
+  res.json({
+    receipt: await admin.approveReceipt(String(req.params.id), req.body as ReviewReceiptInput),
+  });
+}
+export async function rejectReceipt(req: Request, res: Response): Promise<void> {
+  res.json({
+    receipt: await admin.rejectReceipt(String(req.params.id), req.body as ReviewReceiptInput),
+  });
 }

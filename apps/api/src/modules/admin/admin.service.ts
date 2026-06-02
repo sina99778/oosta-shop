@@ -4,6 +4,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/httpError";
+import { deliverOrder } from "../orders/orders.service";
 import type {
   BulkInventoryInput,
   CreateCategoryInput,
@@ -11,6 +12,8 @@ import type {
   CreateProductInput,
   InventoryQuery,
   OrdersQuery,
+  ReceiptsQuery,
+  ReviewReceiptInput,
   UpdateCategoryInput,
   UpdatePlanInput,
   UpdateProductInput,
@@ -353,4 +356,121 @@ export async function getOrder(id: string) {
       fulfilledCount: it.fulfilledItems.length,
     })),
   };
+}
+
+// ---------------- Card-to-card receipts ----------------
+// Receipts are never deleted; this is the review queue + permanent history.
+
+const receiptUserSelect = { id: true, name: true, email: true, phone: true } as const;
+
+type ReceiptWithOrder = Prisma.ReceiptGetPayload<{
+  include: {
+    order: {
+      include: { user: { select: { id: true; name: true; email: true; phone: true } } };
+    };
+  };
+}>;
+
+function serializeReceipt(r: ReceiptWithOrder) {
+  return {
+    id: r.id,
+    status: r.status,
+    reference: r.reference,
+    reviewerNote: r.reviewerNote,
+    mimeType: r.mimeType,
+    createdAt: r.createdAt,
+    reviewedAt: r.reviewedAt,
+    order: {
+      id: r.order.id,
+      totalAmount: Number(r.order.totalAmount),
+      currency: r.order.currency,
+      paymentStatus: r.order.paymentStatus,
+      paymentProvider: r.order.paymentProvider,
+      createdAt: r.order.createdAt,
+      user: {
+        id: r.order.user.id,
+        name: r.order.user.name,
+        email: r.order.user.email,
+        phone: r.order.user.phone,
+      },
+    },
+  };
+}
+
+export async function listReceipts(query: ReceiptsQuery) {
+  const where: Prisma.ReceiptWhereInput = {};
+  if (query.status) where.status = query.status;
+
+  const [total, pending, receipts] = await Promise.all([
+    prisma.receipt.count({ where }),
+    prisma.receipt.count({ where: { status: "PENDING" } }),
+    prisma.receipt.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+      include: { order: { include: { user: { select: receiptUserSelect } } } },
+    }),
+  ]);
+
+  return {
+    items: receipts.map(serializeReceipt),
+    pendingCount: pending,
+    pagination: {
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
+    },
+  };
+}
+
+// Raw image bytes for streaming back to the admin (web preview / bot photo).
+export async function getReceiptImage(id: string) {
+  const receipt = await prisma.receipt.findUnique({
+    where: { id },
+    select: { imageData: true, mimeType: true },
+  });
+  if (!receipt) throw new AppError(404, "NOT_FOUND", "Receipt not found");
+  return { data: Buffer.from(receipt.imageData), mimeType: receipt.mimeType };
+}
+
+async function loadReceiptForReview(id: string) {
+  const receipt = await prisma.receipt.findUnique({
+    where: { id },
+    include: { order: { include: { user: { select: receiptUserSelect } } } },
+  });
+  if (!receipt) throw new AppError(404, "NOT_FOUND", "Receipt not found");
+  return receipt;
+}
+
+// Approve: deliver the order (atomic inventory claim) and mark the receipt APPROVED.
+// If delivery fails (e.g. out of stock) the receipt stays PENDING so it can be retried.
+export async function approveReceipt(id: string, input: ReviewReceiptInput) {
+  const receipt = await loadReceiptForReview(id);
+  if (receipt.order.paymentProvider !== "CARD_TO_CARD") {
+    throw new AppError(400, "NOT_CARD_TO_CARD", "This receipt is not for a card-to-card order");
+  }
+  await deliverOrder(receipt.orderId, `card:${receipt.id}`);
+  await prisma.receipt.update({
+    where: { id },
+    data: { status: "APPROVED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
+  });
+  return serializeReceipt(await loadReceiptForReview(id));
+}
+
+// Reject: keep the receipt (status REJECTED) and move the order back out of "paid".
+// If the order was already PAID (undoing an accidental approval) it becomes REFUNDED.
+export async function rejectReceipt(id: string, input: ReviewReceiptInput) {
+  const receipt = await loadReceiptForReview(id);
+  await prisma.receipt.update({
+    where: { id },
+    data: { status: "REJECTED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
+  });
+  const nextStatus = receipt.order.paymentStatus === "PAID" ? "REFUNDED" : "REJECTED";
+  await prisma.order.update({
+    where: { id: receipt.orderId },
+    data: { paymentStatus: nextStatus },
+  });
+  return serializeReceipt(await loadReceiptForReview(id));
 }

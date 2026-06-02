@@ -40,6 +40,35 @@ async function request<T>(
   return data as T;
 }
 
+// Multipart upload (e.g. card-to-card receipts). The browser sets the multipart
+// boundary header automatically, so we must NOT set content-type ourselves.
+async function upload<T>(path: string, form: FormData, token?: string): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (token) headers.authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "POST",
+    headers,
+    body: form,
+    cache: "no-store",
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = data?.error ?? {};
+    throw new ApiError(err.message ?? "Upload failed", res.status, err.code, err.details);
+  }
+  return data as T;
+}
+
+// Fetch a protected binary resource (e.g. a receipt image) as a Blob.
+async function blob(path: string, token?: string): Promise<Blob> {
+  const headers: Record<string, string> = {};
+  if (token) headers.authorization = `Bearer ${token}`;
+  const res = await fetch(`${BASE_URL}${path}`, { headers, cache: "no-store" });
+  if (!res.ok) throw new ApiError("Request failed", res.status);
+  return res.blob();
+}
+
 export const api = {
   get: <T = unknown>(path: string, token?: string) => request<T>("GET", path, undefined, token),
   post: <T = unknown>(path: string, body?: unknown, token?: string) =>
@@ -47,4 +76,6 @@ export const api = {
   patch: <T = unknown>(path: string, body?: unknown, token?: string) =>
     request<T>("PATCH", path, body, token),
   del: <T = unknown>(path: string, token?: string) => request<T>("DELETE", path, undefined, token),
+  upload,
+  blob,
 };

@@ -67,10 +67,24 @@ export const inventoryQuerySchema = z.object({
 });
 
 export const ordersQuerySchema = z.object({
-  status: z.enum(["PENDING", "PAID", "FAILED", "REFUNDED", "EXPIRED"]).optional(),
+  status: z
+    .enum(["PENDING", "PENDING_REVIEW", "PAID", "FAILED", "REJECTED", "REFUNDED", "EXPIRED"])
+    .optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(50),
 });
+
+// Card-to-card receipts (review queue + full history).
+export const receiptsQuerySchema = z.object({
+  status: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export const reviewReceiptSchema = z
+  .object({ note: z.string().trim().max(500).optional() })
+  .optional()
+  .transform((v) => v ?? {});
 
 export const idParamSchema = z.object({ id: z.string().min(1) });
 export const productIdParamSchema = z.object({ productId: z.string().min(1) });
@@ -84,3 +98,5 @@ export type UpdatePlanInput = z.infer<typeof updatePlanSchema>;
 export type BulkInventoryInput = z.infer<typeof bulkInventorySchema>;
 export type InventoryQuery = z.infer<typeof inventoryQuerySchema>;
 export type OrdersQuery = z.infer<typeof ordersQuerySchema>;
+export type ReceiptsQuery = z.infer<typeof receiptsQuerySchema>;
+export type ReviewReceiptInput = z.infer<typeof reviewReceiptSchema>;

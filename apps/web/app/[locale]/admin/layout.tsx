@@ -20,7 +20,11 @@ export default async function AdminLayout({
     <RequireAuth locale={locale} role="ADMIN">
       <AdminNav
         locale={locale}
-        labels={{ products: dict.admin.products, orders: dict.admin.orders }}
+        labels={{
+          products: dict.admin.products,
+          orders: dict.admin.orders,
+          receipts: dict.admin.receipts.tab,
+        }}
       />
       {children}
     </RequireAuth>

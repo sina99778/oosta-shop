@@ -12,6 +12,13 @@ export const createOrderSchema = z.object({
     )
     .min(1, "At least one item is required")
     .max(20),
+  // "online" → payment gateway (Zarinpal/mock); "card_to_card" → manual transfer + receipt.
+  method: z.enum(["online", "card_to_card"]).default("online"),
+});
+
+// Optional note the buyer can attach to a card-to-card receipt (tracking no, last 4, etc.).
+export const uploadReceiptSchema = z.object({
+  reference: z.string().max(200).optional(),
 });
 
 export const verifyPaymentSchema = z.object({

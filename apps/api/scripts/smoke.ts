@@ -604,6 +604,122 @@ async function testAdmin(): Promise<void> {
   await prisma.user.delete({ where: { id: userId } });
 }
 
+async function testCardToCard(): Promise<void> {
+  ip = "10.10.0.5";
+  const suffix = Math.floor(Math.random() * 1e9)
+    .toString()
+    .padStart(9, "0");
+
+  const signup = await post("/auth/signup", {
+    name: "C2C Tester",
+    email: `c2c_${suffix}@example.com`,
+    password: "C2c@12345",
+  });
+  const token = String(body(signup).token);
+  const userId = String(obj(body(signup).user).id);
+
+  // Public payment config (card-to-card disabled by default in tests)
+  const cfg = await get("/payments/config");
+  const cfgBody = body(cfg);
+  record("GET /payments/config -> 200", cfg.statusCode === 200, `status=${cfg.statusCode}`);
+  record(
+    "payment-config: online true + cardToCard boolean",
+    cfgBody.online === true && typeof cfgBody.cardToCard === "boolean",
+    JSON.stringify(cfgBody),
+  );
+
+  // Product with one unit so an order can be created
+  const category = await prisma.category.findUnique({ where: { slug: "ai-accounts" } });
+  const product = await prisma.product.create({
+    data: {
+      name: `C2C ${suffix}`,
+      slug: `c2c-${suffix}`,
+      description: "Card-to-card test product.",
+      type: "ACCOUNT",
+      categoryId: category!.id,
+    },
+  });
+  const plan = await prisma.productPlan.create({
+    data: { productId: product.id, label: "P", price: 100000 },
+  });
+  await prisma.inventoryItem.create({
+    data: {
+      productId: product.id,
+      planId: plan.id,
+      type: "ACCOUNT",
+      accountEmail: `c_${suffix}@s.local`,
+      accountPassword: "p",
+    },
+  });
+
+  // Card-to-card disabled -> 400 (guarded)
+  const disabled = await post(
+    "/orders",
+    { items: [{ planId: plan.id, quantity: 1 }], method: "card_to_card" },
+    token,
+  );
+  record(
+    "card_to_card while disabled -> 400",
+    disabled.statusCode === 400,
+    `status=${disabled.statusCode}`,
+  );
+
+  // Online order, then receipt upload with no file -> 400 (route is wired + validated)
+  const online = await post(
+    "/orders",
+    { items: [{ planId: plan.id, quantity: 1 }], method: "online" },
+    token,
+  );
+  const orderId = String(obj(body(online).order).id);
+  const noFile = await post(`/orders/${orderId}/receipt`, { reference: "x" }, token);
+  record(
+    "receipt upload without a file -> 400",
+    noFile.statusCode === 400,
+    `status=${noFile.statusCode}`,
+  );
+
+  // Admin receipts queue + history
+  const adminLogin = await post("/auth/login", {
+    identifier: "admin@oosta.local",
+    password: "Admin@12345",
+  });
+  const adminToken = String(body(adminLogin).token);
+  const rec = await get("/admin/receipts", adminToken);
+  const recBody = body(rec) as { items?: unknown[]; pendingCount?: unknown };
+  record(
+    "GET /admin/receipts -> 200 items[] + pendingCount",
+    rec.statusCode === 200 &&
+      Array.isArray(recBody.items) &&
+      typeof recBody.pendingCount === "number",
+    `status=${rec.statusCode}`,
+  );
+  const recPending = await get("/admin/receipts?status=PENDING", adminToken);
+  record(
+    "GET /admin/receipts?status=PENDING -> 200",
+    recPending.statusCode === 200,
+    `status=${recPending.statusCode}`,
+  );
+  const recBad = await get("/admin/receipts?status=BOGUS", adminToken);
+  record(
+    "GET /admin/receipts bad status -> 400",
+    recBad.statusCode === 400,
+    `status=${recBad.statusCode}`,
+  );
+  const recNoAuth = await get("/admin/receipts");
+  record(
+    "GET /admin/receipts no token -> 401",
+    recNoAuth.statusCode === 401,
+    `status=${recNoAuth.statusCode}`,
+  );
+
+  // Cleanup
+  await prisma.order.deleteMany({ where: { userId } });
+  await prisma.inventoryItem.deleteMany({ where: { productId: product.id } });
+  await prisma.productPlan.deleteMany({ where: { productId: product.id } });
+  await prisma.product.delete({ where: { id: product.id } });
+  await prisma.user.delete({ where: { id: userId } });
+}
+
 async function testSecurity(): Promise<void> {
   ip = "10.10.0.4";
   const suffix = Math.floor(Math.random() * 1e9)
@@ -692,6 +808,7 @@ async function main(): Promise<void> {
   await testAuth();
   await testOrders();
   await testAdmin();
+  await testCardToCard();
   await testSecurity();
   testRoleGuard();
 

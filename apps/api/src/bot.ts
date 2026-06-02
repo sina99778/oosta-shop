@@ -11,6 +11,12 @@ import path from "node:path";
 import { env } from "./config/env";
 import { prisma } from "./lib/prisma";
 import { createBackup, restoreFromFile } from "./lib/backup";
+import {
+  approveReceipt,
+  getReceiptImage,
+  listReceipts,
+  rejectReceipt,
+} from "./modules/admin/admin.service";
 
 let bot: Telegraf | undefined;
 let backupTimer: ReturnType<typeof setInterval> | undefined;
@@ -22,10 +28,86 @@ function mainMenu() {
       Markup.button.callback("🧾 Last 5 orders", "orders"),
     ],
     [
+      Markup.button.callback("🧾 Pending receipts", "receipts"),
+      Markup.button.callback("🗂 Receipt history", "receipts_history"),
+    ],
+    [
       Markup.button.callback("💾 Backup now", "backup"),
       Markup.button.callback("♻️ Restore", "restore"),
     ],
   ]);
+}
+
+function receiptCaption(r: {
+  id: string;
+  reference: string | null;
+  status: string;
+  createdAt: Date;
+  order: {
+    id: string;
+    totalAmount: number;
+    currency: string;
+    user: { name: string; email: string | null; phone: string | null };
+  };
+}): string {
+  const who = r.order.user.email ?? r.order.user.phone ?? r.order.user.name;
+  const when = new Date(r.createdAt).toISOString().replace("T", " ").slice(0, 16);
+  const statusIcon = r.status === "APPROVED" ? "✅" : r.status === "REJECTED" ? "❌" : "🕒";
+  return [
+    `🧾 Receipt — order #${r.order.id.slice(-8)}`,
+    `👤 ${r.order.user.name} (${who})`,
+    `💰 ${r.order.totalAmount} ${r.order.currency}`,
+    `🏷 Note: ${r.reference ?? "—"}`,
+    `${statusIcon} Status: ${r.status}`,
+    `🕒 ${when}`,
+  ].join("\n");
+}
+
+// Send each receipt's image + (for pending ones) Approve/Reject buttons.
+async function sendReceipts(chatId: number, status: "PENDING" | undefined): Promise<void> {
+  if (!bot) return;
+  const { items, pendingCount } = await listReceipts({ status, page: 1, pageSize: 10 });
+  if (items.length === 0) {
+    await bot.telegram.sendMessage(
+      chatId,
+      status === "PENDING" ? "✅ No receipts awaiting review." : "No receipts yet.",
+      mainMenu(),
+    );
+    return;
+  }
+  await bot.telegram.sendMessage(
+    chatId,
+    status === "PENDING"
+      ? `🧾 ${pendingCount} receipt(s) awaiting review:`
+      : `🗂 Showing ${items.length} most recent receipt(s):`,
+  );
+  for (const r of items) {
+    const { data, mimeType } = await getReceiptImage(r.id);
+    const caption = receiptCaption(r);
+    const buttons =
+      r.status === "PENDING"
+        ? Markup.inlineKeyboard([
+            [
+              Markup.button.callback("✅ Approve", `rcp_ok_${r.id}`),
+              Markup.button.callback("❌ Reject", `rcp_no_${r.id}`),
+            ],
+          ])
+        : undefined;
+    try {
+      if (mimeType === "application/pdf") {
+        await bot.telegram.sendDocument(
+          chatId,
+          { source: data, filename: `receipt-${r.id}.pdf` },
+          { caption, ...(buttons ?? {}) },
+        );
+      } else {
+        await bot.telegram.sendPhoto(chatId, { source: data }, { caption, ...(buttons ?? {}) });
+      }
+    } catch {
+      // Fall back to a text-only card if the media can't be sent.
+      await bot.telegram.sendMessage(chatId, caption, buttons ?? {});
+    }
+  }
 }
 
 async function statsMessage(): Promise<string> {
@@ -107,6 +189,54 @@ export function startBot(): void {
       "♻️ To restore, send me a backup file (.sql or .sql.gz) with the caption: restore",
       mainMenu(),
     );
+  });
+
+  // Card-to-card receipts.
+  bot.action("receipts", async (ctx) => {
+    await ctx.answerCbQuery("Loading…");
+    await sendReceipts(ctx.chat?.id ?? adminId, "PENDING");
+  });
+  bot.action("receipts_history", async (ctx) => {
+    await ctx.answerCbQuery("Loading…");
+    await sendReceipts(ctx.chat?.id ?? adminId, undefined);
+  });
+
+  bot.action(/^rcp_ok_(.+)$/, async (ctx) => {
+    const id = ctx.match[1];
+    try {
+      const receipt = await approveReceipt(id, {});
+      await ctx.answerCbQuery("✅ Approved & delivered");
+      await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+      await ctx.reply(
+        `✅ Approved — order #${receipt.order.id.slice(-8)} is now PAID and delivered.`,
+        mainMenu(),
+      );
+    } catch (error) {
+      await ctx.answerCbQuery("Failed");
+      await ctx.reply(
+        `❌ Could not approve: ${error instanceof Error ? error.message : String(error)}`,
+        mainMenu(),
+      );
+    }
+  });
+
+  bot.action(/^rcp_no_(.+)$/, async (ctx) => {
+    const id = ctx.match[1];
+    try {
+      const receipt = await rejectReceipt(id, {});
+      await ctx.answerCbQuery("❌ Rejected");
+      await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+      await ctx.reply(
+        `❌ Rejected — order #${receipt.order.id.slice(-8)} marked ${receipt.order.paymentStatus}. The receipt is kept in history.`,
+        mainMenu(),
+      );
+    } catch (error) {
+      await ctx.answerCbQuery("Failed");
+      await ctx.reply(
+        `❌ Could not reject: ${error instanceof Error ? error.message : String(error)}`,
+        mainMenu(),
+      );
+    }
   });
 
   // Restore: admin sends a .sql/.sql.gz dump with the caption "restore".

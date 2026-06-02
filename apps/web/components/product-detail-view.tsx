@@ -13,7 +13,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
-import type { CreateOrderResponse, ProductDetail } from "@/lib/types";
+import type { CreateOrderResponse, PaymentConfig, PaymentMethod, ProductDetail } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 
 export function ProductDetailView({
@@ -26,10 +26,11 @@ export function ProductDetailView({
   dict: Dictionary;
 }) {
   const { data, loading, error } = useApi<{ product: ProductDetail }>(`/products/${slug}`);
+  const paymentConfig = useApi<PaymentConfig>("/payments/config");
   const { user, token } = useAuth();
   const router = useRouter();
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
-  const [buying, setBuying] = useState(false);
+  const [buying, setBuying] = useState<PaymentMethod | null>(null);
   const [buyError, setBuyError] = useState<string | null>(null);
 
   if (loading) {
@@ -48,24 +49,33 @@ export function ProductDetailView({
     selectedPlan ?? product.plans.find((p) => p.inStock)?.id ?? product.plans[0]?.id ?? null;
   const plan = product.plans.find((p) => p.id === activePlanId) ?? null;
 
-  async function buy() {
+  async function buy(method: PaymentMethod) {
     if (!plan) return;
     if (!user || !token) {
       router.push(`/${locale}/login?next=${encodeURIComponent(`/${locale}/products/${slug}`)}`);
       return;
     }
-    setBuying(true);
+    setBuying(method);
     setBuyError(null);
     try {
       const res = await api.post<CreateOrderResponse>(
         "/orders",
-        { items: [{ planId: plan.id, quantity: 1 }] },
+        { items: [{ planId: plan.id, quantity: 1 }], method },
         token,
       );
-      window.location.href = res.payment.redirectUrl;
+      if (method === "card_to_card") {
+        router.push(`/${locale}/checkout/card/${res.order.id}`);
+        return;
+      }
+      if (res.payment?.redirectUrl) {
+        window.location.href = res.payment.redirectUrl;
+        return;
+      }
+      setBuyError(dict.common.somethingWrong);
+      setBuying(null);
     } catch (e) {
       setBuyError(e instanceof ApiError ? e.message : dict.common.somethingWrong);
-      setBuying(false);
+      setBuying(null);
     }
   }
 
@@ -120,10 +130,10 @@ export function ProductDetailView({
           <Button
             className="mt-4 w-full"
             size="lg"
-            disabled={!plan || !plan.inStock || buying}
-            onClick={buy}
+            disabled={!plan || !plan.inStock || buying !== null}
+            onClick={() => buy("online")}
           >
-            {buying ? (
+            {buying === "online" ? (
               <>
                 <Spinner /> {dict.product.purchasing}
               </>
@@ -135,6 +145,24 @@ export function ProductDetailView({
               dict.common.buyNow
             )}
           </Button>
+
+          {paymentConfig.data?.cardToCard && product.inStock && (
+            <Button
+              className="mt-2 w-full"
+              size="lg"
+              variant="outline"
+              disabled={!plan || !plan.inStock || buying !== null}
+              onClick={() => buy("card_to_card")}
+            >
+              {buying === "card_to_card" ? (
+                <>
+                  <Spinner /> {dict.checkout.cardToCard.uploading}
+                </>
+              ) : (
+                dict.checkout.payCardToCard
+              )}
+            </Button>
+          )}
         </Card>
       </div>
     </Container>

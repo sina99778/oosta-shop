@@ -32,8 +32,10 @@ enum InventoryStatus {
 
 enum PaymentStatus {
   PENDING
+  PENDING_REVIEW
   PAID
   FAILED
+  REJECTED
   REFUNDED
   EXPIRED
 }
@@ -42,6 +44,13 @@ enum PaymentProvider {
   ZARINPAL
   STRIPE
   MANUAL
+  CARD_TO_CARD
+}
+
+enum ReceiptStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 // ── Models ───────────────────────────────────────────────────────────
@@ -158,6 +167,8 @@ model Order {
   paymentAuthority String?          @unique
   paymentRefId     String?
 
+  receipts  Receipt[]
+
   paidAt    DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -187,4 +198,24 @@ model OrderItem {
 
   @@index([orderId])
   @@map("order_items")
+}
+
+// Card-to-card payment receipts. Stored permanently (image bytes live in the DB,
+// so backups include them) — receipts are NEVER deleted, even after approval, so
+// the admin always keeps a full, auditable history.
+model Receipt {
+  id           String        @id @default(cuid())
+  orderId      String
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  imageData    Bytes
+  mimeType     String
+  reference    String?
+  status       ReceiptStatus @default(PENDING)
+  reviewerNote String?
+  reviewedAt   DateTime?
+  createdAt    DateTime      @default(now())
+
+  @@index([status])
+  @@index([orderId])
+  @@map("receipts")
 }

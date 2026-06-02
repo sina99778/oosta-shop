@@ -25,6 +25,16 @@ const EnvSchema = z.object({
   ZARINPAL_CURRENCY: z.enum(["IRR", "IRT"]).default("IRR"),
   WEB_BASE_URL: z.string().default("http://localhost:3000"),
 
+  // Manual card-to-card payment (buyer transfers, uploads a receipt, admin approves).
+  // When enabled, the storefront offers it as a payment option and shows the card below.
+  CARD_TO_CARD_ENABLED: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+  CARD_NUMBER: z.string().optional(),
+  CARD_HOLDER: z.string().optional(),
+  CARD_BANK: z.string().optional(),
+
   // Telegram admin bot (optional; the bot stays disabled unless both are set).
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_ADMIN_ID: z.preprocess(

@@ -71,3 +71,21 @@ adminRouter.get(
 // Orders overview
 adminRouter.get("/orders", validate({ query: schemas.ordersQuerySchema }), ctrl.listOrders);
 adminRouter.get("/orders/:id", validate({ params: schemas.idParamSchema }), ctrl.getOrder);
+
+// Card-to-card receipts (review queue + permanent history)
+adminRouter.get("/receipts", validate({ query: schemas.receiptsQuerySchema }), ctrl.listReceipts);
+adminRouter.get(
+  "/receipts/:id/image",
+  validate({ params: schemas.idParamSchema }),
+  ctrl.getReceiptImage,
+);
+adminRouter.post(
+  "/receipts/:id/approve",
+  validate({ params: schemas.idParamSchema, body: schemas.reviewReceiptSchema }),
+  ctrl.approveReceipt,
+);
+adminRouter.post(
+  "/receipts/:id/reject",
+  validate({ params: schemas.idParamSchema, body: schemas.reviewReceiptSchema }),
+  ctrl.rejectReceipt,
+);

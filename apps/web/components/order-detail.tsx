@@ -6,6 +6,7 @@ import { useApi } from "@/lib/use-api";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { CredentialField } from "@/components/credential-field";
 import { formatDate, formatPrice } from "@/lib/format";
@@ -15,7 +16,7 @@ import type { Dictionary } from "@/app/[locale]/dictionaries";
 
 function statusTone(status: string): "success" | "muted" | "danger" {
   if (status === "PAID") return "success";
-  if (status === "PENDING") return "muted";
+  if (status === "PENDING" || status === "PENDING_REVIEW") return "muted";
   return "danger";
 }
 
@@ -69,6 +70,18 @@ export function OrderDetail({
         {formatDate(order.createdAt, locale)} ·{" "}
         {formatPrice(order.totalAmount, order.currency, locale)}
       </p>
+
+      {order.paymentProvider === "CARD_TO_CARD" && order.paymentStatus !== "PAID" && (
+        <Card className="mt-4">
+          {order.paymentStatus === "PENDING_REVIEW" ? (
+            <p className="text-sm text-muted">{d.awaitingReview}</p>
+          ) : (
+            <Link href={`/${locale}/checkout/card/${order.id}`}>
+              <Button>{d.completePayment}</Button>
+            </Link>
+          )}
+        </Card>
+      )}
 
       <div className="mt-6 space-y-4">
         {order.items.map((item) => (

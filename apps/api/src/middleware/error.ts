@@ -4,6 +4,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 import { Prisma } from "@prisma/client";
+import { MulterError } from "multer";
 import { AppError } from "../utils/httpError";
 import { env } from "../config/env";
 
@@ -35,6 +36,13 @@ export function errorHandler(
       path: issue.path.join("."),
       message: issue.message,
     }));
+  } else if (err instanceof MulterError) {
+    statusCode = 400;
+    code = "UPLOAD_ERROR";
+    message =
+      err.code === "LIMIT_FILE_SIZE"
+        ? "Receipt file is too large (max 5 MB)"
+        : "File upload failed";
   } else if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === "P2002") {
       statusCode = 409;

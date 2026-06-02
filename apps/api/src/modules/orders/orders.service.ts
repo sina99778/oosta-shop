@@ -13,9 +13,21 @@ import { getPaymentProvider } from "../payments/provider";
 import type { CreateOrderInput } from "./orders.schemas";
 
 type OrderWithItems = Prisma.OrderGetPayload<{
-  include: { items: { include: { product: true; plan: true; fulfilledItems: true } } };
+  include: {
+    items: { include: { product: true; plan: true; fulfilledItems: true } };
+    receipts: true;
+  };
 }>;
 type FulfilledItem = OrderWithItems["items"][number]["fulfilledItems"][number];
+
+// Destination card shown to the buyer for a manual card-to-card transfer.
+function cardToCardInfo() {
+  return {
+    number: env.CARD_NUMBER ?? "",
+    holder: env.CARD_HOLDER ?? "",
+    bank: env.CARD_BANK ?? "",
+  };
+}
 
 function credentialOf(item: FulfilledItem) {
   return {
@@ -54,6 +66,20 @@ function serializeOrderDetail(order: OrderWithItems) {
       // The account vault: delivered credentials, exposed only for paid orders.
       credentials: paid ? item.fulfilledItems.map(credentialOf) : [],
     })),
+    // Card-to-card receipts the buyer uploaded (metadata only — image fetched separately).
+    receipts: order.receipts.map((r) => ({
+      id: r.id,
+      status: r.status,
+      reference: r.reference,
+      reviewerNote: r.reviewerNote,
+      createdAt: r.createdAt,
+      reviewedAt: r.reviewedAt,
+    })),
+    // For an unpaid card-to-card order, surface the destination card so the buyer can pay.
+    cardToCard:
+      order.paymentProvider === "CARD_TO_CARD" && order.paymentStatus !== "PAID"
+        ? cardToCardInfo()
+        : null,
   };
 }
 
@@ -109,6 +135,34 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
     };
   });
 
+  // --- Card-to-card: create a PENDING order and return the destination card. -----
+  // No gateway is involved; the buyer transfers manually then uploads a receipt.
+  if (input.method === "card_to_card") {
+    if (!env.CARD_TO_CARD_ENABLED) {
+      throw new AppError(400, "METHOD_UNAVAILABLE", "Card-to-card payment is not available");
+    }
+    const order = await prisma.order.create({
+      data: {
+        userId,
+        totalAmount: total,
+        currency,
+        paymentStatus: "PENDING",
+        paymentProvider: "CARD_TO_CARD",
+        items: { create: itemsData },
+      },
+    });
+    return {
+      order: {
+        id: order.id,
+        totalAmount: Number(total),
+        currency,
+        paymentStatus: order.paymentStatus,
+      },
+      cardToCard: { ...cardToCardInfo(), amount: Number(total), currency },
+    };
+  }
+
+  // --- Online: open a payment-gateway session and return the redirect URL. -------
   const provider = getPaymentProvider();
   const order = await prisma.order.create({
     data: {
@@ -144,7 +198,7 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
   };
 }
 
-async function deliverOrder(orderId: string, refId: string | null): Promise<void> {
+export async function deliverOrder(orderId: string, refId: string | null): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
     if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
@@ -235,8 +289,67 @@ export async function listOrders(userId: string) {
 export async function getOrderDetail(userId: string, orderId: string) {
   const order = await prisma.order.findFirst({
     where: { id: orderId, userId },
-    include: { items: { include: { product: true, plan: true, fulfilledItems: true } } },
+    include: {
+      items: { include: { product: true, plan: true, fulfilledItems: true } },
+      receipts: { orderBy: { createdAt: "desc" } },
+    },
   });
   if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
   return serializeOrderDetail(order);
+}
+
+// Buyer uploads a card-to-card transfer receipt. The image is stored in the DB so it
+// is included in backups and is NEVER deleted. The order moves to PENDING_REVIEW.
+const ALLOWED_RECEIPT_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+]);
+
+export async function uploadReceipt(
+  userId: string,
+  orderId: string,
+  file: { buffer: Buffer; mimetype: string } | undefined,
+  reference?: string,
+) {
+  if (!file) throw new AppError(400, "NO_FILE", "A receipt image is required");
+  if (!ALLOWED_RECEIPT_TYPES.has(file.mimetype)) {
+    throw new AppError(400, "BAD_FILE_TYPE", "Receipt must be an image (JPG/PNG/WebP) or PDF");
+  }
+
+  const order = await prisma.order.findFirst({ where: { id: orderId, userId } });
+  if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
+  if (order.paymentProvider !== "CARD_TO_CARD") {
+    throw new AppError(400, "NOT_CARD_TO_CARD", "This order is not a card-to-card order");
+  }
+  if (order.paymentStatus === "PAID") {
+    throw new AppError(400, "ALREADY_PAID", "This order is already paid");
+  }
+
+  const receipt = await prisma.receipt.create({
+    data: {
+      orderId: order.id,
+      imageData: new Uint8Array(file.buffer),
+      mimeType: file.mimetype,
+      reference: reference?.trim() || null,
+      status: "PENDING",
+    },
+  });
+  await prisma.order.update({
+    where: { id: order.id },
+    data: { paymentStatus: "PENDING_REVIEW" },
+  });
+
+  return { ok: true, receiptId: receipt.id, paymentStatus: "PENDING_REVIEW" as const };
+}
+
+// Public payment configuration the storefront uses to decide which methods to offer.
+export function getPaymentConfig() {
+  return {
+    online: true,
+    cardToCard: env.CARD_TO_CARD_ENABLED,
+    card: env.CARD_TO_CARD_ENABLED ? cardToCardInfo() : null,
+  };
 }

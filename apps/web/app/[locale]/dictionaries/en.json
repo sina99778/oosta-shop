@@ -69,7 +69,34 @@
     "failBody": "Your payment was not completed. You have not been charged.",
     "viewOrders": "Go to dashboard",
     "backToStore": "Back to store",
-    "missingParams": "Missing payment information."
+    "missingParams": "Missing payment information.",
+    "chooseMethod": "Choose a payment method",
+    "payOnline": "Pay online",
+    "payCardToCard": "Card-to-card",
+    "cardToCard": {
+      "title": "Card-to-card payment",
+      "instructions": "Transfer the exact amount to the card below, then upload your receipt. Your order is delivered automatically once an admin confirms the payment.",
+      "amount": "Amount to pay",
+      "cardNumber": "Card number",
+      "cardHolder": "Card holder",
+      "bank": "Bank",
+      "copy": "Copy",
+      "copied": "Copied",
+      "uploadTitle": "Upload your receipt",
+      "file": "Receipt image (JPG, PNG, or PDF)",
+      "reference": "Tracking number or note (optional)",
+      "submit": "Submit receipt",
+      "uploading": "Uploading…",
+      "submitted": "Receipt submitted — pending review",
+      "pendingBody": "We received your receipt. Your order will be delivered right after we confirm the payment.",
+      "rejected": "Your previous receipt was rejected. Please upload a valid receipt.",
+      "approved": "Payment confirmed — your order has been delivered.",
+      "yourReceipts": "Your receipts",
+      "uploadedOn": "Uploaded",
+      "viewOrder": "View order",
+      "selectFile": "Please choose a receipt file.",
+      "notAvailable": "This order can no longer accept a receipt."
+    }
   },
   "dashboard": {
     "orders": "Your orders",
@@ -84,6 +111,8 @@
     "copy": "Copy",
     "copied": "Copied",
     "backToDashboard": "Back to dashboard",
+    "completePayment": "Complete payment",
+    "awaitingReview": "Your receipt is awaiting review.",
     "fields": {
       "accountEmail": "Email",
       "accountPassword": "Password",
@@ -92,8 +121,10 @@
     },
     "status": {
       "PENDING": "Pending",
+      "PENDING_REVIEW": "Pending review",
       "PAID": "Paid",
       "FAILED": "Failed",
+      "REJECTED": "Rejected",
       "REFUNDED": "Refunded",
       "EXPIRED": "Expired"
     }
@@ -132,7 +163,29 @@
     "bulkAccountHelp": "One per line: email,password",
     "bulkLicenseHelp": "One license key per line",
     "bulkGiftcardHelp": "One gift-card code per line",
-    "toggleActive": "Toggle active"
+    "toggleActive": "Toggle active",
+    "receipts": {
+      "title": "Receipts",
+      "tab": "Receipts",
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "all": "All",
+      "approve": "Approve",
+      "reject": "Reject",
+      "view": "View receipt",
+      "hide": "Hide image",
+      "none": "No receipts.",
+      "customer": "Customer",
+      "amount": "Amount",
+      "note": "Note",
+      "reviewNote": "Review note (optional)",
+      "uploaded": "Uploaded",
+      "reviewed": "Reviewed",
+      "order": "Order",
+      "awaiting": "awaiting review",
+      "working": "Working…"
+    }
   },
   "footer": {
     "tagline": "Instant digital goods delivery",

@@ -72,6 +72,17 @@ export type OrderItemDetail = {
   credentials: Credential[];
 };
 
+export type CardInfo = { number: string; holder: string; bank: string };
+
+export type ReceiptInfo = {
+  id: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  reference: string | null;
+  reviewerNote: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+};
+
 export type OrderDetail = {
   id: string;
   totalAmount: number;
@@ -82,9 +93,46 @@ export type OrderDetail = {
   createdAt: string;
   paidAt: string | null;
   items: OrderItemDetail[];
+  receipts: ReceiptInfo[];
+  cardToCard: CardInfo | null;
+};
+
+export type PaymentMethod = "online" | "card_to_card";
+
+export type PaymentConfig = {
+  online: boolean;
+  cardToCard: boolean;
+  card: CardInfo | null;
 };
 
 export type CreateOrderResponse = {
   order: { id: string; totalAmount: number; currency: string; paymentStatus: string };
-  payment: { authority: string; redirectUrl: string };
+  payment?: { authority: string; redirectUrl: string };
+  cardToCard?: CardInfo & { amount: number; currency: string };
+};
+
+// Admin receipt review (queue + history)
+export type AdminReceipt = {
+  id: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  reference: string | null;
+  reviewerNote: string | null;
+  mimeType: string;
+  createdAt: string;
+  reviewedAt: string | null;
+  order: {
+    id: string;
+    totalAmount: number;
+    currency: string;
+    paymentStatus: string;
+    paymentProvider: string | null;
+    createdAt: string;
+    user: { id: string; name: string; email: string | null; phone: string | null };
+  };
+};
+
+export type AdminReceiptList = {
+  items: AdminReceipt[];
+  pendingCount: number;
+  pagination: Pagination;
 };
