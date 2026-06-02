@@ -12,8 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
-import { formatPrice } from "@/lib/format";
 import { SeoAssistant } from "@/components/admin/seo-assistant";
+import { PlanRow } from "@/components/admin/plan-row";
 import type { Locale } from "@/lib/i18n";
 import type { Category, ProductType, SpecRow } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
@@ -113,7 +113,6 @@ export function AdminProductDetail({
   const [plSale, setPlSale] = useState("");
   const [plBusy, setPlBusy] = useState(false);
   const [plErr, setPlErr] = useState<string | null>(null);
-  const [planSale, setPlanSale] = useState<Record<string, string>>({});
 
   const [bulkPlan, setBulkPlan] = useState("");
   const [bulkText, setBulkText] = useState("");
@@ -241,17 +240,6 @@ export function AdminProductDetail({
       setPlErr(err instanceof ApiError ? err.message : dict.common.somethingWrong);
     } finally {
       setPlBusy(false);
-    }
-  }
-
-  async function savePlanSale(planId: string) {
-    const raw = planSale[planId];
-    const salePrice = raw && raw.trim() ? Number(raw) : null;
-    try {
-      await api.patch(`/admin/plans/${planId}`, { salePrice }, token ?? undefined);
-      setReload((r) => r + 1);
-    } catch {
-      /* surfaced on reload */
     }
   }
 
@@ -578,41 +566,13 @@ export function AdminProductDetail({
         <h2 className="mb-3 font-semibold">{t.plans}</h2>
         <div className="space-y-2">
           {product.plans.map((pl) => (
-            <div
+            <PlanRow
               key={pl.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm"
-            >
-              <div>
-                <span className="font-medium">{pl.label}</span>{" "}
-                {pl.salePrice != null ? (
-                  <span>
-                    <span className="text-muted line-through">
-                      {formatPrice(pl.price, pl.currency, locale)}
-                    </span>{" "}
-                    <span className="font-semibold text-success">
-                      {formatPrice(pl.salePrice, pl.currency, locale)}
-                    </span>
-                  </span>
-                ) : (
-                  <span>{formatPrice(pl.price, pl.currency, locale)}</span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  placeholder={t.salePrice}
-                  value={planSale[pl.id] ?? (pl.salePrice != null ? String(pl.salePrice) : "")}
-                  onChange={(e) => setPlanSale((m) => ({ ...m, [pl.id]: e.target.value }))}
-                  className="w-32"
-                />
-                <Button size="sm" variant="outline" onClick={() => savePlanSale(pl.id)}>
-                  {t.save}
-                </Button>
-                <Badge tone={pl.availableStock > 0 ? "success" : "muted"}>
-                  {pl.availableStock} {t.available}
-                </Badge>
-              </div>
-            </div>
+              plan={pl}
+              dict={dict}
+              token={token ?? undefined}
+              onChanged={() => setReload((r) => r + 1)}
+            />
           ))}
         </div>
         <form onSubmit={addPlan} className="mt-4 flex flex-wrap items-end gap-2">

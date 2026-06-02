@@ -1,12 +1,10 @@
-fix(ai): auto-retry + fallback model on Gemini overload (503)
+feat(admin): fully editable plan rows (label, price, sale, active, delete)
 
-The 503 "UNAVAILABLE / high demand" error is a transient Google-side spike.
-The SEO generator now retries transient failures (429/5xx/network) with
-exponential backoff and, if the primary model stays overloaded, automatically
-falls back to GEMINI_FALLBACK_MODEL (default gemini-2.5-flash). 404 model-not-
-found also falls through to the fallback; 400/401/403 fail fast. Friendlier
-"model is busy, try again" message on persistent overload.
+The plans section previously only let you edit the sale price. Each plan is now
+a full inline editor: label, price, sale price, active toggle, Save, and Delete
+(delete surfaces the "deactivate instead" message when the plan still has
+inventory/orders).
 
-Verified: API typecheck + smoke (100) + lint clean.
+Verified: next build green + lint clean.
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
