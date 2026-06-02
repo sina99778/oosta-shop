@@ -131,3 +131,17 @@ adminRouter.post(
   ctrl.rejectReview,
 );
 adminRouter.delete("/reviews/:id", validate({ params: schemas.idParamSchema }), ctrl.deleteReview);
+
+// Support tickets
+adminRouter.get("/tickets", validate({ query: schemas.ticketsQuerySchema }), ctrl.listTickets);
+adminRouter.get("/tickets/:id", validate({ params: schemas.idParamSchema }), ctrl.getTicket);
+adminRouter.post(
+  "/tickets/:id/messages",
+  validate({ params: schemas.idParamSchema, body: schemas.ticketReplySchema }),
+  ctrl.replyTicket,
+);
+adminRouter.post(
+  "/tickets/:id/status",
+  validate({ params: schemas.idParamSchema, body: schemas.ticketStatusSchema }),
+  ctrl.setTicketStatus,
+);

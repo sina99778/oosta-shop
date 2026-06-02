@@ -15,6 +15,9 @@ import type {
   ReceiptsQuery,
   ReviewReceiptInput,
   ReviewsQuery,
+  TicketReplyInput,
+  TicketStatusInput,
+  TicketsQuery,
   UpdateCategoryInput,
   UpdatePlanInput,
   UpdateProductInput,
@@ -609,6 +612,85 @@ export async function setReviewStatus(id: string, status: "APPROVED" | "REJECTED
 export async function deleteReview(id: string) {
   await prisma.review.delete({ where: { id } });
   return { ok: true };
+}
+
+// ---------------- Support tickets (admin) ----------------
+const ticketUserSelect = { id: true, name: true, email: true, phone: true } as const;
+
+export async function listTickets(query: TicketsQuery) {
+  const where: Prisma.TicketWhereInput = {};
+  if (query.status) where.status = query.status;
+  const [total, openCount, tickets] = await Promise.all([
+    prisma.ticket.count({ where }),
+    prisma.ticket.count({ where: { status: "OPEN" } }),
+    prisma.ticket.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+      include: { user: { select: ticketUserSelect }, _count: { select: { messages: true } } },
+    }),
+  ]);
+  return {
+    items: tickets.map((t) => ({
+      id: t.id,
+      subject: t.subject,
+      status: t.status,
+      messageCount: t._count.messages,
+      user: t.user,
+      updatedAt: t.updatedAt,
+    })),
+    openCount,
+    pagination: {
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
+    },
+  };
+}
+
+export async function getTicket(id: string) {
+  const ticket = await prisma.ticket.findUnique({
+    where: { id },
+    include: {
+      user: { select: ticketUserSelect },
+      messages: { orderBy: { createdAt: "asc" } },
+    },
+  });
+  if (!ticket) throw new AppError(404, "NOT_FOUND", "Ticket not found");
+  return {
+    id: ticket.id,
+    subject: ticket.subject,
+    status: ticket.status,
+    user: ticket.user,
+    createdAt: ticket.createdAt,
+    updatedAt: ticket.updatedAt,
+    messages: ticket.messages.map((m) => ({
+      id: m.id,
+      body: m.body,
+      isStaff: m.isStaff,
+      createdAt: m.createdAt,
+    })),
+  };
+}
+
+export async function replyTicket(id: string, adminId: string, input: TicketReplyInput) {
+  const ticket = await prisma.ticket.findUnique({ where: { id }, select: { id: true } });
+  if (!ticket) throw new AppError(404, "NOT_FOUND", "Ticket not found");
+  await prisma.ticketMessage.create({
+    data: { ticketId: id, authorId: adminId, body: input.body, isStaff: true },
+  });
+  await prisma.ticket.update({
+    where: { id },
+    data: { status: "ANSWERED", updatedAt: new Date() },
+  });
+  return getTicket(id);
+}
+
+export async function setTicketStatus(id: string, input: TicketStatusInput) {
+  await prisma.ticket.update({ where: { id }, data: { status: input.status } });
+  return getTicket(id);
 }
 
 // ---------------- Sales dashboard / analytics ----------------

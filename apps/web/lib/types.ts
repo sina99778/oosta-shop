@@ -84,6 +84,41 @@ export type AdminReviewList = {
   pagination: Pagination;
 };
 
+// Support tickets
+export type TicketStatus = "OPEN" | "ANSWERED" | "CLOSED";
+export type TicketMessage = { id: string; body: string; isStaff: boolean; createdAt: string };
+export type TicketListItem = {
+  id: string;
+  subject: string;
+  status: TicketStatus;
+  messageCount: number;
+  lastMessage: string;
+  updatedAt: string;
+};
+export type TicketDetail = {
+  id: string;
+  subject: string;
+  status: TicketStatus;
+  createdAt: string;
+  updatedAt: string;
+  messages: TicketMessage[];
+};
+type TicketUser = { id: string; name: string; email: string | null; phone: string | null };
+export type AdminTicketListItem = {
+  id: string;
+  subject: string;
+  status: TicketStatus;
+  messageCount: number;
+  updatedAt: string;
+  user: TicketUser;
+};
+export type AdminTicketList = {
+  items: AdminTicketListItem[];
+  openCount: number;
+  pagination: Pagination;
+};
+export type AdminTicketDetail = TicketDetail & { user: TicketUser };
+
 // Admin sales dashboard
 export type AdminStats = {
   currency: string;

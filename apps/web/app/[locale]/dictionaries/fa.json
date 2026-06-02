@@ -7,7 +7,8 @@
     "login": "ورود",
     "signup": "ثبت‌نام",
     "logout": "خروج",
-    "account": "حساب کاربری"
+    "account": "حساب کاربری",
+    "support": "پشتیبانی"
   },
   "common": {
     "loading": "در حال بارگذاری…",
@@ -151,8 +152,39 @@
       "EXPIRED": "منقضی‌شده"
     }
   },
+  "tickets": {
+    "title": "پشتیبانی",
+    "new": "تیکت جدید",
+    "subject": "موضوع",
+    "message": "پیام",
+    "send": "ارسال",
+    "empty": "هنوز تیکتی ندارید.",
+    "back": "بازگشت به تیکت‌ها",
+    "you": "شما",
+    "staff": "پشتیبانی",
+    "writeReply": "پاسخ بنویسید…",
+    "created": "تیکت ساخته شد.",
+    "status": { "OPEN": "باز", "ANSWERED": "پاسخ داده‌شده", "CLOSED": "بسته" }
+  },
   "admin": {
     "title": "مدیریت",
+    "ticketsTab": "تیکت‌ها",
+    "tickets": {
+      "title": "تیکت‌ها",
+      "open": "باز",
+      "answered": "پاسخ داده‌شده",
+      "closed": "بسته",
+      "all": "همه",
+      "none": "تیکتی نیست.",
+      "customer": "مشتری",
+      "reply": "پاسخ",
+      "close": "بستن",
+      "reopen": "بازگشایی",
+      "writeReply": "پاسخ بنویسید…",
+      "staff": "پشتیبانی",
+      "you": "مشتری",
+      "status": { "OPEN": "باز", "ANSWERED": "پاسخ داده‌شده", "CLOSED": "بسته" }
+    },
     "dashboardTab": "داشبورد",
     "dash": {
       "title": "داشبورد",

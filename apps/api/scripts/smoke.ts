@@ -860,6 +860,94 @@ async function testRichness(): Promise<void> {
   await prisma.user.delete({ where: { id: buyerId } });
 }
 
+async function testTickets(): Promise<void> {
+  ip = "10.10.0.7";
+  const suffix = Math.floor(Math.random() * 1e9)
+    .toString()
+    .padStart(9, "0");
+
+  const signup = await post("/auth/signup", {
+    name: "Ticket User",
+    email: `tkt_${suffix}@example.com`,
+    password: "Tkt@12345",
+  });
+  const token = String(body(signup).token);
+  const userId = String(obj(body(signup).user).id);
+
+  const other = await post("/auth/signup", {
+    name: "Other",
+    email: `tkto_${suffix}@example.com`,
+    password: "Tkt@12345",
+  });
+  const otherToken = String(body(other).token);
+  const otherId = String(obj(body(other).user).id);
+
+  // Auth required
+  const noAuth = await post("/tickets", { subject: "x", body: "y" });
+  record("POST /tickets no token -> 401", noAuth.statusCode === 401, `status=${noAuth.statusCode}`);
+
+  // Create
+  const create = await post("/tickets", { subject: "Help me", body: "It broke" }, token);
+  record("create ticket -> 201", create.statusCode === 201, `status=${create.statusCode}`);
+  const ticketId = String(body(create).id);
+
+  // List + detail
+  const list = body(await get("/tickets", token)).tickets as unknown[] | undefined;
+  record("list my tickets >=1", Array.isArray(list) && list.length >= 1, `count=${list?.length}`);
+  const detail = obj(body(await get(`/tickets/${ticketId}`, token)).ticket);
+  record(
+    "ticket detail has first message",
+    (detail.messages as unknown[]).length === 1,
+    `msgs=${(detail.messages as unknown[]).length}`,
+  );
+
+  // Cross-user cannot read
+  const cross = await get(`/tickets/${ticketId}`, otherToken);
+  record("cross-user ticket -> 404", cross.statusCode === 404, `status=${cross.statusCode}`);
+
+  // User reply
+  const reply = await post(`/tickets/${ticketId}/messages`, { body: "any update?" }, token);
+  record(
+    "user reply -> 2 messages",
+    reply.statusCode === 200 && (obj(body(reply).ticket).messages as unknown[]).length === 2,
+    `status=${reply.statusCode}`,
+  );
+
+  // Admin
+  const adminToken = String(
+    body(await post("/auth/login", { identifier: "admin@oosta.local", password: "Admin@12345" }))
+      .token,
+  );
+  const adminList = body(await get("/admin/tickets?status=OPEN", adminToken)) as {
+    items?: Array<Record<string, unknown>>;
+  };
+  record(
+    "admin tickets queue contains it",
+    (adminList.items ?? []).some((tk) => tk.id === ticketId),
+    "",
+  );
+  const staffReply = await post(
+    `/admin/tickets/${ticketId}/messages`,
+    { body: "Fixed!" },
+    adminToken,
+  );
+  record(
+    "admin reply -> ANSWERED",
+    staffReply.statusCode === 200 && obj(body(staffReply).ticket).status === "ANSWERED",
+    `status=${staffReply.statusCode}`,
+  );
+  const close = await post(`/admin/tickets/${ticketId}/status`, { status: "CLOSED" }, adminToken);
+  record(
+    "admin close -> CLOSED",
+    close.statusCode === 200 && obj(body(close).ticket).status === "CLOSED",
+    `status=${close.statusCode}`,
+  );
+
+  // Cleanup (messages cascade with ticket)
+  await prisma.ticket.deleteMany({ where: { userId } });
+  await prisma.user.deleteMany({ where: { id: { in: [userId, otherId] } } });
+}
+
 async function testSecurity(): Promise<void> {
   ip = "10.10.0.4";
   const suffix = Math.floor(Math.random() * 1e9)
@@ -950,6 +1038,7 @@ async function main(): Promise<void> {
   await testAdmin();
   await testCardToCard();
   await testRichness();
+  await testTickets();
   await testSecurity();
   testRoleGuard();
 

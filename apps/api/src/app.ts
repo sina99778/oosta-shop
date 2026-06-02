@@ -13,6 +13,7 @@ import { authRouter } from "./modules/auth/auth.routes";
 import { catalogRouter } from "./modules/catalog/catalog.routes";
 import { ordersRouter } from "./modules/orders/orders.routes";
 import { paymentsRouter } from "./modules/payments/payments.routes";
+import { ticketsRouter } from "./modules/tickets/tickets.routes";
 import { adminRouter } from "./modules/admin/admin.routes";
 
 export function createApp() {
@@ -39,6 +40,7 @@ export function createApp() {
   app.use(catalogRouter);
   app.use("/orders", ordersRouter);
   app.use("/payments", paymentsRouter);
+  app.use("/tickets", ticketsRouter);
   app.use("/admin", adminRouter);
 
   // 404 + error handling (must be last)

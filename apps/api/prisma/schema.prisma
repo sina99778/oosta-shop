@@ -59,6 +59,12 @@ enum ReviewStatus {
   REJECTED
 }
 
+enum TicketStatus {
+  OPEN
+  ANSWERED
+  CLOSED
+}
+
 // ── Models ───────────────────────────────────────────────────────────
 
 model User {
@@ -67,11 +73,13 @@ model User {
   email        String?  @unique
   phone        String?  @unique
   passwordHash String
-  role         Role     @default(USER)
-  orders       Order[]
-  reviews      Review[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  role           Role            @default(USER)
+  orders         Order[]
+  reviews        Review[]
+  tickets        Ticket[]
+  ticketMessages TicketMessage[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@map("users")
 }
@@ -150,6 +158,36 @@ model Review {
   @@unique([productId, userId])
   @@index([productId, status])
   @@map("reviews")
+}
+
+// Customer support tickets with a threaded message log.
+model Ticket {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject   String
+  status    TicketStatus    @default(OPEN)
+  messages  TicketMessage[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@map("tickets")
+}
+
+model TicketMessage {
+  id        String   @id @default(cuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body      String
+  isStaff   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+  @@map("ticket_messages")
 }
 
 // A purchasable "time-plan" / variant of a product (the price lives here).

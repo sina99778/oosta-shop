@@ -103,6 +103,15 @@ export const reviewsQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(50),
 });
 
+// Support tickets (admin)
+export const ticketsQuerySchema = z.object({
+  status: z.enum(["OPEN", "ANSWERED", "CLOSED"]).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+});
+export const ticketReplySchema = z.object({ body: z.string().trim().min(1).max(5000) });
+export const ticketStatusSchema = z.object({ status: z.enum(["OPEN", "ANSWERED", "CLOSED"]) });
+
 export const idParamSchema = z.object({ id: z.string().min(1) });
 export const productIdParamSchema = z.object({ productId: z.string().min(1) });
 export const imageIdParamSchema = z.object({ imageId: z.string().min(1) });
@@ -119,3 +128,6 @@ export type OrdersQuery = z.infer<typeof ordersQuerySchema>;
 export type ReceiptsQuery = z.infer<typeof receiptsQuerySchema>;
 export type ReviewReceiptInput = z.infer<typeof reviewReceiptSchema>;
 export type ReviewsQuery = z.infer<typeof reviewsQuerySchema>;
+export type TicketsQuery = z.infer<typeof ticketsQuerySchema>;
+export type TicketReplyInput = z.infer<typeof ticketReplySchema>;
+export type TicketStatusInput = z.infer<typeof ticketStatusSchema>;

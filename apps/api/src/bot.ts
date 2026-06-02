@@ -146,6 +146,17 @@ async function sendBackup(chatId: number): Promise<void> {
   }
 }
 
+// Fire-and-forget notification to the admin (used by e.g. the tickets module).
+export async function notifyAdmin(text: string): Promise<void> {
+  const adminId = env.TELEGRAM_ADMIN_ID;
+  if (!bot || !adminId) return;
+  try {
+    await bot.telegram.sendMessage(adminId, text);
+  } catch (error) {
+    console.error("[telegram] notifyAdmin failed", error);
+  }
+}
+
 export function startBot(): void {
   const token = env.TELEGRAM_BOT_TOKEN;
   const adminId = env.TELEGRAM_ADMIN_ID;

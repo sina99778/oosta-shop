@@ -7,7 +7,8 @@
     "login": "Log in",
     "signup": "Sign up",
     "logout": "Log out",
-    "account": "Account"
+    "account": "Account",
+    "support": "Support"
   },
   "common": {
     "loading": "Loading…",
@@ -151,8 +152,39 @@
       "EXPIRED": "Expired"
     }
   },
+  "tickets": {
+    "title": "Support",
+    "new": "New ticket",
+    "subject": "Subject",
+    "message": "Message",
+    "send": "Send",
+    "empty": "You have no tickets yet.",
+    "back": "Back to tickets",
+    "you": "You",
+    "staff": "Support",
+    "writeReply": "Write a reply…",
+    "created": "Ticket created.",
+    "status": { "OPEN": "Open", "ANSWERED": "Answered", "CLOSED": "Closed" }
+  },
   "admin": {
     "title": "Admin",
+    "ticketsTab": "Tickets",
+    "tickets": {
+      "title": "Tickets",
+      "open": "Open",
+      "answered": "Answered",
+      "closed": "Closed",
+      "all": "All",
+      "none": "No tickets.",
+      "customer": "Customer",
+      "reply": "Reply",
+      "close": "Close",
+      "reopen": "Reopen",
+      "writeReply": "Write a reply…",
+      "staff": "Staff",
+      "you": "Customer",
+      "status": { "OPEN": "Open", "ANSWERED": "Answered", "CLOSED": "Closed" }
+    },
     "dashboardTab": "Dashboard",
     "dash": {
       "title": "Dashboard",

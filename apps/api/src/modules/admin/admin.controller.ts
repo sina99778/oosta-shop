@@ -12,6 +12,9 @@ import type {
   ReceiptsQuery,
   ReviewReceiptInput,
   ReviewsQuery,
+  TicketReplyInput,
+  TicketStatusInput,
+  TicketsQuery,
   UpdateCategoryInput,
   UpdatePlanInput,
   UpdateProductInput,
@@ -78,6 +81,28 @@ export async function rejectReview(req: Request, res: Response): Promise<void> {
 }
 export async function deleteReview(req: Request, res: Response): Promise<void> {
   res.json(await admin.deleteReview(String(req.params.id)));
+}
+
+// Support tickets
+export async function listTickets(_req: Request, res: Response): Promise<void> {
+  res.json(await admin.listTickets(res.locals.query as TicketsQuery));
+}
+export async function getTicket(req: Request, res: Response): Promise<void> {
+  res.json({ ticket: await admin.getTicket(String(req.params.id)) });
+}
+export async function replyTicket(req: Request, res: Response): Promise<void> {
+  res.json({
+    ticket: await admin.replyTicket(
+      String(req.params.id),
+      req.user!.id,
+      req.body as TicketReplyInput,
+    ),
+  });
+}
+export async function setTicketStatus(req: Request, res: Response): Promise<void> {
+  res.json({
+    ticket: await admin.setTicketStatus(String(req.params.id), req.body as TicketStatusInput),
+  });
 }
 
 // Sales dashboard
