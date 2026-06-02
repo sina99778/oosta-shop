@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
+import { cn } from "@/lib/cn";
 import { LocaleSwitcher } from "./locale-switcher";
+import { ThemeToggle } from "./theme-toggle";
 import type { Locale } from "@/lib/i18n";
 
 type NavDict = {
@@ -18,35 +21,58 @@ type NavDict = {
   account: string;
 };
 
-export function Header({ locale, dict }: { locale: Locale; dict: NavDict }) {
+export function Header({
+  locale,
+  dict,
+  themeLabel,
+}: {
+  locale: Locale;
+  dict: NavDict;
+  themeLabel: string;
+}) {
   const { user, logout, loading } = useAuth();
+  const pathname = usePathname();
   const base = `/${locale}`;
 
+  const link = (href: string, label: string) => {
+    const active = pathname === href || (href !== base && pathname.startsWith(href));
+    return (
+      <Link
+        href={href}
+        className={cn(
+          "text-sm transition-colors",
+          active ? "font-medium text-foreground" : "text-muted hover:text-foreground",
+        )}
+      >
+        {label}
+      </Link>
+    );
+  };
+
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/70 backdrop-blur-xl">
       <Container className="flex h-16 items-center justify-between gap-4">
-        <div className="flex items-center gap-6">
-          <Link href={base} className="text-lg font-bold tracking-tight">
-            oosta<span className="text-primary">AI</span>
+        <div className="flex items-center gap-7">
+          <Link
+            href={base}
+            className="flex items-center gap-2 text-lg font-extrabold tracking-tight"
+          >
+            <span className="grid size-8 place-items-center rounded-xl bg-brand-gradient text-white shadow-glow">
+              o
+            </span>
+            <span>
+              oosta<span className="text-gradient">AI</span>
+            </span>
           </Link>
-          <nav className="hidden items-center gap-4 text-sm text-muted sm:flex">
-            <Link href={`${base}/products`} className="hover:text-foreground">
-              {dict.products}
-            </Link>
-            {user && (
-              <Link href={`${base}/dashboard`} className="hover:text-foreground">
-                {dict.dashboard}
-              </Link>
-            )}
-            {user?.role === "ADMIN" && (
-              <Link href={`${base}/admin`} className="hover:text-foreground">
-                {dict.admin}
-              </Link>
-            )}
+          <nav className="hidden items-center gap-5 sm:flex">
+            {link(`${base}/products`, dict.products)}
+            {user && link(`${base}/dashboard`, dict.dashboard)}
+            {user?.role === "ADMIN" && link(`${base}/admin`, dict.admin)}
           </nav>
         </div>
 
         <div className="flex items-center gap-2">
+          <ThemeToggle label={themeLabel} />
           <LocaleSwitcher current={locale} />
           {!loading &&
             (user ? (
@@ -60,13 +86,13 @@ export function Header({ locale, dict }: { locale: Locale; dict: NavDict }) {
               <>
                 <Link
                   href={`${base}/login`}
-                  className="inline-flex h-8 items-center rounded-lg px-3 text-sm hover:bg-surface"
+                  className="hidden h-9 items-center rounded-xl px-3.5 text-sm text-muted transition-colors hover:bg-surface hover:text-foreground sm:inline-flex"
                 >
                   {dict.login}
                 </Link>
                 <Link
                   href={`${base}/signup`}
-                  className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary-hover"
+                  className="inline-flex h-9 items-center rounded-xl bg-brand-gradient px-4 text-sm font-medium text-white shadow-glow transition-all hover:brightness-110 active:scale-[0.98]"
                 >
                   {dict.signup}
                 </Link>

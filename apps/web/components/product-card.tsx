@@ -32,7 +32,7 @@ export function ProductCard({
   const image = productImageUrl(product);
   return (
     <Link href={`/${locale}/products/${product.slug}`} className="group block">
-      <Card className="flex h-full flex-col overflow-hidden transition-colors hover:border-primary">
+      <Card className="flex h-full flex-col overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:border-primary hover:shadow-glow">
         <div className="relative -mx-5 -mt-5 mb-3 aspect-[16/10] overflow-hidden border-b border-border bg-surface">
           {image ? (
             // eslint-disable-next-line @next/next/no-img-element

@@ -42,10 +42,16 @@ export default async function LocaleLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${vazirmatn.variable} h-full antialiased`}
     >
       <body className={`flex min-h-full flex-col bg-background text-foreground ${fontClass}`}>
+        {/* Set the theme class before paint to avoid a flash. Defaults to dark. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem('theme');if(t==='light'){document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark')}}catch(e){document.documentElement.classList.add('dark')}`,
+          }}
+        />
         <Providers>
-          <Header locale={locale} dict={dict.nav} />
+          <Header locale={locale} dict={dict.nav} themeLabel={dict.common.toggleTheme} />
           <main className="flex-1">{children}</main>
-          <Footer dict={dict.footer} />
+          <Footer locale={locale} dict={dict.footer} nav={dict.nav} />
         </Providers>
       </body>
     </html>

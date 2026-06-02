@@ -23,6 +23,7 @@
     "previous": "Previous",
     "next": "Next",
     "page": "Page",
+    "toggleTheme": "Toggle theme",
     "somethingWrong": "Something went wrong."
   },
   "home": {
@@ -32,7 +33,11 @@
     "categories": "Categories",
     "bestsellers": "Bestsellers",
     "shopByCategory": "Shop by category",
-    "noProducts": "No products yet."
+    "noProducts": "No products yet.",
+    "heroBadge": "Automated digital store",
+    "trust1": "Instant automatic delivery",
+    "trust2": "Secure payment",
+    "trust3": "24/7 support"
   },
   "products": {
     "title": "Products",
