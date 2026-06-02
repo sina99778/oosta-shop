@@ -84,6 +84,29 @@ export type AdminReviewList = {
   pagination: Pagination;
 };
 
+// Admin sales dashboard
+export type AdminStats = {
+  currency: string;
+  revenueTotal: number;
+  revenue30: number;
+  paidOrders: number;
+  totalOrders: number;
+  pendingReview: number;
+  customers: number;
+  salesByDay: { day: string; count: number; revenue: number }[];
+  topProducts: { id: string; name: string; unitsSold: number }[];
+  lowStock: { id: string; name: string; stock: number }[];
+  recentOrders: {
+    id: string;
+    totalAmount: number;
+    currency: string;
+    paymentStatus: string;
+    itemCount: number;
+    createdAt: string;
+    user: { name: string; email: string | null; phone: string | null };
+  }[];
+};
+
 export type Pagination = { page: number; pageSize: number; total: number; totalPages: number };
 export type Paginated<T> = { items: T[]; pagination: Pagination };
 

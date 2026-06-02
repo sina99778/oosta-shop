@@ -610,3 +610,97 @@ export async function deleteReview(id: string) {
   await prisma.review.delete({ where: { id } });
   return { ok: true };
 }
+
+// ---------------- Sales dashboard / analytics ----------------
+export async function getStats() {
+  const [paidAgg, totalOrders, pendingReview, customers, currencyRow] = await Promise.all([
+    prisma.order.aggregate({
+      where: { paymentStatus: "PAID" },
+      _sum: { totalAmount: true },
+      _count: { _all: true },
+    }),
+    prisma.order.count(),
+    prisma.order.count({ where: { paymentStatus: "PENDING_REVIEW" } }),
+    prisma.user.count({ where: { role: "USER" } }),
+    prisma.order.findFirst({ where: { paymentStatus: "PAID" }, select: { currency: true } }),
+  ]);
+
+  const [revenue30Rows, salesByDay] = await Promise.all([
+    prisma.$queryRaw<{ revenue: number }[]>`
+      SELECT COALESCE(SUM("totalAmount"), 0)::float AS revenue FROM orders
+      WHERE "paymentStatus" = 'PAID' AND "paidAt" >= NOW() - INTERVAL '30 days'`,
+    prisma.$queryRaw<{ day: string; count: number; revenue: number }[]>`
+      SELECT to_char(date_trunc('day', "paidAt"), 'YYYY-MM-DD') AS day,
+             COUNT(*)::int AS count,
+             COALESCE(SUM("totalAmount"), 0)::float AS revenue
+      FROM orders
+      WHERE "paymentStatus" = 'PAID' AND "paidAt" >= NOW() - INTERVAL '13 days'
+      GROUP BY 1 ORDER BY 1`,
+  ]);
+
+  // Top products by units sold
+  const soldRows = await prisma.inventoryItem.groupBy({
+    by: ["productId"],
+    where: { status: "SOLD" },
+    _count: { _all: true },
+  });
+  const topSold = [...soldRows].sort((a, b) => b._count._all - a._count._all).slice(0, 5);
+  const topNames = await prisma.product.findMany({
+    where: { id: { in: topSold.map((r) => r.productId) } },
+    select: { id: true, name: true },
+  });
+  const nameMap = new Map(topNames.map((p) => [p.id, p.name]));
+  const topProducts = topSold.map((r) => ({
+    id: r.productId,
+    name: nameMap.get(r.productId) ?? "—",
+    unitsSold: r._count._all,
+  }));
+
+  // Low-stock active products
+  const activeProducts = await prisma.product.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true },
+  });
+  const availRows = await prisma.inventoryItem.groupBy({
+    by: ["productId"],
+    where: { status: "AVAILABLE", productId: { in: activeProducts.map((p) => p.id) } },
+    _count: { _all: true },
+  });
+  const availMap = new Map(availRows.map((a) => [a.productId, a._count._all]));
+  const lowStock = activeProducts
+    .map((p) => ({ id: p.id, name: p.name, stock: availMap.get(p.id) ?? 0 }))
+    .filter((p) => p.stock <= 5)
+    .sort((a, b) => a.stock - b.stock)
+    .slice(0, 8);
+
+  const recent = await prisma.order.findMany({
+    take: 6,
+    orderBy: { createdAt: "desc" },
+    include: {
+      user: { select: { name: true, email: true, phone: true } },
+      _count: { select: { items: true } },
+    },
+  });
+
+  return {
+    currency: currencyRow?.currency ?? "IRR",
+    revenueTotal: Number(paidAgg._sum.totalAmount ?? 0),
+    revenue30: revenue30Rows[0]?.revenue ?? 0,
+    paidOrders: paidAgg._count._all,
+    totalOrders,
+    pendingReview,
+    customers,
+    salesByDay: salesByDay.map((d) => ({ day: d.day, count: d.count, revenue: d.revenue })),
+    topProducts,
+    lowStock,
+    recentOrders: recent.map((o) => ({
+      id: o.id,
+      totalAmount: Number(o.totalAmount),
+      currency: o.currency,
+      paymentStatus: o.paymentStatus,
+      itemCount: o._count.items,
+      createdAt: o.createdAt,
+      user: o.user,
+    })),
+  };
+}

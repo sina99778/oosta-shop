@@ -153,6 +153,22 @@
   },
   "admin": {
     "title": "مدیریت",
+    "dashboardTab": "داشبورد",
+    "dash": {
+      "title": "داشبورد",
+      "revenue": "درآمد کل",
+      "revenue30": "درآمد (۳۰ روز)",
+      "paidOrders": "سفارش‌های پرداخت‌شده",
+      "orders": "کل سفارش‌ها",
+      "customers": "مشتری‌ها",
+      "pendingReview": "در انتظار بررسی",
+      "salesChart": "فروش — ۱۴ روز اخیر",
+      "topProducts": "پرفروش‌ترین‌ها",
+      "unitsSold": "فروش",
+      "lowStock": "کم‌موجودی",
+      "recentOrders": "سفارش‌های اخیر",
+      "noData": "هنوز داده‌ای نیست."
+    },
     "products": "محصولات",
     "orders": "سفارش‌ها",
     "newProduct": "محصول جدید",

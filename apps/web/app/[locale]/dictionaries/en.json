@@ -153,6 +153,22 @@
   },
   "admin": {
     "title": "Admin",
+    "dashboardTab": "Dashboard",
+    "dash": {
+      "title": "Dashboard",
+      "revenue": "Total revenue",
+      "revenue30": "Revenue (30 days)",
+      "paidOrders": "Paid orders",
+      "orders": "Total orders",
+      "customers": "Customers",
+      "pendingReview": "Awaiting review",
+      "salesChart": "Sales — last 14 days",
+      "topProducts": "Top products",
+      "unitsSold": "sold",
+      "lowStock": "Low stock",
+      "recentOrders": "Recent orders",
+      "noData": "No data yet."
+    },
     "products": "Products",
     "orders": "Orders",
     "newProduct": "New product",

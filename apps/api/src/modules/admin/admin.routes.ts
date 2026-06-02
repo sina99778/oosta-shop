@@ -11,6 +11,9 @@ export const adminRouter = Router();
 
 adminRouter.use(authenticate, requireRole("ADMIN"));
 
+// Dashboard
+adminRouter.get("/stats", ctrl.stats);
+
 // Categories
 adminRouter.get("/categories", ctrl.listCategories);
 adminRouter.post(

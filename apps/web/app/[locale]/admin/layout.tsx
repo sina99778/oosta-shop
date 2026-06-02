@@ -21,6 +21,7 @@ export default async function AdminLayout({
       <AdminNav
         locale={locale}
         labels={{
+          dashboard: dict.admin.dashboardTab,
           products: dict.admin.products,
           orders: dict.admin.orders,
           receipts: dict.admin.receipts.tab,

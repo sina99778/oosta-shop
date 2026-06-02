@@ -80,6 +80,11 @@ export async function deleteReview(req: Request, res: Response): Promise<void> {
   res.json(await admin.deleteReview(String(req.params.id)));
 }
 
+// Sales dashboard
+export async function stats(_req: Request, res: Response): Promise<void> {
+  res.json(await admin.getStats());
+}
+
 // Plans
 export async function createPlan(req: Request, res: Response): Promise<void> {
   res.status(201).json({

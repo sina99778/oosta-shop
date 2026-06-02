@@ -602,6 +602,18 @@ async function testAdmin(): Promise<void> {
     `status=${overview.statusCode}`,
   );
 
+  // Sales dashboard stats
+  const statsRes = await get("/admin/stats", adminToken);
+  const statsBody = body(statsRes);
+  record(
+    "admin stats -> 200 with metrics",
+    statsRes.statusCode === 200 &&
+      typeof statsBody.revenueTotal === "number" &&
+      Array.isArray(statsBody.salesByDay) &&
+      Array.isArray(statsBody.topProducts),
+    `status=${statsRes.statusCode}`,
+  );
+
   // Cleanup
   await prisma.inventoryItem.deleteMany({ where: { productId } });
   await prisma.productPlan.deleteMany({ where: { productId } });
