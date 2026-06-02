@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
-import type { Category, ProductType } from "@/lib/types";
+import type { Category, ProductType, SpecRow } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 
 type AdminPlan = {
@@ -22,6 +22,7 @@ type AdminPlan = {
   label: string;
   durationDays: number | null;
   price: number;
+  salePrice: number | null;
   currency: string;
   isActive: boolean;
   availableStock: number;
@@ -30,9 +31,13 @@ type AdminProductDetailDto = {
   id: string;
   name: string;
   slug: string;
+  shortDescription: string | null;
   description: string;
+  specs: SpecRow[];
+  isFeatured: boolean;
   image: string | null;
   hasImage: boolean;
+  galleryImageIds: string[];
   type: ProductType;
   isActive: boolean;
   category: { id: string; name: string; slug: string };
@@ -66,7 +71,10 @@ export function AdminProductDetail({
   // Editable product details (synced from the loaded product).
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [shortDesc, setShortDesc] = useState("");
   const [desc, setDesc] = useState("");
+  const [specs, setSpecs] = useState<SpecRow[]>([]);
+  const [featured, setFeatured] = useState(false);
   const [type, setType] = useState<ProductType>("ACCOUNT");
   const [catId, setCatId] = useState("");
   const [active, setActive] = useState(true);
@@ -78,23 +86,28 @@ export function AdminProductDetail({
       const p = data.product;
       setName(p.name);
       setSlug(p.slug);
+      setShortDesc(p.shortDescription ?? "");
       setDesc(p.description);
+      setSpecs(p.specs.length ? p.specs : []);
+      setFeatured(p.isFeatured);
       setType(p.type);
       setCatId(p.category.id);
       setActive(p.isActive);
     }
   }, [data]);
 
-  // Image upload state
   const [imgFile, setImgFile] = useState<File | null>(null);
+  const [galFile, setGalFile] = useState<File | null>(null);
   const [imgBusy, setImgBusy] = useState(false);
   const [imgMsg, setImgMsg] = useState<string | null>(null);
 
-  // Plans / bulk import state
   const [plLabel, setPlLabel] = useState("");
   const [plPrice, setPlPrice] = useState("");
+  const [plSale, setPlSale] = useState("");
   const [plBusy, setPlBusy] = useState(false);
   const [plErr, setPlErr] = useState<string | null>(null);
+  const [planSale, setPlanSale] = useState<Record<string, string>>({});
+
   const [bulkPlan, setBulkPlan] = useState("");
   const [bulkText, setBulkText] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -124,7 +137,17 @@ export function AdminProductDetail({
     try {
       await api.patch(
         `/admin/products/${product.id}`,
-        { name, slug, description: desc, type, categoryId: catId, isActive: active },
+        {
+          name,
+          slug,
+          shortDescription: shortDesc.trim() || null,
+          description: desc,
+          specs: specs.filter((s) => s.label.trim() || s.value.trim()),
+          isFeatured: featured,
+          type,
+          categoryId: catId,
+          isActive: active,
+        },
         token ?? undefined,
       );
       setDetailsMsg(t.saved);
@@ -136,7 +159,7 @@ export function AdminProductDetail({
     }
   }
 
-  async function uploadImage() {
+  async function uploadPrimary() {
     if (!imgFile || !token) return;
     setImgBusy(true);
     setImgMsg(null);
@@ -153,12 +176,28 @@ export function AdminProductDetail({
     }
   }
 
-  async function removeImage() {
+  async function removePrimary() {
     if (!token) return;
+    setImgBusy(true);
+    try {
+      await api.del(`/admin/products/${product.id}/image`, token);
+      setReload((r) => r + 1);
+    } catch {
+      /* surfaced on reload */
+    } finally {
+      setImgBusy(false);
+    }
+  }
+
+  async function addGalleryImage() {
+    if (!galFile || !token) return;
     setImgBusy(true);
     setImgMsg(null);
     try {
-      await api.del(`/admin/products/${product.id}/image`, token);
+      const form = new FormData();
+      form.append("image", galFile);
+      await api.upload(`/admin/products/${product.id}/images`, form, token);
+      setGalFile(null);
       setReload((r) => r + 1);
     } catch (err) {
       setImgMsg(err instanceof ApiError ? err.message : dict.common.somethingWrong);
@@ -167,23 +206,43 @@ export function AdminProductDetail({
     }
   }
 
+  async function removeGalleryImage(imageId: string) {
+    if (!token) return;
+    try {
+      await api.del(`/admin/product-images/${imageId}`, token);
+      setReload((r) => r + 1);
+    } catch {
+      /* surfaced on reload */
+    }
+  }
+
   async function addPlan(event: FormEvent) {
     event.preventDefault();
     setPlBusy(true);
     setPlErr(null);
     try {
-      await api.post(
-        `/admin/products/${product.id}/plans`,
-        { label: plLabel, price: Number(plPrice) },
-        token ?? undefined,
-      );
+      const payload: Record<string, unknown> = { label: plLabel, price: Number(plPrice) };
+      if (plSale.trim()) payload.salePrice = Number(plSale);
+      await api.post(`/admin/products/${product.id}/plans`, payload, token ?? undefined);
       setPlLabel("");
       setPlPrice("");
+      setPlSale("");
       setReload((r) => r + 1);
     } catch (err) {
       setPlErr(err instanceof ApiError ? err.message : dict.common.somethingWrong);
     } finally {
       setPlBusy(false);
+    }
+  }
+
+  async function savePlanSale(planId: string) {
+    const raw = planSale[planId];
+    const salePrice = raw && raw.trim() ? Number(raw) : null;
+    try {
+      await api.patch(`/admin/plans/${planId}`, { salePrice }, token ?? undefined);
+      setReload((r) => r + 1);
+    } catch {
+      /* surfaced on reload */
     }
   }
 
@@ -242,14 +301,17 @@ export function AdminProductDetail({
 
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">{product.name}</h1>
-        <Badge tone={product.isActive ? "success" : "muted"}>
-          {product.isActive ? t.active : t.inactive}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {product.isFeatured && <Badge tone="primary">{t.featured}</Badge>}
+          <Badge tone={product.isActive ? "success" : "muted"}>
+            {product.isActive ? t.active : t.inactive}
+          </Badge>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Image manager */}
-        <Card className="space-y-3">
+        {/* Images: primary + gallery */}
+        <Card className="space-y-4">
           <h2 className="font-semibold">{t.productImage}</h2>
           <div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-border bg-surface">
             {imageUrl ? (
@@ -265,17 +327,58 @@ export function AdminProductDetail({
             onChange={(e) => setImgFile(e.target.files?.[0] ?? null)}
             className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
           />
-          <p className="text-xs text-muted">{t.imageHint}</p>
           {imgMsg && <p className="text-sm text-danger">{imgMsg}</p>}
           <div className="flex gap-2">
-            <Button size="sm" onClick={uploadImage} disabled={!imgFile || imgBusy}>
+            <Button size="sm" onClick={uploadPrimary} disabled={!imgFile || imgBusy}>
               {imgBusy ? <Spinner /> : product.hasImage ? t.changeImage : t.uploadImage}
             </Button>
             {product.hasImage && (
-              <Button size="sm" variant="outline" onClick={removeImage} disabled={imgBusy}>
+              <Button size="sm" variant="outline" onClick={removePrimary} disabled={imgBusy}>
                 {t.removeImage}
               </Button>
             )}
+          </div>
+
+          <div className="border-t border-border pt-3">
+            <p className="mb-2 text-sm font-medium">{t.gallery}</p>
+            {product.galleryImageIds.length > 0 && (
+              <div className="mb-2 grid grid-cols-3 gap-2">
+                {product.galleryImageIds.map((gid) => (
+                  <div
+                    key={gid}
+                    className="group relative aspect-square overflow-hidden rounded-md border border-border"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={assetUrl(`/product-images/${gid}`)}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                    <button
+                      onClick={() => removeGalleryImage(gid)}
+                      className="absolute end-1 top-1 rounded bg-danger px-1.5 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setGalFile(e.target.files?.[0] ?? null)}
+              className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-surface file:px-3 file:py-2 file:text-sm hover:file:opacity-90"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              onClick={addGalleryImage}
+              disabled={!galFile || imgBusy}
+            >
+              {t.addImage}
+            </Button>
           </div>
         </Card>
 
@@ -294,15 +397,69 @@ export function AdminProductDetail({
               </div>
             </div>
             <div>
+              <label className="mb-1 block text-sm text-muted">{t.shortDescription}</label>
+              <Input value={shortDesc} onChange={(e) => setShortDesc(e.target.value)} />
+            </div>
+            <div>
               <label className="mb-1 block text-sm text-muted">{t.description}</label>
               <textarea
                 value={desc}
                 onChange={(e) => setDesc(e.target.value)}
-                rows={5}
+                rows={6}
                 required
                 className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
               />
+              <p className="mt-1 text-xs text-muted">{t.markdownHint}</p>
             </div>
+
+            {/* Specifications editor */}
+            <div>
+              <label className="mb-1 block text-sm text-muted">{t.specifications}</label>
+              <div className="space-y-2">
+                {specs.map((row, i) => (
+                  <div key={i} className="flex gap-2">
+                    <Input
+                      placeholder={t.specLabel}
+                      value={row.label}
+                      onChange={(e) =>
+                        setSpecs((s) =>
+                          s.map((r, j) => (j === i ? { ...r, label: e.target.value } : r)),
+                        )
+                      }
+                      className="w-1/3"
+                    />
+                    <Input
+                      placeholder={t.specValue}
+                      value={row.value}
+                      onChange={(e) =>
+                        setSpecs((s) =>
+                          s.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)),
+                        )
+                      }
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSpecs((s) => s.filter((_, j) => j !== i))}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mt-2"
+                onClick={() => setSpecs((s) => [...s, { label: "", value: "" }])}
+              >
+                + {t.addSpec}
+              </Button>
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm text-muted">{t.category}</label>
@@ -334,15 +491,26 @@ export function AdminProductDetail({
                 </select>
               </div>
             </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={active}
-                onChange={(e) => setActive(e.target.checked)}
-                className="accent-primary"
-              />
-              {t.active}
-            </label>
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={active}
+                  onChange={(e) => setActive(e.target.checked)}
+                  className="accent-primary"
+                />
+                {t.active}
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={featured}
+                  onChange={(e) => setFeatured(e.target.checked)}
+                  className="accent-primary"
+                />
+                {t.featured}
+              </label>
+            </div>
             {detailsMsg && <p className="text-sm text-muted">{detailsMsg}</p>}
             <Button type="submit" disabled={savingDetails}>
               {savingDetails ? t.saving : t.save}
@@ -351,21 +519,45 @@ export function AdminProductDetail({
         </Card>
       </div>
 
+      {/* Plans with sale price */}
       <Card>
         <h2 className="mb-3 font-semibold">{t.plans}</h2>
         <div className="space-y-2">
           {product.plans.map((pl) => (
             <div
               key={pl.id}
-              className="flex items-center justify-between rounded-lg border border-border p-3 text-sm"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm"
             >
-              <span className="font-medium">{pl.label}</span>
-              <span className="flex items-center gap-3">
-                <span>{formatPrice(pl.price, pl.currency, locale)}</span>
+              <div>
+                <span className="font-medium">{pl.label}</span>{" "}
+                {pl.salePrice != null ? (
+                  <span>
+                    <span className="text-muted line-through">
+                      {formatPrice(pl.price, pl.currency, locale)}
+                    </span>{" "}
+                    <span className="font-semibold text-success">
+                      {formatPrice(pl.salePrice, pl.currency, locale)}
+                    </span>
+                  </span>
+                ) : (
+                  <span>{formatPrice(pl.price, pl.currency, locale)}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  placeholder={t.salePrice}
+                  value={planSale[pl.id] ?? (pl.salePrice != null ? String(pl.salePrice) : "")}
+                  onChange={(e) => setPlanSale((m) => ({ ...m, [pl.id]: e.target.value }))}
+                  className="w-32"
+                />
+                <Button size="sm" variant="outline" onClick={() => savePlanSale(pl.id)}>
+                  {t.save}
+                </Button>
                 <Badge tone={pl.availableStock > 0 ? "success" : "muted"}>
                   {pl.availableStock} {t.available}
                 </Badge>
-              </span>
+              </div>
             </div>
           ))}
         </div>
@@ -375,7 +567,7 @@ export function AdminProductDetail({
             value={plLabel}
             onChange={(e) => setPlLabel(e.target.value)}
             required
-            className="min-w-40 flex-1"
+            className="min-w-32 flex-1"
           />
           <Input
             placeholder={t.price}
@@ -383,7 +575,14 @@ export function AdminProductDetail({
             value={plPrice}
             onChange={(e) => setPlPrice(e.target.value)}
             required
-            className="w-36"
+            className="w-32"
+          />
+          <Input
+            placeholder={t.salePrice}
+            type="number"
+            value={plSale}
+            onChange={(e) => setPlSale(e.target.value)}
+            className="w-32"
           />
           <Button type="submit" disabled={plBusy}>
             {plBusy ? t.saving : t.addPlan}

@@ -20,9 +20,15 @@ export type ProductSummary = {
   type: ProductType;
   category: CategoryRef;
   priceFrom: number | null;
+  originalPriceFrom: number | null;
+  discountPercent: number;
   currency: string;
   availableStock: number;
   inStock: boolean;
+  lowStock: boolean;
+  isFeatured: boolean;
+  ratingAverage: number;
+  ratingCount: number;
   soldCount?: number;
 };
 
@@ -31,14 +37,51 @@ export type PlanDetail = {
   label: string;
   durationDays: number | null;
   price: number;
+  salePrice: number | null;
+  effectivePrice: number;
+  onSale: boolean;
+  discountPercent: number;
   currency: string;
   availableStock: number;
   inStock: boolean;
 };
 
+export type SpecRow = { label: string; value: string };
+
+export type ProductReview = {
+  id: string;
+  rating: number;
+  comment: string | null;
+  userName: string;
+  createdAt: string;
+};
+
 export type ProductDetail = ProductSummary & {
+  shortDescription: string | null;
   description: string;
+  specs: SpecRow[];
+  galleryImageIds: string[];
   plans: PlanDetail[];
+  rating: { average: number; count: number };
+  reviews: ProductReview[];
+  related: ProductSummary[];
+};
+
+// Admin review moderation
+export type AdminReview = {
+  id: string;
+  rating: number;
+  comment: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  createdAt: string;
+  user: { name: string; email: string | null; phone: string | null };
+  product: { name: string; slug: string };
+};
+
+export type AdminReviewList = {
+  items: AdminReview[];
+  pendingCount: number;
+  pagination: Pagination;
 };
 
 export type Pagination = { page: number; pageSize: number; total: number; totalPages: number };

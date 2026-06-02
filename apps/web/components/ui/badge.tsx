@@ -1,13 +1,15 @@
 import type { HTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
-type Tone = "default" | "success" | "danger" | "muted";
+type Tone = "default" | "success" | "danger" | "muted" | "primary" | "sale";
 
 const tones: Record<Tone, string> = {
   default: "border border-border bg-surface text-foreground",
   success: "bg-success/15 text-success",
   danger: "bg-danger/15 text-danger",
   muted: "bg-surface text-muted",
+  primary: "bg-primary/15 text-primary",
+  sale: "bg-danger text-white",
 };
 
 export function Badge({

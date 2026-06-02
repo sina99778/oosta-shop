@@ -16,6 +16,9 @@ export function HomeSections({ locale, dict }: { locale: Locale; dict: Dictionar
     from: dict.common.from,
     inStock: dict.common.inStock,
     outOfStock: dict.common.outOfStock,
+    featured: dict.product.featured,
+    off: dict.product.off,
+    left: dict.product.left,
   };
 
   return (

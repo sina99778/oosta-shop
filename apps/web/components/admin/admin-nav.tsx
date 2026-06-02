@@ -11,14 +11,16 @@ export function AdminNav({
   labels,
 }: {
   locale: Locale;
-  labels: { products: string; orders: string; receipts: string };
+  labels: { products: string; orders: string; receipts: string; reviews: string };
 }) {
   const pathname = usePathname();
   const base = `/${locale}/admin`;
   const ordersHref = `${base}/orders`;
   const receiptsHref = `${base}/receipts`;
+  const reviewsHref = `${base}/reviews`;
   const onOrders = pathname.startsWith(ordersHref);
   const onReceipts = pathname.startsWith(receiptsHref);
+  const onReviews = pathname.startsWith(reviewsHref);
 
   const tab = (active: boolean) =>
     cn(
@@ -31,7 +33,7 @@ export function AdminNav({
   return (
     <div className="border-b border-border">
       <Container className="flex gap-1">
-        <Link href={base} className={tab(!onOrders && !onReceipts)}>
+        <Link href={base} className={tab(!onOrders && !onReceipts && !onReviews)}>
           {labels.products}
         </Link>
         <Link href={ordersHref} className={tab(onOrders)}>
@@ -39,6 +41,9 @@ export function AdminNav({
         </Link>
         <Link href={receiptsHref} className={tab(onReceipts)}>
           {labels.receipts}
+        </Link>
+        <Link href={reviewsHref} className={tab(onReviews)}>
+          {labels.reviews}
         </Link>
       </Container>
     </div>

@@ -31,6 +31,9 @@ export function ProductsBrowser({ locale, dict }: { locale: Locale; dict: Dictio
     from: dict.common.from,
     inStock: dict.common.inStock,
     outOfStock: dict.common.outOfStock,
+    featured: dict.product.featured,
+    off: dict.product.off,
+    left: dict.product.left,
   };
 
   const chip = (active: boolean) =>
