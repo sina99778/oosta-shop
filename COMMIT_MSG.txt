@@ -1,0 +1,8 @@
+chore(ai): default Gemini model to gemini-3.5-flash (latest)
+
+2.5 is superseded. Default to the newest stable Flash (smart + cheap for SEO
+text, has a free tier). Configurable via GEMINI_MODEL: gemini-3.1-pro for max
+intelligence, gemini-3.1-flash-lite for lowest cost. Updated compose + env
+examples.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>

@@ -38,7 +38,9 @@ const EnvSchema = z.object({
   // AI SEO assistant (Google Gemini). Optional — the deterministic analyzer always
   // works; AI generation is enabled only when GEMINI_API_KEY is set.
   GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default("gemini-2.5-pro"),
+  // Newest stable Flash (great + cheap for SEO text). For max intelligence set
+  // "gemini-3.1-pro"; for lowest cost "gemini-3.1-flash-lite".
+  GEMINI_MODEL: z.string().default("gemini-3.5-flash"),
 
   // Telegram admin bot (optional; the bot stays disabled unless both are set).
   TELEGRAM_BOT_TOKEN: z.string().optional(),
