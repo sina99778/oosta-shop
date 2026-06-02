@@ -56,6 +56,8 @@ export function AdminProductNew({ locale, dict }: { locale: Locale; dict: Dictio
   const [featured, setFeatured] = useState(false);
   const [shortDesc, setShortDesc] = useState("");
   const [desc, setDesc] = useState("");
+  const [metaTitle, setMetaTitle] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
   const [specs, setSpecs] = useState<SpecRow[]>([]);
   const [plans, setPlans] = useState<PlanRow[]>([{ label: "", price: "", sale: "" }]);
   const [primaryFile, setPrimaryFile] = useState<File | null>(null);
@@ -91,6 +93,8 @@ export function AdminProductNew({ locale, dict }: { locale: Locale; dict: Dictio
           slug,
           shortDescription: shortDesc.trim() || null,
           description: desc,
+          metaTitle: metaTitle.trim() || null,
+          metaDescription: metaDescription.trim() || null,
           specs: specs.filter((s) => s.label.trim() || s.value.trim()),
           isFeatured: featured,
           type,
@@ -363,6 +367,23 @@ export function AdminProductNew({ locale, dict }: { locale: Locale; dict: Dictio
             )}
           </div>
           <p className="text-xs text-muted">{t.imageHint}</p>
+        </SectionCard>
+
+        <SectionCard title={t.seo}>
+          <p className="text-xs text-muted">{t.seoHint}</p>
+          <div>
+            <label className="mb-1 block text-sm text-muted">{t.metaTitle}</label>
+            <Input value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-muted">{t.metaDescription}</label>
+            <textarea
+              value={metaDescription}
+              onChange={(e) => setMetaDescription(e.target.value)}
+              rows={2}
+              className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
         </SectionCard>
 
         {err && <p className="text-sm text-danger">{err}</p>}

@@ -278,6 +278,8 @@ export async function getProductBySlug(slug: string) {
     slug: product.slug,
     shortDescription: product.shortDescription,
     description: product.description,
+    metaTitle: product.metaTitle,
+    metaDescription: product.metaDescription,
     specs: specsOf(product.specs),
     isFeatured: product.isFeatured,
     image: product.image,

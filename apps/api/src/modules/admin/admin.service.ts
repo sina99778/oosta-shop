@@ -112,6 +112,8 @@ export async function createProduct(input: CreateProductInput) {
       description: input.description,
       specs: (input.specs ?? undefined) as Prisma.InputJsonValue | undefined,
       isFeatured: input.isFeatured ?? false,
+      metaTitle: input.metaTitle ?? null,
+      metaDescription: input.metaDescription ?? null,
       image: input.image ?? null,
       type: input.type,
       categoryId: input.categoryId,
@@ -144,6 +146,8 @@ export async function getProduct(id: string) {
     description: product.description,
     specs: specsOf(product.specs),
     isFeatured: product.isFeatured,
+    metaTitle: product.metaTitle,
+    metaDescription: product.metaDescription,
     image: product.image,
     hasImage: product.imageMimeType != null,
     galleryImageIds: product.images.map((img) => img.id),
@@ -173,6 +177,8 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
   if (input.description !== undefined) data.description = input.description;
   if (input.specs !== undefined) data.specs = input.specs as Prisma.InputJsonValue;
   if (input.isFeatured !== undefined) data.isFeatured = input.isFeatured;
+  if (input.metaTitle !== undefined) data.metaTitle = input.metaTitle;
+  if (input.metaDescription !== undefined) data.metaDescription = input.metaDescription;
   if (input.image !== undefined) data.image = input.image;
   if (input.type !== undefined) data.type = input.type;
   if (input.isActive !== undefined) data.isActive = input.isActive;

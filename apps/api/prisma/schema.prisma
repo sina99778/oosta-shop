@@ -105,6 +105,9 @@ model Product {
   // Structured key/value spec rows, e.g. [{ "label": "Warranty", "value": "30 days" }]
   specs            Json?
   isFeatured       Boolean @default(false)
+  // SEO overrides (fall back to name / shortDescription when empty)
+  metaTitle        String?
+  metaDescription  String?
   image            String?
   // Primary image stored in the DB (so it is included in backups). imageMimeType
   // is kept light for listings; imageData is only selected by the image endpoint.

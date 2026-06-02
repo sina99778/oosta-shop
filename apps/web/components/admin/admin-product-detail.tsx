@@ -33,6 +33,8 @@ type AdminProductDetailDto = {
   slug: string;
   shortDescription: string | null;
   description: string;
+  metaTitle: string | null;
+  metaDescription: string | null;
   specs: SpecRow[];
   isFeatured: boolean;
   image: string | null;
@@ -73,6 +75,8 @@ export function AdminProductDetail({
   const [slug, setSlug] = useState("");
   const [shortDesc, setShortDesc] = useState("");
   const [desc, setDesc] = useState("");
+  const [metaTitle, setMetaTitle] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
   const [specs, setSpecs] = useState<SpecRow[]>([]);
   const [featured, setFeatured] = useState(false);
   const [type, setType] = useState<ProductType>("ACCOUNT");
@@ -88,6 +92,8 @@ export function AdminProductDetail({
       setSlug(p.slug);
       setShortDesc(p.shortDescription ?? "");
       setDesc(p.description);
+      setMetaTitle(p.metaTitle ?? "");
+      setMetaDescription(p.metaDescription ?? "");
       setSpecs(p.specs.length ? p.specs : []);
       setFeatured(p.isFeatured);
       setType(p.type);
@@ -142,6 +148,8 @@ export function AdminProductDetail({
           slug,
           shortDescription: shortDesc.trim() || null,
           description: desc,
+          metaTitle: metaTitle.trim() || null,
+          metaDescription: metaDescription.trim() || null,
           specs: specs.filter((s) => s.label.trim() || s.value.trim()),
           isFeatured: featured,
           type,
@@ -410,6 +418,26 @@ export function AdminProductDetail({
                 className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
               />
               <p className="mt-1 text-xs text-muted">{t.markdownHint}</p>
+            </div>
+
+            {/* SEO */}
+            <div className="rounded-lg border border-border p-3">
+              <p className="mb-2 text-sm font-medium">{t.seo}</p>
+              <div className="space-y-2">
+                <Input
+                  placeholder={t.metaTitle}
+                  value={metaTitle}
+                  onChange={(e) => setMetaTitle(e.target.value)}
+                />
+                <textarea
+                  placeholder={t.metaDescription}
+                  value={metaDescription}
+                  onChange={(e) => setMetaDescription(e.target.value)}
+                  rows={2}
+                  className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+                />
+                <p className="text-xs text-muted">{t.seoHint}</p>
+              </div>
             </div>
 
             {/* Specifications editor */}

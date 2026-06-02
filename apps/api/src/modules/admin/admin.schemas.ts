@@ -31,6 +31,8 @@ export const createProductSchema = z.object({
   description: z.string().trim().min(1).max(20000),
   specs: z.array(specRow).max(50).optional(),
   isFeatured: z.boolean().optional(),
+  metaTitle: z.string().trim().max(200).nullable().optional(),
+  metaDescription: z.string().trim().max(400).nullable().optional(),
   image: z.string().trim().min(1).nullable().optional(),
   type: productType,
   categoryId: z.string().min(1),

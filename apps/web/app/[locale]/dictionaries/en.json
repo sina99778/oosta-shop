@@ -265,6 +265,10 @@
     "createProductCta": "Create product",
     "removeRow": "Remove",
     "optional": "optional",
+    "seo": "SEO",
+    "metaTitle": "Meta title",
+    "metaDescription": "Meta description",
+    "seoHint": "Leave empty to use the product name and short description.",
     "reviews": {
       "tab": "Reviews",
       "title": "Reviews",

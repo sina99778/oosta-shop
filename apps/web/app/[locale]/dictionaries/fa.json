@@ -265,6 +265,10 @@
     "createProductCta": "ساخت محصول",
     "removeRow": "حذف",
     "optional": "اختیاری",
+    "seo": "سئو",
+    "metaTitle": "عنوان متا",
+    "metaDescription": "توضیحات متا",
+    "seoHint": "خالی بگذارید تا از نام و توضیح کوتاه استفاده شود.",
     "reviews": {
       "tab": "نظرات",
       "title": "نظرات",

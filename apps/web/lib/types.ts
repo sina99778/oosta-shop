@@ -59,6 +59,8 @@ export type ProductReview = {
 export type ProductDetail = ProductSummary & {
   shortDescription: string | null;
   description: string;
+  metaTitle: string | null;
+  metaDescription: string | null;
   specs: SpecRow[];
   galleryImageIds: string[];
   plans: PlanDetail[];
