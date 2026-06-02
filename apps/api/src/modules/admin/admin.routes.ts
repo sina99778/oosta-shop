@@ -43,7 +43,7 @@ adminRouter.delete(
   validate({ params: schemas.idParamSchema }),
   ctrl.deleteProduct,
 );
-// Product image (multipart field "image"): upload/replace + remove
+// Primary product image (multipart field "image"): upload/replace + remove
 adminRouter.post(
   "/products/:id/image",
   validate({ params: schemas.idParamSchema }),
@@ -54,6 +54,18 @@ adminRouter.delete(
   "/products/:id/image",
   validate({ params: schemas.idParamSchema }),
   ctrl.removeProductImage,
+);
+// Gallery images (multipart field "image"): add one + remove by image id
+adminRouter.post(
+  "/products/:id/images",
+  validate({ params: schemas.idParamSchema }),
+  uploadProductImage,
+  ctrl.addGalleryImage,
+);
+adminRouter.delete(
+  "/product-images/:imageId",
+  validate({ params: schemas.imageIdParamSchema }),
+  ctrl.removeGalleryImage,
 );
 
 // Plans
@@ -102,3 +114,17 @@ adminRouter.post(
   validate({ params: schemas.idParamSchema, body: schemas.reviewReceiptSchema }),
   ctrl.rejectReceipt,
 );
+
+// Customer reviews moderation
+adminRouter.get("/reviews", validate({ query: schemas.reviewsQuerySchema }), ctrl.listReviews);
+adminRouter.post(
+  "/reviews/:id/approve",
+  validate({ params: schemas.idParamSchema }),
+  ctrl.approveReview,
+);
+adminRouter.post(
+  "/reviews/:id/reject",
+  validate({ params: schemas.idParamSchema }),
+  ctrl.rejectReview,
+);
+adminRouter.delete("/reviews/:id", validate({ params: schemas.idParamSchema }), ctrl.deleteReview);

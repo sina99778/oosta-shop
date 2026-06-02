@@ -124,13 +124,16 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
   let total = new Prisma.Decimal(0);
   const itemsData = input.items.map((item) => {
     const plan = planMap.get(item.planId)!;
-    const lineTotal = plan.price.mul(item.quantity);
+    // Charge the sale price when it is set and genuinely lower than the regular price.
+    const unitPrice =
+      plan.salePrice != null && plan.salePrice.lt(plan.price) ? plan.salePrice : plan.price;
+    const lineTotal = unitPrice.mul(item.quantity);
     total = total.add(lineTotal);
     return {
       productId: plan.productId,
       planId: plan.id,
       quantity: item.quantity,
-      unitPrice: plan.price,
+      unitPrice,
       lineTotal,
     };
   });

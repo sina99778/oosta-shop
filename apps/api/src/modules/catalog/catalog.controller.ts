@@ -3,7 +3,7 @@
 
 import type { Request, Response } from "express";
 import * as catalog from "./catalog.service";
-import type { BestsellingQuery, ListProductsQuery } from "./catalog.schemas";
+import type { BestsellingQuery, ListProductsQuery, SubmitReviewInput } from "./catalog.schemas";
 
 export async function listCategories(_req: Request, res: Response): Promise<void> {
   res.json({ categories: await catalog.listCategories() });
@@ -28,4 +28,18 @@ export async function productImage(req: Request, res: Response): Promise<void> {
   res.setHeader("Content-Type", mimeType);
   res.setHeader("Cache-Control", "public, max-age=300");
   res.send(data);
+}
+
+export async function galleryImage(req: Request, res: Response): Promise<void> {
+  const { data, mimeType } = await catalog.getGalleryImage(String(req.params.id));
+  res.setHeader("Content-Type", mimeType);
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.send(data);
+}
+
+export async function submitReview(req: Request, res: Response): Promise<void> {
+  const { rating, comment } = req.body as SubmitReviewInput;
+  res
+    .status(201)
+    .json(await catalog.submitReview(req.user!.id, String(req.params.id), rating, comment));
 }

@@ -14,10 +14,19 @@ import type {
   OrdersQuery,
   ReceiptsQuery,
   ReviewReceiptInput,
+  ReviewsQuery,
   UpdateCategoryInput,
   UpdatePlanInput,
   UpdateProductInput,
 } from "./admin.schemas";
+
+function specsOf(value: Prisma.JsonValue | null): Array<{ label: string; value: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.map((row) => {
+    const r = row as { label?: unknown; value?: unknown };
+    return { label: String(r?.label ?? ""), value: String(r?.value ?? "") };
+  });
+}
 
 async function ensureCategory(id: string): Promise<void> {
   const found = await prisma.category.findUnique({ where: { id }, select: { id: true } });
@@ -94,7 +103,10 @@ export async function createProduct(input: CreateProductInput) {
     data: {
       name: input.name,
       slug: input.slug,
+      shortDescription: input.shortDescription ?? null,
       description: input.description,
+      specs: (input.specs ?? undefined) as Prisma.InputJsonValue | undefined,
+      isFeatured: input.isFeatured ?? false,
       image: input.image ?? null,
       type: input.type,
       categoryId: input.categoryId,
@@ -105,7 +117,11 @@ export async function createProduct(input: CreateProductInput) {
 export async function getProduct(id: string) {
   const product = await prisma.product.findUnique({
     where: { id },
-    include: { category: true, plans: { orderBy: { price: "asc" } } },
+    include: {
+      category: true,
+      plans: { orderBy: { price: "asc" } },
+      images: { orderBy: { sortOrder: "asc" }, select: { id: true } },
+    },
     omit: { imageData: true },
   });
   if (!product) throw new AppError(404, "NOT_FOUND", "Product not found");
@@ -119,9 +135,13 @@ export async function getProduct(id: string) {
     id: product.id,
     name: product.name,
     slug: product.slug,
+    shortDescription: product.shortDescription,
     description: product.description,
+    specs: specsOf(product.specs),
+    isFeatured: product.isFeatured,
     image: product.image,
     hasImage: product.imageMimeType != null,
+    galleryImageIds: product.images.map((img) => img.id),
     type: product.type,
     isActive: product.isActive,
     category: { id: product.category.id, name: product.category.name, slug: product.category.slug },
@@ -130,6 +150,7 @@ export async function getProduct(id: string) {
       label: pl.label,
       durationDays: pl.durationDays,
       price: Number(pl.price),
+      salePrice: pl.salePrice != null ? Number(pl.salePrice) : null,
       currency: pl.currency,
       isActive: pl.isActive,
       availableStock: availMap.get(pl.id) ?? 0,
@@ -143,7 +164,10 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
   const data: Prisma.ProductUpdateInput = {};
   if (input.name !== undefined) data.name = input.name;
   if (input.slug !== undefined) data.slug = input.slug;
+  if (input.shortDescription !== undefined) data.shortDescription = input.shortDescription;
   if (input.description !== undefined) data.description = input.description;
+  if (input.specs !== undefined) data.specs = input.specs as Prisma.InputJsonValue;
+  if (input.isFeatured !== undefined) data.isFeatured = input.isFeatured;
   if (input.image !== undefined) data.image = input.image;
   if (input.type !== undefined) data.type = input.type;
   if (input.isActive !== undefined) data.isActive = input.isActive;
@@ -194,6 +218,7 @@ export async function createPlan(productId: string, input: CreatePlanInput) {
       label: input.label,
       durationDays: input.durationDays ?? null,
       price: input.price,
+      salePrice: input.salePrice ?? null,
       currency: input.currency ?? "IRR",
       isActive: input.isActive ?? true,
     },
@@ -205,6 +230,7 @@ export async function updatePlan(id: string, input: UpdatePlanInput) {
   if (input.label !== undefined) data.label = input.label;
   if (input.durationDays !== undefined) data.durationDays = input.durationDays;
   if (input.price !== undefined) data.price = input.price;
+  if (input.salePrice !== undefined) data.salePrice = input.salePrice;
   if (input.currency !== undefined) data.currency = input.currency;
   if (input.isActive !== undefined) data.isActive = input.isActive;
   return prisma.productPlan.update({ where: { id }, data });
@@ -501,4 +527,84 @@ export async function rejectReceipt(id: string, input: ReviewReceiptInput) {
     data: { paymentStatus: nextStatus },
   });
   return serializeReceipt(await loadReceiptForReview(id));
+}
+
+// ---------------- Product gallery images ----------------
+export async function addGalleryImage(
+  productId: string,
+  file: { buffer: Buffer; mimetype: string } | undefined,
+) {
+  if (!file) throw new AppError(400, "NO_FILE", "An image file is required");
+  if (!file.mimetype.startsWith("image/")) {
+    throw new AppError(400, "BAD_FILE_TYPE", "Gallery image must be an image (JPG/PNG/WebP)");
+  }
+  await ensureProduct(productId);
+  const max = await prisma.productImage.aggregate({
+    where: { productId },
+    _max: { sortOrder: true },
+  });
+  const image = await prisma.productImage.create({
+    data: {
+      productId,
+      imageData: new Uint8Array(file.buffer),
+      mimeType: file.mimetype,
+      sortOrder: (max._max.sortOrder ?? -1) + 1,
+    },
+  });
+  return { ok: true, id: image.id };
+}
+
+export async function removeGalleryImage(imageId: string) {
+  await prisma.productImage.delete({ where: { id: imageId } });
+  return { ok: true };
+}
+
+// ---------------- Customer reviews moderation ----------------
+export async function listReviews(query: ReviewsQuery) {
+  const where: Prisma.ReviewWhereInput = {};
+  if (query.status) where.status = query.status;
+
+  const [total, pending, reviews] = await Promise.all([
+    prisma.review.count({ where }),
+    prisma.review.count({ where: { status: "PENDING" } }),
+    prisma.review.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+      include: {
+        user: { select: { name: true, email: true, phone: true } },
+        product: { select: { name: true, slug: true } },
+      },
+    }),
+  ]);
+
+  return {
+    items: reviews.map((r) => ({
+      id: r.id,
+      rating: r.rating,
+      comment: r.comment,
+      status: r.status,
+      createdAt: r.createdAt,
+      user: r.user,
+      product: r.product,
+    })),
+    pendingCount: pending,
+    pagination: {
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
+    },
+  };
+}
+
+export async function setReviewStatus(id: string, status: "APPROVED" | "REJECTED") {
+  await prisma.review.update({ where: { id }, data: { status } });
+  return { ok: true, status };
+}
+
+export async function deleteReview(id: string) {
+  await prisma.review.delete({ where: { id } });
+  return { ok: true };
 }

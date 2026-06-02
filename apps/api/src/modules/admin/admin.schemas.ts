@@ -19,10 +19,18 @@ export const updateCategorySchema = createCategorySchema
   .partial()
   .refine((d) => Object.keys(d).length > 0, "No fields to update");
 
+const specRow = z.object({
+  label: z.string().trim().max(100),
+  value: z.string().trim().max(500),
+});
+
 export const createProductSchema = z.object({
   name: z.string().trim().min(1).max(200),
   slug,
-  description: z.string().trim().min(1).max(5000),
+  shortDescription: z.string().trim().max(300).nullable().optional(),
+  description: z.string().trim().min(1).max(20000),
+  specs: z.array(specRow).max(50).optional(),
+  isFeatured: z.boolean().optional(),
   image: z.string().trim().min(1).nullable().optional(),
   type: productType,
   categoryId: z.string().min(1),
@@ -36,6 +44,8 @@ export const createPlanSchema = z.object({
   label: z.string().trim().min(1).max(100),
   durationDays: z.coerce.number().int().min(1).nullable().optional(),
   price: z.coerce.number().positive(),
+  // number = set a sale price; null = clear it; absent = leave unchanged.
+  salePrice: z.union([z.coerce.number().positive(), z.null()]).optional(),
   currency: z.string().trim().min(1).max(10).optional(),
   isActive: z.boolean().optional(),
 });
@@ -86,8 +96,16 @@ export const reviewReceiptSchema = z
   .optional()
   .transform((v) => v ?? {});
 
+// Customer reviews moderation
+export const reviewsQuerySchema = z.object({
+  status: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+});
+
 export const idParamSchema = z.object({ id: z.string().min(1) });
 export const productIdParamSchema = z.object({ productId: z.string().min(1) });
+export const imageIdParamSchema = z.object({ imageId: z.string().min(1) });
 
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;
@@ -100,3 +118,4 @@ export type InventoryQuery = z.infer<typeof inventoryQuerySchema>;
 export type OrdersQuery = z.infer<typeof ordersQuerySchema>;
 export type ReceiptsQuery = z.infer<typeof receiptsQuerySchema>;
 export type ReviewReceiptInput = z.infer<typeof reviewReceiptSchema>;
+export type ReviewsQuery = z.infer<typeof reviewsQuerySchema>;

@@ -726,6 +726,128 @@ async function testCardToCard(): Promise<void> {
   await prisma.user.delete({ where: { id: userId } });
 }
 
+async function testRichness(): Promise<void> {
+  ip = "10.10.0.6";
+  const suffix = Math.floor(Math.random() * 1e9)
+    .toString()
+    .padStart(9, "0");
+
+  const adminToken = String(
+    body(await post("/auth/login", { identifier: "admin@oosta.local", password: "Admin@12345" }))
+      .token,
+  );
+  const buyer = await post("/auth/signup", {
+    name: "Rich Buyer",
+    email: `rich_${suffix}@example.com`,
+    password: "Rich@12345",
+  });
+  const buyerToken = String(body(buyer).token);
+  const buyerId = String(obj(body(buyer).user).id);
+
+  const feat = await get("/products?featured=true");
+  record(
+    "GET /products?featured=true -> 200",
+    feat.statusCode === 200,
+    `status=${feat.statusCode}`,
+  );
+  const gal404 = await get(`/product-images/nope_${suffix}`);
+  record("gallery image bad id -> 404", gal404.statusCode === 404, `status=${gal404.statusCode}`);
+
+  const category = await prisma.category.findUnique({ where: { slug: "ai-accounts" } });
+  const product = await prisma.product.create({
+    data: {
+      name: `Rich ${suffix}`,
+      slug: `rich-${suffix}`,
+      description: "Richness test product.",
+      type: "ACCOUNT",
+      categoryId: category!.id,
+      isFeatured: true,
+    },
+  });
+  const plan = await prisma.productPlan.create({
+    data: { productId: product.id, label: "P", price: 200000 },
+  });
+  await prisma.inventoryItem.create({
+    data: {
+      productId: product.id,
+      planId: plan.id,
+      type: "ACCOUNT",
+      accountEmail: `r_${suffix}@s.local`,
+      accountPassword: "p",
+    },
+  });
+
+  // Sale price via admin -> reflected in catalog + charged on order
+  const setSale = await patch(`/admin/plans/${plan.id}`, { salePrice: 150000 }, adminToken);
+  record("admin set salePrice -> 200", setSale.statusCode === 200, `status=${setSale.statusCode}`);
+  const detail = obj(body(await get(`/products/rich-${suffix}`)).product);
+  const dplan = (detail.plans as Array<Record<string, unknown>>)[0];
+  record(
+    "detail plan onSale + effective=150000 + 25% off",
+    dplan.onSale === true && dplan.effectivePrice === 150000 && dplan.discountPercent === 25,
+    JSON.stringify({ eff: dplan.effectivePrice, off: dplan.discountPercent }),
+  );
+  record("detail isFeatured true", detail.isFeatured === true, String(detail.isFeatured));
+
+  const order = obj(
+    body(await post("/orders", { items: [{ planId: plan.id, quantity: 1 }] }, buyerToken)).order,
+  );
+  record(
+    "order total uses sale price (150000)",
+    Number(order.totalAmount) === 150000,
+    String(order.totalAmount),
+  );
+
+  // Reviews: submit -> moderate -> reflected in rating
+  const sub = await post(
+    `/products/${product.id}/reviews`,
+    { rating: 5, comment: "great" },
+    buyerToken,
+  );
+  record(
+    "submit review -> 201 PENDING",
+    sub.statusCode === 201 && body(sub).status === "PENDING",
+    `status=${sub.statusCode}`,
+  );
+  const subNoAuth = await post(`/products/${product.id}/reviews`, { rating: 5 });
+  record(
+    "review submit no auth -> 401",
+    subNoAuth.statusCode === 401,
+    `status=${subNoAuth.statusCode}`,
+  );
+
+  const adminReviews = body(await get("/admin/reviews?status=PENDING", adminToken)) as {
+    items?: Array<Record<string, unknown>>;
+  };
+  const mine = (adminReviews.items ?? []).find(
+    (r) => (r.product as { slug?: string } | undefined)?.slug === `rich-${suffix}`,
+  );
+  record("admin reviews queue contains it", Boolean(mine), "");
+  const approve = await post(`/admin/reviews/${String(mine?.id)}/approve`, {}, adminToken);
+  record("approve review -> 200", approve.statusCode === 200, `status=${approve.statusCode}`);
+
+  const detail2 = obj(body(await get(`/products/rich-${suffix}`)).product);
+  const rating = obj(detail2.rating);
+  record(
+    "approved review reflected in rating (count1 avg5)",
+    Number(rating.count) === 1 && Number(rating.average) === 5,
+    JSON.stringify(rating),
+  );
+  record(
+    "detail exposes related[] array",
+    Array.isArray(detail2.related),
+    `len=${(detail2.related as unknown[])?.length}`,
+  );
+
+  // Cleanup
+  await prisma.review.deleteMany({ where: { productId: product.id } });
+  await prisma.order.deleteMany({ where: { userId: buyerId } });
+  await prisma.inventoryItem.deleteMany({ where: { productId: product.id } });
+  await prisma.productPlan.deleteMany({ where: { productId: product.id } });
+  await prisma.product.delete({ where: { id: product.id } });
+  await prisma.user.delete({ where: { id: buyerId } });
+}
+
 async function testSecurity(): Promise<void> {
   ip = "10.10.0.4";
   const suffix = Math.floor(Math.random() * 1e9)
@@ -815,6 +937,7 @@ async function main(): Promise<void> {
   await testOrders();
   await testAdmin();
   await testCardToCard();
+  await testRichness();
   await testSecurity();
   testRoleGuard();
 

@@ -11,6 +11,7 @@ import type {
   OrdersQuery,
   ReceiptsQuery,
   ReviewReceiptInput,
+  ReviewsQuery,
   UpdateCategoryInput,
   UpdatePlanInput,
   UpdateProductInput,
@@ -56,6 +57,27 @@ export async function setProductImage(req: Request, res: Response): Promise<void
 }
 export async function removeProductImage(req: Request, res: Response): Promise<void> {
   res.json(await admin.removeProductImage(String(req.params.id)));
+}
+export async function addGalleryImage(req: Request, res: Response): Promise<void> {
+  const file = req.file ? { buffer: req.file.buffer, mimetype: req.file.mimetype } : undefined;
+  res.status(201).json(await admin.addGalleryImage(String(req.params.id), file));
+}
+export async function removeGalleryImage(req: Request, res: Response): Promise<void> {
+  res.json(await admin.removeGalleryImage(String(req.params.imageId)));
+}
+
+// Reviews moderation
+export async function listReviews(_req: Request, res: Response): Promise<void> {
+  res.json(await admin.listReviews(res.locals.query as ReviewsQuery));
+}
+export async function approveReview(req: Request, res: Response): Promise<void> {
+  res.json({ review: await admin.setReviewStatus(String(req.params.id), "APPROVED") });
+}
+export async function rejectReview(req: Request, res: Response): Promise<void> {
+  res.json({ review: await admin.setReviewStatus(String(req.params.id), "REJECTED") });
+}
+export async function deleteReview(req: Request, res: Response): Promise<void> {
+  res.json(await admin.deleteReview(String(req.params.id)));
 }
 
 // Plans
