@@ -1,8 +1,12 @@
-chore(ai): default Gemini model to gemini-3.5-flash (latest)
+fix(ai): auto-retry + fallback model on Gemini overload (503)
 
-2.5 is superseded. Default to the newest stable Flash (smart + cheap for SEO
-text, has a free tier). Configurable via GEMINI_MODEL: gemini-3.1-pro for max
-intelligence, gemini-3.1-flash-lite for lowest cost. Updated compose + env
-examples.
+The 503 "UNAVAILABLE / high demand" error is a transient Google-side spike.
+The SEO generator now retries transient failures (429/5xx/network) with
+exponential backoff and, if the primary model stays overloaded, automatically
+falls back to GEMINI_FALLBACK_MODEL (default gemini-2.5-flash). 404 model-not-
+found also falls through to the fallback; 400/401/403 fail fast. Friendlier
+"model is busy, try again" message on persistent overload.
+
+Verified: API typecheck + smoke (100) + lint clean.
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
