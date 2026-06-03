@@ -114,6 +114,9 @@ export const ticketsQuerySchema = z.object({
 export const ticketReplySchema = z.object({ body: z.string().trim().min(1).max(5000) });
 export const ticketStatusSchema = z.object({ status: z.enum(["OPEN", "ANSWERED", "CLOSED"]) });
 
+// API keys
+export const createApiKeySchema = z.object({ name: z.string().trim().min(1).max(60) });
+
 // AI SEO generation
 export const seoGenerateSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -144,3 +147,4 @@ export type TicketsQuery = z.infer<typeof ticketsQuerySchema>;
 export type TicketReplyInput = z.infer<typeof ticketReplySchema>;
 export type TicketStatusInput = z.infer<typeof ticketStatusSchema>;
 export type SeoGenerateInput = z.infer<typeof seoGenerateSchema>;
+export type CreateApiKeyInput = z.infer<typeof createApiKeySchema>;

@@ -185,6 +185,22 @@
       "you": "Customer",
       "status": { "OPEN": "Open", "ANSWERED": "Answered", "CLOSED": "Closed" }
     },
+    "apiTab": "API",
+    "apiKeys": {
+      "title": "API keys",
+      "intro": "Give a key to your AI assistant or scripts to manage the store programmatically. The key has full admin access. It is shown only once.",
+      "name": "Key name",
+      "create": "Create key",
+      "creating": "Creating…",
+      "copy": "Copy",
+      "copied": "Copied",
+      "saveNow": "Copy this key now — you won't be able to see it again.",
+      "none": "No keys yet.",
+      "lastUsed": "Last used",
+      "never": "never",
+      "revoke": "Revoke",
+      "usage": "Send it as an X-API-Key header (or Authorization: Bearer). Base URL:"
+    },
     "dashboardTab": "Dashboard",
     "dash": {
       "title": "Dashboard",

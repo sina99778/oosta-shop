@@ -1,10 +1,16 @@
-feat(admin): fully editable plan rows (label, price, sale, active, delete)
+feat: API keys for programmatic admin access (AI assistant) + API.md
 
-The plans section previously only let you edit the sale price. Each plan is now
-a full inline editor: label, price, sale price, active toggle, Save, and Delete
-(delete surfaces the "deactivate instead" message when the plan still has
-inventory/orders).
+Give an external AI assistant/script full admin access via a key.
 
-Verified: next build green + lint clean.
+Schema: ApiKey (SHA-256 hash stored; raw shown once) + migration api_keys.
+Auth: authenticate() now also accepts X-API-Key / Bearer oosta_sk_... and
+authenticates as the owning admin user — so every /admin/* endpoint works with
+a key. Admin endpoints: GET/POST/DELETE /admin/api-keys.
+Web: admin "API" tab to create (shown once + copy), list, and revoke keys.
+Docs: API.md — full reference (auth + products/plans/inventory/images/SEO/
+orders/reviews/tickets/blog/stats + curl examples) to hand to the assistant.
+
+Verified: API typecheck + smoke (107 checks incl. key create/use/revoke) +
+next build (admin/api-keys) + lint, all green.
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>

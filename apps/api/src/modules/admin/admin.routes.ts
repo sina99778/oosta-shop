@@ -14,6 +14,11 @@ adminRouter.use(authenticate, requireRole("ADMIN"));
 // Dashboard
 adminRouter.get("/stats", ctrl.stats);
 
+// API keys (programmatic admin access)
+adminRouter.get("/api-keys", ctrl.listApiKeys);
+adminRouter.post("/api-keys", validate({ body: schemas.createApiKeySchema }), ctrl.createApiKey);
+adminRouter.delete("/api-keys/:id", validate({ params: schemas.idParamSchema }), ctrl.deleteApiKey);
+
 // AI SEO assistant
 adminRouter.get("/ai/status", ctrl.aiStatus);
 adminRouter.post("/seo/generate", validate({ body: schemas.seoGenerateSchema }), ctrl.generateSeo);

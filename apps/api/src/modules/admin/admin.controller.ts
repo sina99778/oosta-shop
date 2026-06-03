@@ -4,6 +4,7 @@ import type { Request, Response } from "express";
 import * as admin from "./admin.service";
 import type {
   BulkInventoryInput,
+  CreateApiKeyInput,
   CreateCategoryInput,
   CreatePlanInput,
   CreateProductInput,
@@ -104,6 +105,19 @@ export async function setTicketStatus(req: Request, res: Response): Promise<void
   res.json({
     ticket: await admin.setTicketStatus(String(req.params.id), req.body as TicketStatusInput),
   });
+}
+
+// API keys
+export async function listApiKeys(req: Request, res: Response): Promise<void> {
+  res.json(await admin.listApiKeys(req.user!.id));
+}
+export async function createApiKey(req: Request, res: Response): Promise<void> {
+  res
+    .status(201)
+    .json(await admin.createApiKey(req.user!.id, (req.body as CreateApiKeyInput).name));
+}
+export async function deleteApiKey(req: Request, res: Response): Promise<void> {
+  res.json(await admin.deleteApiKey(req.user!.id, String(req.params.id)));
 }
 
 // AI SEO assistant

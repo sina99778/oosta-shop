@@ -870,6 +870,91 @@ async function testRichness(): Promise<void> {
   await prisma.user.delete({ where: { id: buyerId } });
 }
 
+async function testApiKeys(): Promise<void> {
+  ip = "10.10.0.8";
+  const adminToken = String(
+    body(await post("/auth/login", { identifier: "admin@oosta.local", password: "Admin@12345" }))
+      .token,
+  );
+
+  // Create a key
+  const created = await post("/admin/api-keys", { name: "Smoke Key" }, adminToken);
+  const createdBody = body(created);
+  const rawKey = String(createdBody.key);
+  record(
+    "create api key -> 201 + raw key",
+    created.statusCode === 201 && rawKey.startsWith("oosta_sk_"),
+    `status=${created.statusCode}`,
+  );
+
+  // Use the key via X-API-Key to reach an admin endpoint
+  const viaHeader = await inject(app, {
+    method: "GET",
+    url: "/admin/products",
+    headers: { "x-api-key": rawKey },
+    remoteAddress: ip,
+  });
+  record(
+    "api key (X-API-Key) reaches admin -> 200",
+    viaHeader.statusCode === 200,
+    `status=${viaHeader.statusCode}`,
+  );
+
+  // Use the key via Authorization: Bearer
+  const viaBearer = await inject(app, {
+    method: "GET",
+    url: "/admin/stats",
+    headers: { authorization: `Bearer ${rawKey}` },
+    remoteAddress: ip,
+  });
+  record(
+    "api key (Bearer) reaches admin -> 200",
+    viaBearer.statusCode === 200,
+    `status=${viaBearer.statusCode}`,
+  );
+
+  // Invalid key -> 401
+  const bad = await inject(app, {
+    method: "GET",
+    url: "/admin/products",
+    headers: { "x-api-key": "oosta_sk_invalidkey" },
+    remoteAddress: ip,
+  });
+  record("invalid api key -> 401", bad.statusCode === 401, `status=${bad.statusCode}`);
+
+  // List (no raw secret leaked)
+  const list = body(await get("/admin/api-keys", adminToken)) as {
+    keys?: Array<Record<string, unknown>>;
+  };
+  const mine = (list.keys ?? []).find((k) => k.name === "Smoke Key");
+  record(
+    "list api keys (no secret)",
+    Boolean(mine) && mine?.key === undefined && mine?.keyHash === undefined,
+    "",
+  );
+
+  // Revoke -> key stops working
+  const id = String(createdBody.id);
+  const del = await inject(app, {
+    method: "DELETE",
+    url: `/admin/api-keys/${id}`,
+    headers: { authorization: `Bearer ${adminToken}` },
+    remoteAddress: ip,
+  });
+  record("revoke api key -> 200", del.statusCode === 200, `status=${del.statusCode}`);
+  const afterRevoke = await inject(app, {
+    method: "GET",
+    url: "/admin/products",
+    headers: { "x-api-key": rawKey },
+    remoteAddress: ip,
+  });
+  record(
+    "revoked api key -> 401",
+    afterRevoke.statusCode === 401,
+    `status=${afterRevoke.statusCode}`,
+  );
+}
+
 async function testTickets(): Promise<void> {
   ip = "10.10.0.7";
   const suffix = Math.floor(Math.random() * 1e9)
@@ -1048,6 +1133,7 @@ async function main(): Promise<void> {
   await testAdmin();
   await testCardToCard();
   await testRichness();
+  await testApiKeys();
   await testTickets();
   await testSecurity();
   testRoleGuard();

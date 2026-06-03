@@ -6,6 +6,7 @@ import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/httpError";
 import { deliverOrder } from "../orders/orders.service";
 import { generateSeo, isAiEnabled } from "../../lib/gemini";
+import { generateApiKey } from "../../lib/apiKey";
 import type {
   BulkInventoryInput,
   CreateCategoryInput,
@@ -699,6 +700,28 @@ export async function replyTicket(id: string, adminId: string, input: TicketRepl
 export async function setTicketStatus(id: string, input: TicketStatusInput) {
   await prisma.ticket.update({ where: { id }, data: { status: input.status } });
   return getTicket(id);
+}
+
+// ---------------- API keys ----------------
+export async function listApiKeys(userId: string) {
+  const keys = await prisma.apiKey.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, name: true, prefix: true, lastUsedAt: true, createdAt: true },
+  });
+  return { keys };
+}
+
+export async function createApiKey(userId: string, name: string) {
+  const { raw, hash, prefix } = generateApiKey();
+  const key = await prisma.apiKey.create({ data: { userId, name, prefix, keyHash: hash } });
+  // `key` (raw) is returned only here, once.
+  return { id: key.id, name: key.name, prefix: key.prefix, key: raw, createdAt: key.createdAt };
+}
+
+export async function deleteApiKey(userId: string, id: string) {
+  await prisma.apiKey.deleteMany({ where: { id, userId } });
+  return { ok: true };
 }
 
 // ---------------- AI SEO assistant ----------------

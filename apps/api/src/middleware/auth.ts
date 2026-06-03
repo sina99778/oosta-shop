@@ -5,17 +5,48 @@
 import type { NextFunction, Request, Response } from "express";
 import type { Role } from "@prisma/client";
 import { verifyAccessToken } from "../lib/jwt";
+import { looksLikeApiKey, resolveApiKey } from "../lib/apiKey";
 import { AppError } from "../utils/httpError";
 
-export function authenticate(req: Request, _res: Response, next: NextFunction): void {
+// Accepts either a user JWT (Authorization: Bearer <jwt>) OR an API key
+// (X-API-Key: oosta_sk_… , or Authorization: Bearer oosta_sk_…). API keys
+// authenticate as their owning user (used for programmatic admin access).
+export async function authenticate(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
   const header = req.headers.authorization;
-  if (!header || !header.startsWith("Bearer ")) {
-    next(new AppError(401, "UNAUTHORIZED", "Missing or invalid Authorization header"));
+  const bearer = header?.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : undefined;
+  const apiKeyHeader = (req.headers["x-api-key"] as string | undefined)?.trim();
+  const rawKey =
+    apiKeyHeader && looksLikeApiKey(apiKeyHeader)
+      ? apiKeyHeader
+      : bearer && looksLikeApiKey(bearer)
+        ? bearer
+        : undefined;
+
+  if (rawKey) {
+    try {
+      const resolved = await resolveApiKey(rawKey);
+      if (!resolved) {
+        next(new AppError(401, "UNAUTHORIZED", "Invalid API key"));
+        return;
+      }
+      req.user = { id: resolved.userId, role: resolved.role };
+      next();
+    } catch {
+      next(new AppError(401, "UNAUTHORIZED", "Invalid API key"));
+    }
     return;
   }
 
+  if (!bearer) {
+    next(new AppError(401, "UNAUTHORIZED", "Missing or invalid Authorization header"));
+    return;
+  }
   try {
-    const payload = verifyAccessToken(header.slice("Bearer ".length));
+    const payload = verifyAccessToken(bearer);
     req.user = { id: payload.sub, role: payload.role };
     next();
   } catch {
