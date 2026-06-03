@@ -18,6 +18,7 @@ export function AdminNav({
     receipts: string;
     reviews: string;
     tickets: string;
+    blog: string;
     api: string;
   };
 }) {
@@ -28,12 +29,14 @@ export function AdminNav({
   const receiptsHref = `${base}/receipts`;
   const reviewsHref = `${base}/reviews`;
   const ticketsHref = `${base}/tickets`;
+  const blogHref = `${base}/blog`;
   const apiHref = `${base}/api-keys`;
   const onDash = pathname.startsWith(dashHref);
   const onOrders = pathname.startsWith(ordersHref);
   const onReceipts = pathname.startsWith(receiptsHref);
   const onReviews = pathname.startsWith(reviewsHref);
   const onTickets = pathname.startsWith(ticketsHref);
+  const onBlog = pathname.startsWith(blogHref);
   const onApi = pathname.startsWith(apiHref);
 
   const tab = (active: boolean) =>
@@ -52,7 +55,9 @@ export function AdminNav({
         </Link>
         <Link
           href={base}
-          className={tab(!onDash && !onOrders && !onReceipts && !onReviews && !onTickets && !onApi)}
+          className={tab(
+            !onDash && !onOrders && !onReceipts && !onReviews && !onTickets && !onBlog && !onApi,
+          )}
         >
           {labels.products}
         </Link>
@@ -67,6 +72,9 @@ export function AdminNav({
         </Link>
         <Link href={ticketsHref} className={tab(onTickets)}>
           {labels.tickets}
+        </Link>
+        <Link href={blogHref} className={tab(onBlog)}>
+          {labels.blog}
         </Link>
         <Link href={apiHref} className={tab(onApi)}>
           {labels.api}

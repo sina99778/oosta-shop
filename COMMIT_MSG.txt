@@ -1,16 +1,23 @@
-feat: API keys for programmatic admin access (AI assistant) + API.md
+feat: blog (text + images + video) — admin CMS + public pages + API
 
-Give an external AI assistant/script full admin access via a key.
+Schema: BlogPost (Markdown content, cover bytes in DB, DRAFT/PUBLISHED) +
+BlogMedia; migration blog.
 
-Schema: ApiKey (SHA-256 hash stored; raw shown once) + migration api_keys.
-Auth: authenticate() now also accepts X-API-Key / Bearer oosta_sk_... and
-authenticates as the owning admin user — so every /admin/* endpoint works with
-a key. Admin endpoints: GET/POST/DELETE /admin/api-keys.
-Web: admin "API" tab to create (shown once + copy), list, and revoke keys.
-Docs: API.md — full reference (auth + products/plans/inventory/images/SEO/
-orders/reviews/tickets/blog/stats + curl examples) to hand to the assistant.
+API
+- Public: GET /blog, GET /blog/:slug (published only), GET /blog-cover/:id,
+  GET /blog-media/:id
+- Admin (/admin/blog, guarded): list/get/create/update/delete, POST /:id/cover,
+  POST /media (returns a URL to embed). All reachable with an API key too.
 
-Verified: API typecheck + smoke (107 checks incl. key create/use/revoke) +
-next build (admin/api-keys) + lint, all green.
+Web
+- Public /blog (cards) + /blog/[slug] (server-rendered: metadata, OG, Article
+  JSON-LD, cover, Markdown body). "Blog" link in the header; blog in sitemap.
+- Markdown renderer now supports images ![alt](url), links, and video embeds
+  (!video <url> -> YouTube/Aparat iframe or .mp4 <video>) — XSS-safe (http(s) only).
+- Admin "Blog" tab: list + editor (title, slug, excerpt, Markdown content,
+  status, cover upload, media upload that copies a ready ![image](url) snippet).
+
+Verified: API typecheck + smoke (116 checks incl. draft-hidden, publish, public
+list/detail, media upload+serve) + next build (all blog routes) + lint, all green.
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>

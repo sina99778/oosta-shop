@@ -121,6 +121,36 @@ export type AdminTicketList = {
 };
 export type AdminTicketDetail = TicketDetail & { user: TicketUser };
 
+// Blog
+export type BlogPostSummary = {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  hasCover: boolean;
+  publishedAt: string | null;
+};
+export type BlogPostDetail = BlogPostSummary & { content: string };
+export type AdminBlogPost = {
+  id: string;
+  slug: string;
+  title: string;
+  status: "DRAFT" | "PUBLISHED";
+  hasCover: boolean;
+  publishedAt: string | null;
+  createdAt: string;
+};
+export type AdminBlogPostDetail = {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  content: string;
+  status: "DRAFT" | "PUBLISHED";
+  hasCover: boolean;
+  publishedAt: string | null;
+};
+
 // Admin sales dashboard
 export type AdminStats = {
   currency: string;

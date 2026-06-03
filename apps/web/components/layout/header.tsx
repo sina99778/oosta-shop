@@ -20,6 +20,7 @@ type NavDict = {
   logout: string;
   account: string;
   support: string;
+  blog: string;
 };
 
 export function Header({
@@ -67,6 +68,7 @@ export function Header({
           </Link>
           <nav className="hidden items-center gap-5 sm:flex">
             {link(`${base}/products`, dict.products)}
+            {link(`${base}/blog`, dict.blog)}
             {user && link(`${base}/dashboard`, dict.dashboard)}
             {user && link(`${base}/support`, dict.support)}
             {user?.role === "ADMIN" && link(`${base}/admin`, dict.admin)}

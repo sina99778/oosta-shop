@@ -870,6 +870,100 @@ async function testRichness(): Promise<void> {
   await prisma.user.delete({ where: { id: buyerId } });
 }
 
+async function testBlog(): Promise<void> {
+  ip = "10.10.0.9";
+  const suffix = Math.floor(Math.random() * 1e9)
+    .toString()
+    .padStart(9, "0");
+  const slug = `how-to-${suffix}`;
+  const adminToken = String(
+    body(await post("/auth/login", { identifier: "admin@oosta.local", password: "Admin@12345" }))
+      .token,
+  );
+
+  // Create as DRAFT
+  const create = await post(
+    "/admin/blog",
+    { title: "How to buy", slug, content: "# Guide\n\nSome **content**.", status: "DRAFT" },
+    adminToken,
+  );
+  record("create blog post -> 201", create.statusCode === 201, `status=${create.statusCode}`);
+  const id = String(body(create).id);
+
+  // Draft is NOT public
+  const pubListBefore = body(await get("/blog")).posts as Array<{ slug: string }> | undefined;
+  record(
+    "draft not in public list",
+    Array.isArray(pubListBefore) && !pubListBefore.some((p) => p.slug === slug),
+    "",
+  );
+  record("public draft slug -> 404", (await get(`/blog/${slug}`)).statusCode === 404, "");
+
+  // Publish
+  const pub = await patch(`/admin/blog/${id}`, { status: "PUBLISHED" }, adminToken);
+  record(
+    "publish post -> PUBLISHED",
+    pub.statusCode === 200 && obj(body(pub).post).status === "PUBLISHED",
+    `status=${pub.statusCode}`,
+  );
+
+  // Now public
+  const detail = await get(`/blog/${slug}`);
+  record(
+    "public published post -> 200 with content",
+    detail.statusCode === 200 && typeof obj(body(detail).post).content === "string",
+    `status=${detail.statusCode}`,
+  );
+  const pubList = body(await get("/blog")).posts as Array<{ slug: string }> | undefined;
+  record(
+    "published in public list",
+    (pubList ?? []).some((p) => p.slug === slug),
+    "",
+  );
+
+  // Media upload (multipart) + serve
+  const boundary = "----blog" + suffix;
+  const CRLF = "\r\n";
+  const bytes = Buffer.from("FAKE-PNG-BLOG-MEDIA");
+  const payload = Buffer.concat([
+    Buffer.from(
+      `--${boundary}${CRLF}Content-Disposition: form-data; name="image"; filename="m.png"${CRLF}Content-Type: image/png${CRLF}${CRLF}`,
+      "utf8",
+    ),
+    bytes,
+    Buffer.from(`${CRLF}--${boundary}--${CRLF}`, "utf8"),
+  ]);
+  const upload = await inject(app, {
+    method: "POST",
+    url: "/admin/blog/media",
+    headers: {
+      authorization: `Bearer ${adminToken}`,
+      "content-type": `multipart/form-data; boundary=${boundary}`,
+    },
+    payload,
+    remoteAddress: ip,
+  });
+  const mediaId = String(body(upload).id);
+  record(
+    "blog media upload -> 201 + url",
+    upload.statusCode === 201 && typeof body(upload).url === "string",
+    `status=${upload.statusCode}`,
+  );
+  const mediaServe = await get(`/blog-media/${mediaId}`);
+  record(
+    "blog media serves png bytes",
+    mediaServe.statusCode === 200 && Buffer.from(mediaServe.rawPayload).equals(bytes),
+    `status=${mediaServe.statusCode}`,
+  );
+
+  // Admin requires auth
+  record("admin blog list no token -> 401", (await get("/admin/blog")).statusCode === 401, "");
+
+  // Cleanup
+  await prisma.blogMedia.deleteMany({ where: { id: mediaId } });
+  await prisma.blogPost.deleteMany({ where: { id } });
+}
+
 async function testApiKeys(): Promise<void> {
   ip = "10.10.0.8";
   const adminToken = String(
@@ -1134,6 +1228,7 @@ async function main(): Promise<void> {
   await testCardToCard();
   await testRichness();
   await testApiKeys();
+  await testBlog();
   await testTickets();
   await testSecurity();
   testRoleGuard();

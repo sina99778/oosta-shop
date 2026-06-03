@@ -65,6 +65,11 @@ enum TicketStatus {
   CLOSED
 }
 
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+}
+
 // ── Models ───────────────────────────────────────────────────────────
 
 model User {
@@ -208,6 +213,35 @@ model ApiKey {
 
   @@index([userId])
   @@map("api_keys")
+}
+
+// Blog / educational content. Body is Markdown (supports inline images + video
+// embeds). Cover image bytes live in the DB so they are part of backups.
+model BlogPost {
+  id          String     @id @default(cuid())
+  slug        String     @unique
+  title       String
+  excerpt     String?
+  content     String // Markdown
+  coverData   Bytes?
+  coverMime   String?
+  status      PostStatus @default(DRAFT)
+  publishedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([status, publishedAt])
+  @@map("blog_posts")
+}
+
+// Uploaded media (images) referenced by URL inside blog post Markdown.
+model BlogMedia {
+  id        String   @id @default(cuid())
+  imageData Bytes
+  mimeType  String
+  createdAt DateTime @default(now())
+
+  @@map("blog_media")
 }
 
 // A purchasable "time-plan" / variant of a product (the price lives here).

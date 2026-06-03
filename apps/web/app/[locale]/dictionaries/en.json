@@ -8,7 +8,8 @@
     "signup": "Sign up",
     "logout": "Log out",
     "account": "Account",
-    "support": "Support"
+    "support": "Support",
+    "blog": "Blog"
   },
   "common": {
     "loading": "Loading…",
@@ -152,6 +153,13 @@
       "EXPIRED": "Expired"
     }
   },
+  "blog": {
+    "title": "Blog",
+    "subtitle": "Guides & tutorials",
+    "readMore": "Read more",
+    "empty": "No posts yet.",
+    "back": "Back to blog"
+  },
   "tickets": {
     "title": "Support",
     "new": "New ticket",
@@ -184,6 +192,31 @@
       "staff": "Staff",
       "you": "Customer",
       "status": { "OPEN": "Open", "ANSWERED": "Answered", "CLOSED": "Closed" }
+    },
+    "blogTab": "Blog",
+    "blog": {
+      "title": "Blog",
+      "new": "New post",
+      "postTitle": "Title",
+      "slug": "Slug",
+      "excerpt": "Excerpt",
+      "content": "Content (Markdown)",
+      "contentHint": "Markdown. Images: ![alt](url) · Video: !video <url> (YouTube/Aparat/.mp4). Upload media below to get a URL.",
+      "status": "Status",
+      "draft": "Draft",
+      "published": "Published",
+      "cover": "Cover image",
+      "uploadCover": "Set cover",
+      "changeCover": "Change cover",
+      "uploadMedia": "Upload media",
+      "mediaCopied": "Media URL copied — paste it into the content.",
+      "save": "Save",
+      "saved": "Saved",
+      "create": "Create post",
+      "delete": "Delete",
+      "none": "No posts yet.",
+      "view": "View",
+      "saveFirst": "Save the post first, then upload images."
     },
     "apiTab": "API",
     "apiKeys": {

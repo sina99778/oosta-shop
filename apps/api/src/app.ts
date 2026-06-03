@@ -14,6 +14,7 @@ import { catalogRouter } from "./modules/catalog/catalog.routes";
 import { ordersRouter } from "./modules/orders/orders.routes";
 import { paymentsRouter } from "./modules/payments/payments.routes";
 import { ticketsRouter } from "./modules/tickets/tickets.routes";
+import { blogRouter, blogAdminRouter } from "./modules/blog/blog.routes";
 import { adminRouter } from "./modules/admin/admin.routes";
 
 export function createApp() {
@@ -41,6 +42,8 @@ export function createApp() {
   app.use("/orders", ordersRouter);
   app.use("/payments", paymentsRouter);
   app.use("/tickets", ticketsRouter);
+  app.use(blogRouter); // public blog
+  app.use("/admin/blog", blogAdminRouter); // before /admin so it matches first
   app.use("/admin", adminRouter);
 
   // 404 + error handling (must be last)
