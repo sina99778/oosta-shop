@@ -16,13 +16,29 @@ import {
 } from "../modules/admin/admin.schemas";
 import { createPostSchema, updatePostSchema } from "../modules/blog/blog.schemas";
 
+export type PendingImage = { buffer: Buffer; mimeType: string };
+type ToolCtx = { image?: PendingImage };
+
 type JsonSchema = Record<string, unknown>;
 type Tool = {
   name: string;
   description: string;
   parameters: JsonSchema;
-  run: (args: Record<string, unknown>) => Promise<unknown>;
+  run: (args: Record<string, unknown>, ctx: ToolCtx) => Promise<unknown>;
 };
+
+// Remembered across calls so a follow-up photo can target the last item.
+let lastProductId: string | null = null;
+let lastPostId: string | null = null;
+
+const apiPublicBase = () => `${env.WEB_BASE_URL.replace(/\/$/, "")}/api`;
+
+function requireImage(ctx: ToolCtx): PendingImage {
+  if (!ctx.image) {
+    throw new Error("No image is attached. Ask the user to send a photo with their request.");
+  }
+  return ctx.image;
+}
 
 const obj = (properties: Record<string, JsonSchema>, required: string[] = []): JsonSchema => ({
   type: "object",
@@ -80,7 +96,11 @@ const TOOLS: Tool[] = [
       },
       ["name", "slug", "description", "type", "categoryId"],
     ),
-    run: (a) => adminSvc.createProduct(createProductSchema.parse(a)),
+    run: async (a) => {
+      const p = await adminSvc.createProduct(createProductSchema.parse(a));
+      lastProductId = p.id;
+      return p;
+    },
   },
   {
     name: "update_product",
@@ -175,7 +195,11 @@ const TOOLS: Tool[] = [
       },
       ["title", "slug", "content"],
     ),
-    run: (a) => blogSvc.createPost(createPostSchema.parse(a)),
+    run: async (a) => {
+      const p = await blogSvc.createPost(createPostSchema.parse(a));
+      lastPostId = p.id;
+      return p;
+    },
   },
   {
     name: "update_blog_post",
@@ -196,6 +220,52 @@ const TOOLS: Tool[] = [
       return blogSvc.updatePost(String(id), updatePostSchema.parse(rest));
     },
   },
+  {
+    name: "set_product_image",
+    description:
+      "Set the ATTACHED photo as a product's primary image. Requires a photo attached. If productId is omitted, the most recently created product is used.",
+    parameters: obj({ productId: str() }),
+    run: async (a, ctx) => {
+      const img = requireImage(ctx);
+      const id = (a.productId as string) || lastProductId;
+      if (!id) throw new Error("No productId given and no recent product to use.");
+      return adminSvc.setProductImage(String(id), { buffer: img.buffer, mimetype: img.mimeType });
+    },
+  },
+  {
+    name: "add_product_gallery_image",
+    description: "Add the ATTACHED photo to a product's gallery. Requires a photo attached.",
+    parameters: obj({ productId: str() }),
+    run: async (a, ctx) => {
+      const img = requireImage(ctx);
+      const id = (a.productId as string) || lastProductId;
+      if (!id) throw new Error("No productId given and no recent product to use.");
+      return adminSvc.addGalleryImage(String(id), { buffer: img.buffer, mimetype: img.mimeType });
+    },
+  },
+  {
+    name: "set_blog_cover",
+    description:
+      "Set the ATTACHED photo as a blog post's cover. Requires a photo attached. If postId is omitted, the most recently created post is used.",
+    parameters: obj({ postId: str() }),
+    run: async (a, ctx) => {
+      const img = requireImage(ctx);
+      const id = (a.postId as string) || lastPostId;
+      if (!id) throw new Error("No postId given and no recent post to use.");
+      return blogSvc.setCover(String(id), { buffer: img.buffer, mimetype: img.mimeType });
+    },
+  },
+  {
+    name: "upload_blog_image",
+    description:
+      "Upload the ATTACHED photo as blog media and return its absolute URL. Then embed it inside post content with ![alt](url) via update_blog_post. Requires a photo attached.",
+    parameters: obj({}),
+    run: async (_a, ctx) => {
+      const img = requireImage(ctx);
+      const m = await blogSvc.addMedia({ buffer: img.buffer, mimetype: img.mimeType });
+      return { url: `${apiPublicBase()}/blog-media/${m.id}` };
+    },
+  },
 ];
 
 const SYSTEM = `You are the admin assistant for the "oostaAI" digital-goods store (AI accounts, licenses, gift cards). You manage the store by calling the provided tools.
@@ -207,6 +277,7 @@ Rules:
 - To add a product: ensure a category exists (list_categories; create_category if needed) → create_product → add_plan (at least one) → add_inventory if the user provided stock.
 - Write all human content (descriptions, blog posts, excerpts) in the SAME language the user used (usually Persian), unless asked otherwise. Make it high quality and SEO-friendly.
 - New blog posts/products can be created as DRAFT unless the user asks to publish.
+- When a photo is attached (see [context]): use set_product_image (or add_product_gallery_image) for a product, or set_blog_cover for a blog post. To place a photo INSIDE blog text, call upload_blog_image to get a URL and then update_blog_post with the content containing ![alt](url). If the user doesn't say which item, use the most recent product/post id from [context].
 - If a tool returns an error, read it, fix the arguments, and try again.
 - When finished, reply with a SHORT summary in Persian of exactly what you did (names, ids, links). Keep it concise.`;
 
@@ -250,11 +321,12 @@ async function callGemini(contents: Content[]): Promise<Content | null> {
 async function runTool(
   name: string,
   args: Record<string, unknown>,
+  ctx: ToolCtx,
 ): Promise<Record<string, unknown>> {
   const tool = TOOLS.find((t) => t.name === name);
   if (!tool) return { error: `Unknown tool: ${name}` };
   try {
-    const result = await tool.run(args ?? {});
+    const result = await tool.run(args ?? {}, ctx);
     return { result: result ?? { ok: true } };
   } catch (error) {
     if (error instanceof ZodError) {
@@ -270,15 +342,22 @@ export function isAgentEnabled(): boolean {
   return Boolean(env.GEMINI_API_KEY);
 }
 
-// Runs the agent loop for a single instruction. onStep is called with a short
-// progress note each time a tool runs (so the bot can show activity).
+// Runs the agent loop for a single instruction. opts.image makes a photo available
+// to the image tools; opts.onStep is called with each tool name (for progress UI).
 export async function runAgent(
   instruction: string,
-  onStep?: (note: string) => void,
+  opts: { image?: PendingImage; onStep?: (note: string) => void } = {},
 ): Promise<string> {
   if (!env.GEMINI_API_KEY) return "هوش مصنوعی تنظیم نشده است (GEMINI_API_KEY).";
 
-  const contents: Content[] = [{ role: "user", parts: [{ text: instruction }] }];
+  const ctx: ToolCtx = { image: opts.image };
+  const notes: string[] = [];
+  if (opts.image) notes.push("A photo is attached to this message.");
+  if (lastProductId) notes.push(`Most recent product id: ${lastProductId}.`);
+  if (lastPostId) notes.push(`Most recent blog post id: ${lastPostId}.`);
+  const text = notes.length ? `${instruction}\n\n[context] ${notes.join(" ")}` : instruction;
+
+  const contents: Content[] = [{ role: "user", parts: [{ text }] }];
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const reply = await callGemini(contents);
@@ -291,17 +370,17 @@ export async function runAgent(
     );
 
     if (calls.length === 0) {
-      const text = reply.parts
+      const final = reply.parts
         .map((p) => ("text" in p ? p.text : ""))
         .join("")
         .trim();
-      return text || "انجام شد.";
+      return final || "انجام شد.";
     }
 
     const responseParts: Part[] = [];
     for (const call of calls) {
-      onStep?.(call.functionCall.name);
-      const response = await runTool(call.functionCall.name, call.functionCall.args ?? {});
+      opts.onStep?.(call.functionCall.name);
+      const response = await runTool(call.functionCall.name, call.functionCall.args ?? {}, ctx);
       responseParts.push({ functionResponse: { name: call.functionCall.name, response } });
     }
     contents.push({ role: "user", parts: responseParts });

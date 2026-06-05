@@ -281,24 +281,60 @@ export function startBot(): void {
     }
   });
 
+  // Run the agent for a chat message (optionally with an attached photo) and reply.
+  async function runAgentForChat(
+    chatId: number,
+    instruction: string,
+    image?: { buffer: Buffer; mimeType: string },
+  ): Promise<void> {
+    if (!bot) return;
+    if (!isAgentEnabled()) {
+      await bot.telegram.sendMessage(
+        chatId,
+        "🤖 AI is not configured (set GEMINI_API_KEY).",
+        mainMenu(),
+      );
+      return;
+    }
+    await bot.telegram.sendChatAction(chatId, "typing").catch(() => {});
+    const thinking = await bot.telegram.sendMessage(chatId, "🤖 در حال انجام…").catch(() => null);
+    try {
+      const result = await runAgent(instruction, {
+        image,
+        onStep: (note) => {
+          void bot?.telegram.sendChatAction(chatId, "typing").catch(() => {});
+          console.log(`[agent] tool: ${note}`);
+        },
+      });
+      if (thinking) await bot.telegram.deleteMessage(chatId, thinking.message_id).catch(() => {});
+      await bot.telegram.sendMessage(chatId, result.slice(0, 3800), mainMenu());
+    } catch (error) {
+      await bot.telegram.sendMessage(
+        chatId,
+        `❌ ${error instanceof Error ? error.message : String(error)}`,
+        mainMenu(),
+      );
+    }
+  }
+
   // AI agent: any plain text message (not a command) is treated as an instruction.
   bot.on(message("text"), async (ctx) => {
     const text = ctx.message.text?.trim() ?? "";
     if (!text || text.startsWith("/")) return;
-    if (!isAgentEnabled()) {
-      await ctx.reply("🤖 AI is not configured (set GEMINI_API_KEY).", mainMenu());
-      return;
-    }
-    await ctx.sendChatAction("typing").catch(() => {});
-    const thinking = await ctx.reply("🤖 در حال انجام…").catch(() => null);
+    await runAgentForChat(ctx.chat.id, text);
+  });
+
+  // AI agent with a photo: the caption is the instruction; the image is attached.
+  bot.on(message("photo"), async (ctx) => {
+    const caption =
+      (ctx.message.caption ?? "").trim() || "این عکس را روی مناسب‌ترین/آخرین محصول یا پست بگذار.";
     try {
-      const result = await runAgent(text, (note) => {
-        void ctx.sendChatAction("typing").catch(() => {});
-        console.log(`[agent] tool: ${note}`);
-      });
-      if (thinking)
-        await ctx.telegram.deleteMessage(ctx.chat.id, thinking.message_id).catch(() => {});
-      await ctx.reply(result.slice(0, 3800), mainMenu());
+      const photos = ctx.message.photo;
+      const largest = photos[photos.length - 1];
+      const link = await ctx.telegram.getFileLink(largest.file_id);
+      const res = await fetch(link.href);
+      const buffer = Buffer.from(await res.arrayBuffer());
+      await runAgentForChat(ctx.chat.id, caption, { buffer, mimeType: "image/jpeg" });
     } catch (error) {
       await ctx.reply(`❌ ${error instanceof Error ? error.message : String(error)}`, mainMenu());
     }
