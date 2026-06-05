@@ -11,6 +11,7 @@ import path from "node:path";
 import { env } from "./config/env";
 import { prisma } from "./lib/prisma";
 import { createBackup, restoreFromFile } from "./lib/backup";
+import { isAgentEnabled, runAgent } from "./lib/agent";
 import {
   approveReceipt,
   getReceiptImage,
@@ -179,8 +180,13 @@ export function startBot(): void {
     return next();
   });
 
-  // /start is the only command — it opens the button menu. Everything else is a button.
-  bot.start((ctx) => ctx.reply("👋 oostaAI admin panel — choose an option:", mainMenu()));
+  // /start opens the button menu. Plain text messages go to the AI agent.
+  bot.start((ctx) =>
+    ctx.reply(
+      "👋 پنل ادمین oostaAI\n\nیک گزینه را انتخاب کن، یا همین‌جا فارسی دستور بده تا دستیار هوش مصنوعی انجامش بده — مثلاً:\n«یک محصول اکانت اسپاتیفای با قیمت ۱۵۰۰۰۰ بساز» یا «یک پست وبلاگ درباره‌ی خرید امن بنویس».",
+      mainMenu(),
+    ),
+  );
 
   bot.action("stats", async (ctx) => {
     await ctx.answerCbQuery();
@@ -272,6 +278,29 @@ export function startBot(): void {
       await ctx.reply(
         `❌ Restore failed: ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+  });
+
+  // AI agent: any plain text message (not a command) is treated as an instruction.
+  bot.on(message("text"), async (ctx) => {
+    const text = ctx.message.text?.trim() ?? "";
+    if (!text || text.startsWith("/")) return;
+    if (!isAgentEnabled()) {
+      await ctx.reply("🤖 AI is not configured (set GEMINI_API_KEY).", mainMenu());
+      return;
+    }
+    await ctx.sendChatAction("typing").catch(() => {});
+    const thinking = await ctx.reply("🤖 در حال انجام…").catch(() => null);
+    try {
+      const result = await runAgent(text, (note) => {
+        void ctx.sendChatAction("typing").catch(() => {});
+        console.log(`[agent] tool: ${note}`);
+      });
+      if (thinking)
+        await ctx.telegram.deleteMessage(ctx.chat.id, thinking.message_id).catch(() => {});
+      await ctx.reply(result.slice(0, 3800), mainMenu());
+    } catch (error) {
+      await ctx.reply(`❌ ${error instanceof Error ? error.message : String(error)}`, mainMenu());
     }
   });
 

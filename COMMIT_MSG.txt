@@ -1,23 +1,18 @@
-feat: blog (text + images + video) — admin CMS + public pages + API
+feat: AI agent inside the Telegram bot (Gemini function-calling)
 
-Schema: BlogPost (Markdown content, cover bytes in DB, DRAFT/PUBLISHED) +
-BlogMedia; migration blog.
+The admin can now just message the bot in plain language and an agent executes
+the work end-to-end.
 
-API
-- Public: GET /blog, GET /blog/:slug (published only), GET /blog-cover/:id,
-  GET /blog-media/:id
-- Admin (/admin/blog, guarded): list/get/create/update/delete, POST /:id/cover,
-  POST /media (returns a URL to embed). All reachable with an API key too.
+- lib/agent.ts: Gemini function-calling loop with in-process tools that run the
+  real services — list/create/update products, plans, inventory, categories,
+  stats, and create/update/list blog posts (each validated with the existing Zod
+  schemas). System prompt enforces ascii slugs, product types, Persian content,
+  and a "create product -> plan -> inventory" flow.
+- bot.ts: any non-command text message is treated as an instruction -> runAgent;
+  shows typing, returns a short Persian summary. /start hints how to use it.
+- Reuses GEMINI_MODEL (configurable); disabled gracefully without a key.
 
-Web
-- Public /blog (cards) + /blog/[slug] (server-rendered: metadata, OG, Article
-  JSON-LD, cover, Markdown body). "Blog" link in the header; blog in sitemap.
-- Markdown renderer now supports images ![alt](url), links, and video embeds
-  (!video <url> -> YouTube/Aparat iframe or .mp4 <video>) — XSS-safe (http(s) only).
-- Admin "Blog" tab: list + editor (title, slug, excerpt, Markdown content,
-  status, cover upload, media upload that copies a ready ![image](url) snippet).
-
-Verified: API typecheck + smoke (116 checks incl. draft-hidden, publish, public
-list/detail, media upload+serve) + next build (all blog routes) + lint, all green.
+Verified: API typecheck + smoke (116) + lint, all green. (Bot/agent run in the
+API process; not exercised by the in-process smoke.)
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
