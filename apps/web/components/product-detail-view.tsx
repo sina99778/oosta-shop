@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/lib/use-api";
@@ -50,6 +50,14 @@ export function ProductDetailView({
   const [comment, setComment] = useState("");
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewMsg, setReviewMsg] = useState<string | null>(null);
+
+  const [reviewsList, setReviewsList] = useState<Array<ProductDetail["reviews"][number] & { isPendingLocal?: boolean }>>([]);
+
+  useEffect(() => {
+    if (data?.product) {
+      setReviewsList(data.product.reviews);
+    }
+  }, [data?.product?.reviews]);
 
   if (loading) {
     return (
@@ -119,6 +127,17 @@ export function ProductDetailView({
     setReviewMsg(null);
     try {
       await api.post(`/products/${product.id}/reviews`, { rating, comment }, token);
+      
+      const newReview = {
+        id: `pending-${Date.now()}`,
+        rating,
+        comment: comment.trim() || null,
+        userName: user.name,
+        createdAt: new Date().toISOString(),
+        isPendingLocal: true,
+      };
+      setReviewsList((prev) => [newReview, ...prev]);
+
       setComment("");
       setReviewMsg(t.reviewThanks);
     } catch (e) {
@@ -129,7 +148,7 @@ export function ProductDetailView({
   }
 
   return (
-    <Container className="py-8">
+    <Container className="py-8 animate-fade-in">
       {/* Breadcrumb */}
       <nav className="mb-4 flex flex-wrap items-center gap-1 text-sm text-muted">
         <Link href={`/${locale}`} className="hover:text-foreground">
@@ -362,14 +381,21 @@ export function ProductDetailView({
 
           {tab === "reviews" && (
             <div className="space-y-6">
-              {product.reviews.length === 0 ? (
+              {reviewsList.length === 0 ? (
                 <p className="text-muted">{t.noReviews}</p>
               ) : (
                 <div className="space-y-4">
-                  {product.reviews.map((r) => (
+                  {reviewsList.map((r) => (
                     <div key={r.id} className="border-b border-border pb-4">
                       <div className="flex items-center justify-between">
-                        <span className="font-medium">{r.userName}</span>
+                        <span className="font-medium flex items-center gap-2">
+                          {r.userName}
+                          {r.isPendingLocal && (
+                            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-normal text-amber-500">
+                              {dict.admin.reviews.pending}
+                            </span>
+                          )}
+                        </span>
                         <span className="text-xs text-muted">
                           {formatDate(r.createdAt, locale)}
                         </span>

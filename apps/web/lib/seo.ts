@@ -2,8 +2,11 @@
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
-// Public site origin, derived from the API URL (…/api → …).
+// Public site origin, derived from the dedicated web URL env, or API URL (…/api → …).
 export function siteUrl(): string {
+  const webUrl = process.env.NEXT_PUBLIC_WEB_URL || process.env.WEB_BASE_URL;
+  if (webUrl) return webUrl.replace(/\/$/, "");
+
   const base = API.replace(/\/api\/?$/, "");
   return base || "http://localhost:3000";
 }

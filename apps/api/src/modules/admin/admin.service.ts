@@ -531,15 +531,34 @@ export async function approveReceipt(id: string, input: ReviewReceiptInput) {
 // If the order was already PAID (undoing an accidental approval) it becomes REFUNDED.
 export async function rejectReceipt(id: string, input: ReviewReceiptInput) {
   const receipt = await loadReceiptForReview(id);
-  await prisma.receipt.update({
-    where: { id },
-    data: { status: "REJECTED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
+  const wasPaid = receipt.order.paymentStatus === "PAID";
+  const nextStatus = wasPaid ? "REFUNDED" : "REJECTED";
+
+  await prisma.$transaction(async (tx) => {
+    await tx.receipt.update({
+      where: { id },
+      data: { status: "REJECTED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
+    });
+
+    await tx.order.update({
+      where: { id: receipt.orderId },
+      data: { paymentStatus: nextStatus },
+    });
+
+    if (wasPaid) {
+      const orderItems = await tx.orderItem.findMany({
+        where: { orderId: receipt.orderId },
+        select: { id: true },
+      });
+      const orderItemIds = orderItems.map((oi) => oi.id);
+
+      await tx.inventoryItem.updateMany({
+        where: { orderItemId: { in: orderItemIds } },
+        data: { status: "AVAILABLE", orderItemId: null, soldAt: null },
+      });
+    }
   });
-  const nextStatus = receipt.order.paymentStatus === "PAID" ? "REFUNDED" : "REJECTED";
-  await prisma.order.update({
-    where: { id: receipt.orderId },
-    data: { paymentStatus: nextStatus },
-  });
+
   return serializeReceipt(await loadReceiptForReview(id));
 }
 

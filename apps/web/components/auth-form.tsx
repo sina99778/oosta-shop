@@ -66,8 +66,8 @@ export function AuthForm({
   }
 
   return (
-    <Container className="flex justify-center py-16">
-      <Card className="w-full max-w-sm">
+    <Container className="flex justify-center py-16 animate-fade-in">
+      <Card className="w-full max-w-sm glass-panel shadow-glow">
         <h1 className="text-xl font-bold">{mode === "login" ? a.loginTitle : a.signupTitle}</h1>
         <form onSubmit={onSubmit} className="mt-6 space-y-3">
           {mode === "signup" && (

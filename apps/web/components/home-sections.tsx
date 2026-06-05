@@ -33,7 +33,7 @@ export function HomeSections({ locale, dict }: { locale: Locale; dict: Dictionar
               <Link
                 key={category.id}
                 href={`/${locale}/products?category=${category.slug}`}
-                className="group relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-card transition-all hover:-translate-y-0.5 hover:border-primary"
+                className="group relative overflow-hidden rounded-2xl p-5 glass-panel glass-panel-hover"
               >
                 <div className="absolute inset-x-0 -top-16 h-32 bg-brand-gradient opacity-0 blur-2xl transition-opacity group-hover:opacity-20" />
                 <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">

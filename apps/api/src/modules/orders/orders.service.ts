@@ -10,6 +10,7 @@ import { prisma } from "../../lib/prisma";
 import { env } from "../../config/env";
 import { AppError } from "../../utils/httpError";
 import { getPaymentProvider } from "../payments/provider";
+import { notifyAdmin } from "../../bot";
 import type { CreateOrderInput } from "./orders.schemas";
 
 type OrderWithItems = Prisma.OrderGetPayload<{
@@ -181,6 +182,7 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
   const payment = await provider.createPayment({
     orderId: order.id,
     amount: Number(total),
+    currency: order.currency,
     description: `Order ${order.id}`,
     callbackUrl: `${env.WEB_BASE_URL}/checkout/callback`,
   });
@@ -248,6 +250,7 @@ export async function verifyAndDeliver(authority: string, status: string) {
   const verification = await provider.verifyPayment({
     authority,
     amount: Number(order.totalAmount),
+    currency: order.currency,
   });
   if (!verification.success) {
     await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "FAILED" } });
@@ -259,7 +262,14 @@ export async function verifyAndDeliver(authority: string, status: string) {
   } catch (error) {
     if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
       await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "FAILED" } });
-      // A real gateway would trigger a refund here.
+      
+      // Notify admin about stock exhaustion and manual refund requirement
+      void notifyAdmin(
+        `⚠️ *کمبود موجودی در حین پرداخت*\n\n` +
+        `سفارش *#${order.id.slice(-8)}* با مبلغ ${Number(order.totalAmount)} ${order.currency} پرداخت شد، اما موجودی محصول به اتمام رسیده بود.\n` +
+        `وضعیت سفارش به FAILED تغییر یافت. لطفا نسبت به بازگردانی وجه کاربر یا شارژ مجدد انبار اقدام نمایید.`
+      ).catch(() => {});
+
       throw new AppError(
         409,
         "OUT_OF_STOCK",

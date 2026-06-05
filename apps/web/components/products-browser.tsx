@@ -43,7 +43,7 @@ export function ProductsBrowser({ locale, dict }: { locale: Locale; dict: Dictio
     );
 
   return (
-    <Container className="py-10">
+    <Container className="py-10 animate-fade-in">
       <h1 className="mb-6 text-2xl font-bold">{dict.products.title}</h1>
 
       <div className="mb-8 flex flex-wrap gap-2">

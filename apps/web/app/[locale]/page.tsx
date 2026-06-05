@@ -31,7 +31,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
 
   return (
     <>
-      <section className="relative overflow-hidden border-b border-border">
+      <section className="relative overflow-hidden border-b border-border animate-fade-in">
         <div className="hero-aurora pointer-events-none absolute inset-0" />
         <div className="bg-dots pointer-events-none absolute inset-0 opacity-40" />
         <Container className="relative py-20 text-center sm:py-28">

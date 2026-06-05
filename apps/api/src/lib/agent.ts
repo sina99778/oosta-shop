@@ -281,7 +281,6 @@ Rules:
 - If a tool returns an error, read it, fix the arguments, and try again.
 - When finished, reply with a SHORT summary in Persian of exactly what you did (names, ids, links). Keep it concise.`;
 
-const MODEL = env.GEMINI_MODEL;
 const MAX_STEPS = 10;
 
 type Part =
@@ -290,8 +289,18 @@ type Part =
   | { functionResponse: { name: string; response: Record<string, unknown> } };
 type Content = { role: "user" | "model"; parts: Part[] };
 
-async function callGemini(contents: Content[]): Promise<Content | null> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+class GeminiHttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function callGeminiSingle(model: string, contents: Content[]): Promise<Content | null> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY! },
@@ -310,12 +319,44 @@ async function callGemini(contents: Content[]): Promise<Content | null> {
       generationConfig: { temperature: 0.4 },
     }),
   });
+
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(`Gemini ${res.status}: ${detail.slice(0, 200)}`);
+    throw new GeminiHttpError(res.status, detail.slice(0, 200));
   }
+
   const json = (await res.json()) as { candidates?: { content?: Content }[] };
   return json.candidates?.[0]?.content ?? null;
+}
+
+async function callGemini(contents: Content[]): Promise<Content | null> {
+  const models = [env.GEMINI_MODEL];
+  if (env.GEMINI_FALLBACK_MODEL && env.GEMINI_FALLBACK_MODEL !== env.GEMINI_MODEL) {
+    models.push(env.GEMINI_FALLBACK_MODEL);
+  }
+
+  let lastStatus = 0;
+  let lastDetail = "";
+
+  for (const model of models) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await callGeminiSingle(model, contents);
+      } catch (error) {
+        const status = error instanceof GeminiHttpError ? error.status : 0;
+        lastStatus = status;
+        lastDetail = error instanceof Error ? error.message : String(error);
+
+        if (status === 404) break; // model name unknown -> try fallback model
+        if (status === 400 || status === 401 || status === 403) {
+          throw new Error(`Gemini rejected the request (${status}): ${lastDetail}`);
+        }
+        if (attempt < 2) await sleep(700 * Math.pow(2, attempt)); // backoff
+      }
+    }
+  }
+
+  throw new Error(`Gemini request failed (${lastStatus}): ${lastDetail}`);
 }
 
 async function runTool(

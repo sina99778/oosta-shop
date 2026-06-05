@@ -9,7 +9,17 @@ import { env } from "../config/env";
 
 function run(command: string, extraEnv: Record<string, string>): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn("sh", ["-c", command], { env: { ...process.env, ...extraEnv } });
+    const isWin = process.platform === "win32";
+    const shell = isWin ? "cmd.exe" : "sh";
+    const finalCommand = isWin
+      ? command
+          .replace(/\$DATABASE_URL/g, "%DATABASE_URL%")
+          .replace(/\$OUT/g, "%OUT%")
+          .replace(/\$IN/g, "%IN%")
+      : command;
+    const args = isWin ? ["/c", finalCommand] : ["-c", finalCommand];
+
+    const child = spawn(shell, args, { env: { ...process.env, ...extraEnv } });
     let stderr = "";
     child.stderr.on("data", (chunk) => {
       stderr += String(chunk);

@@ -28,7 +28,7 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
   const statusMap = d.status as Record<string, string>;
 
   return (
-    <Container className="py-10">
+    <Container className="py-10 animate-fade-in">
       <h1 className="mb-6 text-2xl font-bold">{d.orders}</h1>
       {loading ? (
         <Spinner className="size-6" />

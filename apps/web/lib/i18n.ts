@@ -1,5 +1,5 @@
-// Locale configuration shared by the proxy (locale routing) and server dictionaries.
-// Kept free of "server-only" so it can be imported anywhere (proxy, client, server).
+// Locale configuration shared by the middleware (locale routing) and server dictionaries.
+// Kept free of "server-only" so it can be imported anywhere (middleware, client, server).
 
 export const locales = ["en", "fa"] as const;
 export type Locale = (typeof locales)[number];

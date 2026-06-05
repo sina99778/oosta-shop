@@ -53,7 +53,7 @@ export function OrderDetail({
   const order = data.order;
 
   return (
-    <Container className="py-10">
+    <Container className="py-10 animate-fade-in">
       <Link href={`/${locale}/dashboard`} className="text-sm text-muted hover:text-foreground">
         ← {d.backToDashboard}
       </Link>

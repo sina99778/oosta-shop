@@ -13,6 +13,7 @@ import { AppError } from "../../utils/httpError";
 export type CreatePaymentInput = {
   orderId: string;
   amount: number;
+  currency: string;
   description: string;
   callbackUrl: string;
 };
@@ -21,7 +22,7 @@ export type CreatePaymentResult = {
   authority: string;
   redirectUrl: string;
 };
-export type VerifyPaymentArgs = { authority: string; amount: number };
+export type VerifyPaymentArgs = { authority: string; amount: number; currency: string };
 export type VerifyPaymentResult = { success: boolean; refId: string | null };
 
 export interface PaymentProviderAdapter {
@@ -33,7 +34,7 @@ export interface PaymentProviderAdapter {
 // --- Mock provider: simulates an instant, successful payment -------------------
 const mockProvider: PaymentProviderAdapter = {
   name: "MANUAL",
-  async createPayment({ orderId, callbackUrl }) {
+  async createPayment({ orderId, callbackUrl, currency: _currency }) {
     const authority = `mock_${orderId}`;
     // Point the redirect straight back at the callback with a success status,
     // simulating the user paying on a hosted page.
@@ -42,7 +43,7 @@ const mockProvider: PaymentProviderAdapter = {
     url.searchParams.set("Status", "OK");
     return { provider: "MANUAL", authority, redirectUrl: url.toString() };
   },
-  async verifyPayment({ authority }) {
+  async verifyPayment({ authority, amount: _amount, currency: _currency }) {
     return { success: true, refId: `mockref_${authority}` };
   },
 };
@@ -54,14 +55,23 @@ function zarinpalBase(): string {
 
 const zarinpalProvider: PaymentProviderAdapter = {
   name: "ZARINPAL",
-  async createPayment({ amount, description, callbackUrl }) {
+  async createPayment({ amount, currency: orderCurrency, description, callbackUrl }) {
+    let finalAmount = amount;
+    const targetCurrency = env.ZARINPAL_CURRENCY; // "IRR" or "IRT"
+
+    if (orderCurrency === "IRR" && targetCurrency === "IRT") {
+      finalAmount = amount / 10;
+    } else if (orderCurrency === "IRT" && targetCurrency === "IRR") {
+      finalAmount = amount * 10;
+    }
+
     const response = await fetch(`${zarinpalBase()}/pg/v4/payment/request.json`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({
         merchant_id: env.ZARINPAL_MERCHANT_ID,
-        amount: Math.round(amount),
-        currency: env.ZARINPAL_CURRENCY,
+        amount: Math.round(finalAmount),
+        currency: targetCurrency,
         description,
         callback_url: callbackUrl,
       }),
@@ -77,13 +87,22 @@ const zarinpalProvider: PaymentProviderAdapter = {
       redirectUrl: `${zarinpalBase()}/pg/StartPay/${authority}`,
     };
   },
-  async verifyPayment({ authority, amount }) {
+  async verifyPayment({ authority, amount, currency: orderCurrency }) {
+    let finalAmount = amount;
+    const targetCurrency = env.ZARINPAL_CURRENCY; // "IRR" or "IRT"
+
+    if (orderCurrency === "IRR" && targetCurrency === "IRT") {
+      finalAmount = amount / 10;
+    } else if (orderCurrency === "IRT" && targetCurrency === "IRR") {
+      finalAmount = amount * 10;
+    }
+
     const response = await fetch(`${zarinpalBase()}/pg/v4/payment/verify.json`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({
         merchant_id: env.ZARINPAL_MERCHANT_ID,
-        amount: Math.round(amount),
+        amount: Math.round(finalAmount),
         authority,
       }),
     });
