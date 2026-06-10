@@ -47,14 +47,17 @@ const EnvSchema = z.object({
   // OpenRouter (openrouter.ai) — preferred LLM provider for the Telegram AI agent
   // when set (Gemini stays as the fallback provider). One key unlocks every model.
   OPENROUTER_API_KEY: z.string().optional(),
-  // Best tool-calling + Persian quality per June 2026 evals ($3/$15 per M tokens).
-  // Cheaper: "google/gemini-3.5-flash" ($1.50/$9) or "openai/gpt-5.4-mini" ($0.75/$4.50).
-  OPENROUTER_MODEL: z.string().default("anthropic/claude-sonnet-4.6"),
+  // GPT-5.5: strongest GPT for writing/SEO structure ($5/$30 per M tokens).
+  // Note: June 2026 Persian evals (TARAZ/PerHalluEval) + blind copy tests actually
+  // favor "anthropic/claude-sonnet-4.6" ($3/$15) for Persian copy — easy switch.
+  // Cheaper: "openai/gpt-5.4" ($2.50/$15) or "google/gemini-3.5-flash" ($1.50/$9).
+  OPENROUTER_MODEL: z.string().default("openai/gpt-5.5"),
   // Tried automatically when the primary model errors/overloads. Empty disables it.
-  OPENROUTER_FALLBACK_MODEL: z.string().default("google/gemini-3.5-flash"),
-  // Image generation for the agent (~$0.04/image, GA "nano banana"). Higher quality:
-  // "google/gemini-3.1-flash-image-preview" (~$0.07) or "google/gemini-3-pro-image-preview".
-  OPENROUTER_IMAGE_MODEL: z.string().default("google/gemini-2.5-flash-image"),
+  OPENROUTER_FALLBACK_MODEL: z.string().default("google/gemini-3.1-pro-preview"),
+  // "Nano Banana Pro" — $0.134/image (1K & 2K same price), quality ≈ GPT Image 2
+  // high tier ($0.211) and better at editing product photos. Cheaper: nano banana 2
+  // "google/gemini-3.1-flash-image-preview" (~$0.067) or "google/gemini-2.5-flash-image" (~$0.04).
+  OPENROUTER_IMAGE_MODEL: z.string().default("google/gemini-3-pro-image-preview"),
 
   // Telegram admin bot (optional; the bot stays disabled unless both are set).
   TELEGRAM_BOT_TOKEN: z.string().optional(),
