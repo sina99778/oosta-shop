@@ -24,9 +24,12 @@ import {
 import {
   approveReceipt,
   getReceiptImage,
+  getStats,
   listReceipts,
+  listTickets,
   rejectReceipt,
 } from "./modules/admin/admin.service";
+import { getGatewayConfig, maskCard, patchGatewayConfig } from "./lib/gatewayConfig";
 
 let bot: Telegraf | undefined;
 let backupTimer: ReturnType<typeof setInterval> | undefined;
@@ -34,22 +37,78 @@ let backupTimer: ReturnType<typeof setInterval> | undefined;
 function mainMenu() {
   return Markup.inlineKeyboard([
     [
-      Markup.button.callback("📊 Stats", "stats"),
-      Markup.button.callback("🧾 Last 5 orders", "orders"),
+      Markup.button.callback("📊 آمار فروش", "stats"),
+      Markup.button.callback("🧾 سفارش‌های اخیر", "orders"),
     ],
     [
-      Markup.button.callback("🧾 Pending receipts", "receipts"),
-      Markup.button.callback("🗂 Receipt history", "receipts_history"),
+      Markup.button.callback("🧾 رسیدهای در انتظار", "receipts"),
+      Markup.button.callback("🗂 تاریخچه رسیدها", "receipts_history"),
     ],
     [
-      Markup.button.callback("💾 Backup now", "backup"),
-      Markup.button.callback("♻️ Restore", "restore"),
+      Markup.button.callback("🎫 تیکت‌های باز", "tickets"),
+      Markup.button.callback("💳 درگاه‌ها", "gateways"),
     ],
     [
       Markup.button.callback("🧠 مدل‌ها", "models"),
       Markup.button.callback("📈 بازدیدها", "visits"),
     ],
+    [
+      Markup.button.callback("💾 بکاپ فوری", "backup"),
+      Markup.button.callback("♻️ بازیابی", "restore"),
+    ],
   ]);
+}
+
+const fmtAmount = (n: number) => new Intl.NumberFormat("fa-IR").format(Math.round(n));
+
+// Gateway status + one-tap toggles. Card details change via the AI agent in chat.
+async function gatewaysView() {
+  const gw = await getGatewayConfig();
+  const text = [
+    "💳 درگاه‌های پرداخت",
+    "",
+    `درگاه آنلاین: ${gw.provider === "zarinpal" ? "زرین‌پال ✅" : "تستی (mock) ⚠️"}`,
+    ...(gw.provider === "zarinpal"
+      ? [
+          `  مرچنت: ${gw.zarinpalMerchantId.slice(0, 8)}…`,
+          `  سندباکس: ${gw.zarinpalSandbox ? "روشن ⚠️" : "خاموش ✅"}`,
+        ]
+      : []),
+    "",
+    `کارت‌به‌کارت: ${gw.cardEnabled ? "فعال ✅" : "غیرفعال ❌"}`,
+    ...(gw.cardEnabled
+      ? [`  کارت: ${maskCard(gw.cardNumber)}`, `  ${gw.cardHolder || "—"} · ${gw.cardBank || "—"}`]
+      : []),
+    "",
+    "برای تغییر شماره کارت/مرچنت، همین‌جا به دستیار بگو — مثلاً:",
+    "«شماره کارت کارت‌به‌کارت را به ۶۲۱۹۸۶۱۰۱۲۳۴۵۶۷۸ تغییر بده»",
+  ].join("\n");
+
+  const keyboard = Markup.inlineKeyboard([
+    [
+      Markup.button.callback(
+        gw.provider === "zarinpal" ? "🔁 برو روی حالت تستی" : "🔁 برو روی زرین‌پال",
+        "gw_provider",
+      ),
+    ],
+    [
+      Markup.button.callback(
+        gw.cardEnabled ? "❌ غیرفعال‌کردن کارت‌به‌کارت" : "✅ فعال‌کردن کارت‌به‌کارت",
+        "gw_card",
+      ),
+    ],
+    ...(gw.provider === "zarinpal"
+      ? [
+          [
+            Markup.button.callback(
+              gw.zarinpalSandbox ? "🔌 خاموش‌کردن سندباکس" : "🧪 روشن‌کردن سندباکس",
+              "gw_sandbox",
+            ),
+          ],
+        ]
+      : []),
+  ]);
+  return { text, keyboard };
 }
 
 // "IR" -> 🇮🇷 (regional-indicator pair); unknown country -> 🌐.
@@ -177,25 +236,73 @@ async function sendReceipts(chatId: number, status: "PENDING" | undefined): Prom
 }
 
 async function statsMessage(): Promise<string> {
-  const [users, paidOrders] = await Promise.all([
-    prisma.user.count(),
-    prisma.order.count({ where: { paymentStatus: "PAID" } }),
-  ]);
-  return `📊 Stats\n\n👤 Users: ${users}\n✅ Paid orders: ${paidOrders}`;
+  const s = await getStats();
+  const lines = [
+    "📊 آمار فروش",
+    "",
+    `💰 درآمد کل: ${fmtAmount(s.revenueTotal)} ${s.currency}`,
+    `📆 درآمد ۳۰ روز اخیر: ${fmtAmount(s.revenue30)} ${s.currency}`,
+    `✅ سفارش‌های موفق: ${s.paidOrders} از ${s.totalOrders}`,
+    `🕒 در انتظار بررسی رسید: ${s.pendingReview}`,
+    `👤 مشتری‌ها: ${s.customers}`,
+  ];
+  if (s.salesByDay.length > 0) {
+    lines.push("", "📅 فروش روزهای اخیر:");
+    for (const d of s.salesByDay.slice(-7)) {
+      lines.push(`  ${d.day} — ${d.count} سفارش · ${fmtAmount(d.revenue)} ${s.currency}`);
+    }
+  }
+  if (s.topProducts.length > 0) {
+    lines.push("", "🏆 پرفروش‌ها:");
+    for (const p of s.topProducts) lines.push(`  • ${p.name} — ${p.unitsSold} فروش`);
+  }
+  if (s.lowStock.length > 0) {
+    lines.push("", "⚠️ موجودی کم:");
+    for (const p of s.lowStock) lines.push(`  • ${p.name} — ${p.stock} عدد`);
+  }
+  return lines.join("\n");
 }
 
 async function ordersMessage(): Promise<string> {
   const orders = await prisma.order.findMany({
-    take: 5,
+    take: 8,
     orderBy: { createdAt: "desc" },
     include: { user: { select: { email: true, phone: true } } },
   });
-  if (orders.length === 0) return "No orders yet.";
+  if (orders.length === 0) return "هنوز سفارشی ثبت نشده.";
+  const icon: Record<string, string> = {
+    PAID: "✅",
+    PENDING: "🕒",
+    PENDING_REVIEW: "🧾",
+    FAILED: "❌",
+    REJECTED: "🚫",
+    REFUNDED: "↩️",
+    EXPIRED: "⌛",
+  };
   const lines = orders.map((order) => {
-    const who = order.user.email ?? order.user.phone ?? "unknown";
-    return `#${order.id.slice(-8)} · ${who} · ${Number(order.totalAmount)} ${order.currency} · ${order.paymentStatus}`;
+    const who = order.user.email ?? order.user.phone ?? "ناشناس";
+    return `${icon[order.paymentStatus] ?? "•"} #${order.id.slice(-8)} · ${who} · ${fmtAmount(Number(order.totalAmount))} ${order.currency}`;
   });
-  return `🧾 Last ${orders.length} orders\n\n${lines.join("\n")}`;
+  return `🧾 ${orders.length} سفارش اخیر\n\n${lines.join("\n")}`;
+}
+
+async function ticketsMessage(): Promise<string> {
+  const { items, openCount } = await listTickets({ status: "OPEN", page: 1, pageSize: 10 });
+  if (items.length === 0) return "🎫 تیکت بازی وجود ندارد. ✅";
+  const lines = items.map(
+    (t) => `• #${t.id.slice(-8)} — ${t.subject}\n  از ${t.user.name} · ${t.messageCount} پیام`,
+  );
+  const header =
+    openCount > items.length
+      ? `🎫 ${openCount} تیکت باز (${items.length} مورد اخیر):`
+      : `🎫 ${openCount} تیکت باز:`;
+  return [
+    header,
+    "",
+    ...lines,
+    "",
+    "برای پاسخ، همین‌جا به دستیار بگو — مثلاً: «تیکت #xxxxxxxx را بخوان و جواب مناسب بده»",
+  ].join("\n");
 }
 
 async function sendBackup(chatId: number): Promise<void> {
@@ -270,6 +377,62 @@ export function startBot(): void {
     await ctx.reply(
       "♻️ To restore, send me a backup file (.sql or .sql.gz) with the caption: restore",
       mainMenu(),
+    );
+  });
+
+  bot.action("tickets", async (ctx) => {
+    await ctx.answerCbQuery("Loading…");
+    try {
+      await ctx.reply(await ticketsMessage(), mainMenu());
+    } catch (error) {
+      await ctx.reply(`❌ ${error instanceof Error ? error.message : String(error)}`, mainMenu());
+    }
+  });
+
+  // Payment gateways: status + one-tap toggles.
+  bot.action("gateways", async (ctx) => {
+    await ctx.answerCbQuery();
+    const view = await gatewaysView();
+    await ctx.reply(view.text, view.keyboard);
+  });
+
+  const gwToggle = async (
+    ctx: {
+      answerCbQuery: (t?: string) => Promise<unknown>;
+      editMessageText: (t: string, k?: object) => Promise<unknown>;
+    },
+    patch: () => Promise<unknown>,
+    note: string,
+  ) => {
+    try {
+      await patch();
+      await ctx.answerCbQuery(note);
+      const view = await gatewaysView();
+      await ctx.editMessageText(view.text, view.keyboard).catch(() => {});
+    } catch (error) {
+      await ctx.answerCbQuery(error instanceof Error ? error.message.slice(0, 60) : "Failed");
+    }
+  };
+
+  bot.action("gw_provider", async (ctx) => {
+    const gw = await getGatewayConfig();
+    const next = gw.provider === "zarinpal" ? "mock" : "zarinpal";
+    await gwToggle(ctx, () => patchGatewayConfig({ provider: next }), `✅ ${next}`);
+  });
+  bot.action("gw_card", async (ctx) => {
+    const gw = await getGatewayConfig();
+    await gwToggle(
+      ctx,
+      () => patchGatewayConfig({ cardEnabled: !gw.cardEnabled }),
+      gw.cardEnabled ? "❌ غیرفعال شد" : "✅ فعال شد",
+    );
+  });
+  bot.action("gw_sandbox", async (ctx) => {
+    const gw = await getGatewayConfig();
+    await gwToggle(
+      ctx,
+      () => patchGatewayConfig({ zarinpalSandbox: !gw.zarinpalSandbox }),
+      gw.zarinpalSandbox ? "🔌 خاموش شد" : "🧪 روشن شد",
     );
   });
 

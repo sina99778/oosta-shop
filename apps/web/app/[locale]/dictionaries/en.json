@@ -259,7 +259,19 @@
       "enamadRemove": "Remove badge",
       "enamadNone": "No badge uploaded yet.",
       "save": "Save changes",
-      "saved": "Saved — the site is updated."
+      "saved": "Saved — the site is updated.",
+      "payments": "Payment gateways",
+      "paymentsHint": "Applies to checkout immediately. The Telegram bot's «💳» button can toggle these too.",
+      "payProvider": "Online gateway",
+      "payProviderMock": "Test (mock)",
+      "payProviderZarinpal": "Zarinpal",
+      "payMerchant": "Zarinpal merchant ID",
+      "paySandbox": "Zarinpal sandbox (test mode)",
+      "payCardEnabled": "Offer card-to-card at checkout",
+      "payCardNumber": "Card number (16 digits)",
+      "payCardHolder": "Card holder name",
+      "payCardBank": "Bank name",
+      "paySave": "Save payment settings"
     },
     "apiKeys": {
       "title": "API keys",

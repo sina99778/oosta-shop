@@ -1229,6 +1229,78 @@ async function testPagesAndSettings(): Promise<void> {
   );
   await patch("/admin/settings", { enamadLink: null, contactEmail: null }, adminToken);
 
+  // ---- Payment gateway runtime config ----
+  const gwGet = await get("/admin/settings/payments", adminToken);
+  record(
+    "gateway config GET -> provider present",
+    gwGet.statusCode === 200 && typeof obj(body(gwGet).payments).provider === "string",
+    `status=${gwGet.statusCode}`,
+  );
+  const gwPatch = await patch(
+    "/admin/settings/payments",
+    { cardEnabled: true, cardNumber: "6219-8610 1234 5678", cardHolder: "Smoke", cardBank: "Test" },
+    adminToken,
+  );
+  record(
+    "gateway PATCH normalizes card number",
+    gwPatch.statusCode === 200 && obj(body(gwPatch).payments).cardNumber === "6219861012345678",
+    `status=${gwPatch.statusCode} card=${obj(body(gwPatch).payments).cardNumber}`,
+  );
+  const pubPay = await get("/payments/config");
+  record(
+    "public payment config reflects runtime card-to-card",
+    pubPay.statusCode === 200 &&
+      body(pubPay).cardToCard === true &&
+      obj(body(pubPay).card).number === "6219861012345678",
+    `status=${pubPay.statusCode}`,
+  );
+  record(
+    "bad card number -> 400",
+    (await patch("/admin/settings/payments", { cardNumber: "123" }, adminToken)).statusCode === 400,
+    "",
+  );
+  record(
+    "gateway PATCH no token -> 401",
+    (await patch("/admin/settings/payments", { cardEnabled: false })).statusCode === 401,
+    "",
+  );
+  // Switching to the real gateway requires a real merchant id (placeholder is refused).
+  const gwZp = await patch(
+    "/admin/settings/payments",
+    { provider: "zarinpal", zarinpalMerchantId: "merchant-12345678" },
+    adminToken,
+  );
+  record(
+    "zarinpal with real merchant -> 200",
+    gwZp.statusCode === 200 && obj(body(gwZp).payments).provider === "zarinpal",
+    `status=${gwZp.statusCode}`,
+  );
+  record(
+    "placeholder merchant while zarinpal -> 400",
+    (
+      await patch(
+        "/admin/settings/payments",
+        { zarinpalMerchantId: "00000000-0000-0000-0000-000000000000" },
+        adminToken,
+      )
+    ).statusCode === 400,
+    "",
+  );
+
+  // Revert to env defaults.
+  await patch(
+    "/admin/settings/payments",
+    {
+      provider: null,
+      zarinpalMerchantId: null,
+      cardEnabled: null,
+      cardNumber: null,
+      cardHolder: null,
+      cardBank: null,
+    },
+    adminToken,
+  );
+
   // Internal prefs stored in the same table (agent.* model choices) must never
   // leak through the public settings endpoint.
   await prisma.siteSetting.upsert({

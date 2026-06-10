@@ -4,7 +4,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/httpError";
-import { deliverOrder } from "../orders/orders.service";
+import { deliverOrder, lowStockWarning } from "../orders/orders.service";
+import { notifyAdmin } from "../../bot";
 import { generateSeo, isAiEnabled } from "../../lib/gemini";
 import { generateApiKey } from "../../lib/apiKey";
 import type {
@@ -548,6 +549,10 @@ export async function approveReceipt(id: string, input: ReviewReceiptInput) {
     where: { id },
     data: { status: "APPROVED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
   });
+  // Card-to-card sales consume inventory too — warn the admin when a plan runs low.
+  void lowStockWarning(receipt.orderId)
+    .then((warning) => (warning ? notifyAdmin(warning) : undefined))
+    .catch(() => {});
   return serializeReceipt(await loadReceiptForReview(id));
 }
 

@@ -5,6 +5,12 @@ import { validate } from "../../middleware/validate";
 import { uploadProductImage } from "../../middleware/upload";
 import { settingsPatchSchema, type SettingsPatch } from "./settings.schemas";
 import * as settings from "./settings.service";
+import {
+  gatewayPatchSchema,
+  getGatewayConfig,
+  patchGatewayConfig,
+  type GatewayPatch,
+} from "../../lib/gatewayConfig";
 
 // Public: the web layout fetches this on every render (theme + hero overrides).
 export const settingsRouter = Router();
@@ -37,6 +43,17 @@ settingsAdminRouter.patch(
   validate({ body: settingsPatchSchema }),
   async (req: Request, res: Response) => {
     res.json({ settings: await settings.patchSettings(req.body as SettingsPatch) });
+  },
+);
+// Payment-gateway runtime config (provider, Zarinpal merchant, card-to-card).
+settingsAdminRouter.get("/payments", async (_req: Request, res: Response) => {
+  res.json({ payments: await getGatewayConfig() });
+});
+settingsAdminRouter.patch(
+  "/payments",
+  validate({ body: gatewayPatchSchema }),
+  async (req: Request, res: Response) => {
+    res.json({ payments: await patchGatewayConfig(req.body as GatewayPatch) });
   },
 );
 settingsAdminRouter.post("/enamad", uploadProductImage, async (req: Request, res: Response) => {

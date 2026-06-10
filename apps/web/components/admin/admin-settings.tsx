@@ -16,6 +16,16 @@ import type { Dictionary } from "@/app/[locale]/dictionaries";
 
 type Settings = Partial<Record<string, string>>;
 
+type Payments = {
+  provider: "mock" | "zarinpal";
+  zarinpalMerchantId: string;
+  zarinpalSandbox: boolean;
+  cardEnabled: boolean;
+  cardNumber: string;
+  cardHolder: string;
+  cardBank: string;
+};
+
 const TEXT_FIELDS = [
   "heroTitleFa",
   "heroTitleEn",
@@ -55,18 +65,52 @@ export function AdminSettings({ dict }: { dict: Dictionary }) {
   const [badgeBump, setBadgeBump] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [pay, setPay] = useState<Payments | null>(null);
+  // Snapshot of the loaded values: only fields the admin actually CHANGED are
+  // PATCHed, so untouched env-derived defaults never get frozen as DB overrides.
+  const [payOrig, setPayOrig] = useState<Payments | null>(null);
+
   useEffect(() => {
     if (!token) return;
-    api
-      .get<{ settings: Settings; enamadBadge: boolean }>("/admin/settings", token)
-      .then((res) => {
+    Promise.all([
+      api.get<{ settings: Settings; enamadBadge: boolean }>("/admin/settings", token),
+      api.get<{ payments: Payments }>("/admin/settings/payments", token),
+    ])
+      .then(([res, payRes]) => {
         setForm(res.settings);
         setHasBadge(res.enamadBadge);
+        setPay(payRes.payments);
+        setPayOrig(payRes.payments);
         setLoaded(true);
       })
       .catch(() => setErr(dict.common.somethingWrong))
       .finally(() => setLoading(false));
   }, [token, dict.common.somethingWrong]);
+
+  async function savePayments() {
+    if (!token || !pay || !payOrig) return;
+    const patch: Record<string, unknown> = {};
+    for (const key of Object.keys(pay) as Array<keyof Payments>) {
+      if (pay[key] !== payOrig[key]) patch[key] = pay[key];
+    }
+    if (Object.keys(patch).length === 0) {
+      setMsg(t.saved);
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const res = await api.patch<{ payments: Payments }>("/admin/settings/payments", patch, token);
+      setPay(res.payments);
+      setPayOrig(res.payments);
+      setMsg(t.saved);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : dict.common.somethingWrong);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const set = (key: string, value: string) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -177,6 +221,90 @@ export function AdminSettings({ dict }: { dict: Dictionary }) {
         <h2 className="font-semibold">{t.contact}</h2>
         <div className="grid gap-4 sm:grid-cols-2">{CONTACT_FIELDS.map((k) => field(k, t[k]))}</div>
       </Card>
+
+      {pay && (
+        <Card className="space-y-4">
+          <h2 className="font-semibold">{t.payments}</h2>
+          <p className="text-sm text-muted">{t.paymentsHint}</p>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-sm text-muted">{t.payProvider}</span>
+              <select
+                value={pay.provider}
+                onChange={(e) =>
+                  setPay({ ...pay, provider: e.target.value as Payments["provider"] })
+                }
+                className="h-10 w-full rounded-xl border border-border bg-card px-3 text-sm"
+              >
+                <option value="zarinpal">{t.payProviderZarinpal}</option>
+                <option value="mock">{t.payProviderMock}</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-sm text-muted">{t.payMerchant}</span>
+              <Input
+                value={pay.zarinpalMerchantId}
+                onChange={(e) => setPay({ ...pay, zarinpalMerchantId: e.target.value })}
+                dir="ltr"
+                className="font-mono"
+              />
+            </label>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={pay.zarinpalSandbox}
+              onChange={(e) => setPay({ ...pay, zarinpalSandbox: e.target.checked })}
+            />
+            {t.paySandbox}
+          </label>
+
+          <hr className="border-border" />
+
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={pay.cardEnabled}
+              onChange={(e) => setPay({ ...pay, cardEnabled: e.target.checked })}
+            />
+            {t.payCardEnabled}
+          </label>
+          {pay.cardEnabled && (
+            <div className="grid gap-4 sm:grid-cols-3">
+              <label className="block">
+                <span className="mb-1 block text-sm text-muted">{t.payCardNumber}</span>
+                <Input
+                  value={pay.cardNumber}
+                  onChange={(e) => setPay({ ...pay, cardNumber: e.target.value })}
+                  dir="ltr"
+                  className="font-mono"
+                  placeholder="6219861012345678"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm text-muted">{t.payCardHolder}</span>
+                <Input
+                  value={pay.cardHolder}
+                  onChange={(e) => setPay({ ...pay, cardHolder: e.target.value })}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm text-muted">{t.payCardBank}</span>
+                <Input
+                  value={pay.cardBank}
+                  onChange={(e) => setPay({ ...pay, cardBank: e.target.value })}
+                />
+              </label>
+            </div>
+          )}
+
+          <Button variant="outline" onClick={savePayments} disabled={busy || !loaded}>
+            {t.paySave}
+          </Button>
+        </Card>
+      )}
 
       <Card className="space-y-4">
         <h2 className="font-semibold">{t.enamad}</h2>

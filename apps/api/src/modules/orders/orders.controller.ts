@@ -33,6 +33,6 @@ export async function uploadReceipt(req: Request, res: Response): Promise<void> 
   res.status(201).json(result);
 }
 
-export function paymentConfig(_req: Request, res: Response): void {
-  res.json(orders.getPaymentConfig());
+export async function paymentConfig(_req: Request, res: Response): Promise<void> {
+  res.json(await orders.getPaymentConfig());
 }

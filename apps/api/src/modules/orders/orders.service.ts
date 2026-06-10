@@ -10,6 +10,7 @@ import { prisma } from "../../lib/prisma";
 import { env } from "../../config/env";
 import { AppError } from "../../utils/httpError";
 import { getPaymentProvider } from "../payments/provider";
+import { getGatewayConfig } from "../../lib/gatewayConfig";
 import { notifyAdmin } from "../../bot";
 import type { CreateOrderInput } from "./orders.schemas";
 
@@ -21,13 +22,11 @@ type OrderWithItems = Prisma.OrderGetPayload<{
 }>;
 type FulfilledItem = OrderWithItems["items"][number]["fulfilledItems"][number];
 
-// Destination card shown to the buyer for a manual card-to-card transfer.
-function cardToCardInfo() {
-  return {
-    number: env.CARD_NUMBER ?? "",
-    holder: env.CARD_HOLDER ?? "",
-    bank: env.CARD_BANK ?? "",
-  };
+// Destination card shown to the buyer for a manual card-to-card transfer
+// (runtime gateway config: editable from the admin panel / bot / agent).
+async function cardToCardInfo() {
+  const gw = await getGatewayConfig();
+  return { number: gw.cardNumber, holder: gw.cardHolder, bank: gw.cardBank };
 }
 
 function credentialOf(item: FulfilledItem) {
@@ -41,7 +40,7 @@ function credentialOf(item: FulfilledItem) {
   };
 }
 
-function serializeOrderDetail(order: OrderWithItems) {
+async function serializeOrderDetail(order: OrderWithItems) {
   const paid = order.paymentStatus === "PAID";
   return {
     id: order.id,
@@ -79,7 +78,7 @@ function serializeOrderDetail(order: OrderWithItems) {
     // For an unpaid card-to-card order, surface the destination card so the buyer can pay.
     cardToCard:
       order.paymentProvider === "CARD_TO_CARD" && order.paymentStatus !== "PAID"
-        ? cardToCardInfo()
+        ? await cardToCardInfo()
         : null,
   };
 }
@@ -142,7 +141,8 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
   // --- Card-to-card: create a PENDING order and return the destination card. -----
   // No gateway is involved; the buyer transfers manually then uploads a receipt.
   if (input.method === "card_to_card") {
-    if (!env.CARD_TO_CARD_ENABLED) {
+    const gw = await getGatewayConfig();
+    if (!gw.cardEnabled) {
       throw new AppError(400, "METHOD_UNAVAILABLE", "Card-to-card payment is not available");
     }
     const order = await prisma.order.create({
@@ -162,12 +162,12 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
         currency,
         paymentStatus: order.paymentStatus,
       },
-      cardToCard: { ...cardToCardInfo(), amount: Number(total), currency },
+      cardToCard: { ...(await cardToCardInfo()), amount: Number(total), currency },
     };
   }
 
   // --- Online: open a payment-gateway session and return the redirect URL. -------
-  const provider = getPaymentProvider();
+  const provider = await getPaymentProvider();
   const order = await prisma.order.create({
     data: {
       userId,
@@ -246,7 +246,7 @@ export async function verifyAndDeliver(authority: string, status: string) {
     return { status: "failed" as const };
   }
 
-  const provider = getPaymentProvider();
+  const provider = await getPaymentProvider();
   const verification = await provider.verifyPayment({
     authority,
     amount: Number(order.totalAmount),
@@ -279,7 +279,62 @@ export async function verifyAndDeliver(authority: string, status: string) {
     throw error;
   }
 
+  // Tell the admin about the sale (and any plan that just ran low) — fire & forget.
+  void notifySale(order.id).catch(() => {});
+
   return { status: "paid" as const, order: await getOrderDetail(order.userId, order.id) };
+}
+
+const LOW_STOCK_ALERT = 5;
+
+// "⚠️ low stock" lines for the plans in an order, or null when nothing is low.
+// Exported so the card-to-card approval path can warn too.
+export async function lowStockWarning(orderId: string): Promise<string | null> {
+  const items = await prisma.orderItem.findMany({
+    where: { orderId },
+    include: { product: { select: { name: true } } },
+  });
+  if (items.length === 0) return null;
+
+  const planIds = [...new Set(items.map((i) => i.planId))];
+  const remaining = await prisma.inventoryItem.groupBy({
+    by: ["planId"],
+    where: { planId: { in: planIds }, status: "AVAILABLE" },
+    _count: { _all: true },
+  });
+  const remainMap = new Map(remaining.map((r) => [r.planId, r._count._all]));
+  const low = items
+    .map((i) => ({ name: i.product.name, left: remainMap.get(i.planId) ?? 0 }))
+    .filter((p) => p.left <= LOW_STOCK_ALERT);
+  if (low.length === 0) return null;
+  return ["⚠️ موجودی رو به اتمام:", ...low.map((p) => `• ${p.name} — ${p.left} عدد مانده`)].join(
+    "\n",
+  );
+}
+
+// Telegram notification for a successful online sale + low-stock warnings.
+async function notifySale(orderId: string): Promise<void> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      user: { select: { name: true, email: true, phone: true } },
+      items: { include: { product: { select: { name: true } } } },
+    },
+  });
+  if (!order) return;
+
+  const who = order.user.email ?? order.user.phone ?? order.user.name;
+  const lines = [
+    "💰 فروش جدید!",
+    "",
+    `سفارش #${order.id.slice(-8)} — ${Number(order.totalAmount)} ${order.currency}`,
+    `خریدار: ${order.user.name} (${who})`,
+    ...order.items.map((i) => `• ${i.product.name} × ${i.quantity}`),
+  ];
+  const low = await lowStockWarning(orderId);
+  if (low) lines.push("", low);
+
+  await notifyAdmin(lines.join("\n"));
 }
 
 export async function listOrders(userId: string) {
@@ -359,10 +414,11 @@ export async function uploadReceipt(
 }
 
 // Public payment configuration the storefront uses to decide which methods to offer.
-export function getPaymentConfig() {
+export async function getPaymentConfig() {
+  const gw = await getGatewayConfig();
   return {
     online: true,
-    cardToCard: env.CARD_TO_CARD_ENABLED,
-    card: env.CARD_TO_CARD_ENABLED ? cardToCardInfo() : null,
+    cardToCard: gw.cardEnabled,
+    card: gw.cardEnabled ? await cardToCardInfo() : null,
   };
 }

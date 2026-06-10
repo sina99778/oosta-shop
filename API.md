@@ -171,6 +171,23 @@ Enamad trust badge image (shown in the footer):
 - `DELETE /admin/settings/enamad`
 - Public: `GET /site-assets/enamad`
 
+---
+
+## Payment gateways (runtime, no redeploy)
+
+- `GET /admin/settings/payments` → current gateway config
+- `PATCH /admin/settings/payments` → merge-patch; `null` (or `""` for strings)
+  reverts a key to the env default
+
+Keys: `provider` (`"zarinpal"` | `"mock"`), `zarinpalMerchantId`,
+`zarinpalSandbox` (bool), `cardEnabled` (bool — offer card-to-card at checkout),
+`cardNumber` (16 digits; spaces/dashes/Persian digits normalized), `cardHolder`,
+`cardBank`. Public read used by checkout: `GET /payments/config`.
+
+```json
+{ "provider": "zarinpal", "cardEnabled": true, "cardNumber": "6219861012345678" }
+```
+
 ```json
 { "themePrimary": "#7c3aed", "heroTitleFa": "اکانت‌های هوش مصنوعی، تحویل آنی" }
 ```

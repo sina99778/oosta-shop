@@ -8,6 +8,7 @@
 
 import type { PaymentProvider } from "@prisma/client";
 import { env } from "../../config/env";
+import { getGatewayConfig } from "../../lib/gatewayConfig";
 import { AppError } from "../../utils/httpError";
 
 export type CreatePaymentInput = {
@@ -49,13 +50,16 @@ const mockProvider: PaymentProviderAdapter = {
 };
 
 // --- Zarinpal provider (real API) ----------------------------------------------
-function zarinpalBase(): string {
-  return env.ZARINPAL_SANDBOX ? "https://sandbox.zarinpal.com" : "https://payment.zarinpal.com";
+// Merchant id + sandbox come from the runtime gateway config (DB over env), so
+// the admin can change them live from the panel / bot / agent.
+function zarinpalBase(sandbox: boolean): string {
+  return sandbox ? "https://sandbox.zarinpal.com" : "https://payment.zarinpal.com";
 }
 
 const zarinpalProvider: PaymentProviderAdapter = {
   name: "ZARINPAL",
   async createPayment({ amount, currency: orderCurrency, description, callbackUrl }) {
+    const gw = await getGatewayConfig();
     let finalAmount = amount;
     const targetCurrency = env.ZARINPAL_CURRENCY; // "IRR" or "IRT"
 
@@ -65,11 +69,11 @@ const zarinpalProvider: PaymentProviderAdapter = {
       finalAmount = amount * 10;
     }
 
-    const response = await fetch(`${zarinpalBase()}/pg/v4/payment/request.json`, {
+    const response = await fetch(`${zarinpalBase(gw.zarinpalSandbox)}/pg/v4/payment/request.json`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({
-        merchant_id: env.ZARINPAL_MERCHANT_ID,
+        merchant_id: gw.zarinpalMerchantId,
         amount: Math.round(finalAmount),
         currency: targetCurrency,
         description,
@@ -84,10 +88,11 @@ const zarinpalProvider: PaymentProviderAdapter = {
     return {
       provider: "ZARINPAL",
       authority,
-      redirectUrl: `${zarinpalBase()}/pg/StartPay/${authority}`,
+      redirectUrl: `${zarinpalBase(gw.zarinpalSandbox)}/pg/StartPay/${authority}`,
     };
   },
   async verifyPayment({ authority, amount, currency: orderCurrency }) {
+    const gw = await getGatewayConfig();
     let finalAmount = amount;
     const targetCurrency = env.ZARINPAL_CURRENCY; // "IRR" or "IRT"
 
@@ -97,11 +102,11 @@ const zarinpalProvider: PaymentProviderAdapter = {
       finalAmount = amount * 10;
     }
 
-    const response = await fetch(`${zarinpalBase()}/pg/v4/payment/verify.json`, {
+    const response = await fetch(`${zarinpalBase(gw.zarinpalSandbox)}/pg/v4/payment/verify.json`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({
-        merchant_id: env.ZARINPAL_MERCHANT_ID,
+        merchant_id: gw.zarinpalMerchantId,
         amount: Math.round(finalAmount),
         authority,
       }),
@@ -116,6 +121,7 @@ const zarinpalProvider: PaymentProviderAdapter = {
   },
 };
 
-export function getPaymentProvider(): PaymentProviderAdapter {
-  return env.PAYMENT_PROVIDER === "zarinpal" ? zarinpalProvider : mockProvider;
+export async function getPaymentProvider(): Promise<PaymentProviderAdapter> {
+  const gw = await getGatewayConfig();
+  return gw.provider === "zarinpal" ? zarinpalProvider : mockProvider;
 }

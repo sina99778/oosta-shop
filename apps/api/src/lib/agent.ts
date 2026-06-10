@@ -27,6 +27,7 @@ import {
   updateProductSchema,
 } from "../modules/admin/admin.schemas";
 import { getVisitStats } from "../modules/analytics/analytics.service";
+import { gatewayPatchSchema, getGatewayConfig, patchGatewayConfig } from "./gatewayConfig";
 import { prisma } from "./prisma";
 import { createPostSchema, updatePostSchema } from "../modules/blog/blog.schemas";
 import { createPageSchema, updatePageSchema } from "../modules/pages/pages.schemas";
@@ -513,6 +514,28 @@ const TOOLS: Tool[] = [
     run: (a) => adminSvc.setTicketStatus(String(a.id), ticketStatusSchema.parse(a)),
   },
   {
+    name: "get_payment_settings",
+    description:
+      "Read the payment-gateway config: provider (mock|zarinpal), Zarinpal merchant id + sandbox, card-to-card enabled + destination card details.",
+    parameters: obj({}),
+    run: () => getGatewayConfig(),
+  },
+  {
+    name: "update_payment_settings",
+    description:
+      'Change payment gateways live: provider ("zarinpal" = real gateway, "mock" = test mode), zarinpalMerchantId, zarinpalSandbox (boolean), cardEnabled (boolean — offer card-to-card at checkout), cardNumber (16 digits), cardHolder, cardBank. Set a string key to "" (or null) to revert to the env default.',
+    parameters: obj({
+      provider: { type: "string", enum: ["mock", "zarinpal"] },
+      zarinpalMerchantId: str(),
+      zarinpalSandbox: bool(),
+      cardEnabled: bool(),
+      cardNumber: str("16 digits"),
+      cardHolder: str(),
+      cardBank: str(),
+    }),
+    run: (a) => patchGatewayConfig(gatewayPatchSchema.parse(a)),
+  },
+  {
     name: "get_visit_stats",
     description:
       "Site traffic: today / last 7 days / last 30 days page views + unique visitors, daily series, and a per-country breakdown.",
@@ -536,6 +559,7 @@ Rules:
 - Site look & feel: update_site_settings changes theme colors (hex), home hero/announcement copy, footer about text and contact info live, per language (En/Fa keys). Read get_site_settings first when modifying.
 - Product display order: update_product sortOrder (higher = earlier) or reorder_products with the full desired order.
 - Store operations: orders (list_orders/get_order), stock (list_inventory/add_inventory), reviews moderation (list_reviews/set_review_status), support tickets (list_tickets/get_ticket/reply_ticket — reply politely in the customer's language), and traffic (get_visit_stats).
+- Payments: get_payment_settings / update_payment_settings control the gateway (zarinpal vs mock, merchant id, sandbox) and card-to-card (enable + destination card). Confirm the values back to the user after changing them.
 - Destructive tools (delete_product, delete_category, delete_plan, delete_page): only when the user explicitly asks to delete; otherwise prefer deactivating.
 - If a tool returns an error, read it, fix the arguments, and try again.
 - When finished, reply with a SHORT summary in Persian of exactly what you did (names, ids, links). Keep it concise.`;
