@@ -32,6 +32,7 @@
     "heroTitle": "Digital products, delivered instantly",
     "heroSubtitle": "AI accounts, licenses, and gift cards — delivered the moment your payment is confirmed.",
     "browse": "Browse products",
+    "browseSecondary": "Read the blog",
     "categories": "Categories",
     "bestsellers": "Bestsellers",
     "shopByCategory": "Shop by category",
@@ -39,7 +40,15 @@
     "heroBadge": "Automated digital store",
     "trust1": "Instant automatic delivery",
     "trust2": "Secure payment",
-    "trust3": "24/7 support"
+    "trust3": "24/7 support",
+    "featInstantTitle": "Instant delivery",
+    "featInstantText": "Your credentials appear in your dashboard the second payment clears.",
+    "featSecureTitle": "Secure payment",
+    "featSecureText": "Bank gateway or card-to-card with verified receipts.",
+    "featSupportTitle": "Real support",
+    "featSupportText": "Ticketing with fast human answers, day and night.",
+    "featWarrantyTitle": "Guaranteed items",
+    "featWarrantyText": "Every account and license is checked before it is listed."
   },
   "products": {
     "title": "Products",
@@ -219,6 +228,39 @@
       "saveFirst": "Save the post first, then upload images."
     },
     "apiTab": "API",
+    "settingsTab": "Settings",
+    "settings": {
+      "title": "Site settings",
+      "intro": "Everything here applies to the storefront immediately — no redeploy. Clear a field and save to revert it to the default.",
+      "theme": "Theme colors",
+      "primary": "Primary (light mode)",
+      "primaryDark": "Primary (dark mode)",
+      "accent": "Accent (light mode)",
+      "accentDark": "Accent (dark mode)",
+      "copy": "Homepage texts",
+      "heroTitleFa": "Hero title (Persian)",
+      "heroTitleEn": "Hero title (English)",
+      "heroSubtitleFa": "Hero subtitle (Persian)",
+      "heroSubtitleEn": "Hero subtitle (English)",
+      "announcementFa": "Announcement bar (Persian)",
+      "announcementEn": "Announcement bar (English)",
+      "footerAboutFa": "Footer about (Persian)",
+      "footerAboutEn": "Footer about (English)",
+      "contact": "Contact & social",
+      "contactEmail": "Email",
+      "contactPhone": "Phone",
+      "contactTelegram": "Telegram (@handle or URL)",
+      "contactInstagram": "Instagram (@handle or URL)",
+      "enamad": "Enamad trust badge",
+      "enamadHint": "Upload the badge image from your Enamad panel and paste your trustseal link — it appears in the site footer.",
+      "enamadLink": "Badge link (https://trustseal.enamad.ir/…)",
+      "enamadUpload": "Upload badge image",
+      "enamadReplace": "Replace badge image",
+      "enamadRemove": "Remove badge",
+      "enamadNone": "No badge uploaded yet.",
+      "save": "Save changes",
+      "saved": "Saved — the site is updated."
+    },
     "apiKeys": {
       "title": "API keys",
       "intro": "Give a key to your AI assistant or scripts to manage the store programmatically. The key has full admin access. It is shown only once.",
@@ -381,6 +423,12 @@
   },
   "footer": {
     "tagline": "Instant digital goods delivery",
-    "rights": "All rights reserved."
+    "rights": "All rights reserved.",
+    "aboutTitle": "About oostaAI",
+    "aboutDefault": "oostaAI sells AI accounts, software licenses and gift cards with fully automatic delivery — your purchase is in your dashboard seconds after payment.",
+    "shopTitle": "Shop",
+    "supportTitle": "Customer care",
+    "contactTitle": "Contact",
+    "trustTitle": "Trust seal"
   }
 }

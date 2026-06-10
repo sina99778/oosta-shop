@@ -73,23 +73,40 @@ export function ProductCard({
         )}
 
         {product.priceFrom !== null && (
-          <div className="mt-auto pt-4">
-            {product.lowStock && (
-              <p className="mb-1 text-xs text-danger">
-                {product.availableStock} {labels.left}
+          <div className="mt-auto flex items-end justify-between gap-2 pt-4">
+            <div>
+              {product.lowStock && (
+                <p className="mb-1 text-xs text-danger">
+                  {product.availableStock} {labels.left}
+                </p>
+              )}
+              <p className="text-xs text-muted">
+                {labels.from}{" "}
+                {product.originalPriceFrom !== null && (
+                  <span className="line-through">
+                    {formatPrice(product.originalPriceFrom, product.currency, locale)}
+                  </span>
+                )}
               </p>
-            )}
-            <p className="text-sm text-muted">
-              {labels.from}{" "}
-              {product.originalPriceFrom !== null && (
-                <span className="text-muted line-through">
-                  {formatPrice(product.originalPriceFrom, product.currency, locale)}
-                </span>
-              )}{" "}
-              <span className="font-semibold text-foreground">
+              <p className="text-base font-bold text-foreground">
                 {formatPrice(product.priceFrom, product.currency, locale)}
-              </span>
-            </p>
+              </p>
+            </div>
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-border text-muted transition-all group-hover:border-transparent group-hover:bg-brand-gradient group-hover:text-white">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="rtl:-scale-x-100"
+              >
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </span>
           </div>
         )}
       </Card>

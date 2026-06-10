@@ -16,6 +16,7 @@ import { paymentsRouter } from "./modules/payments/payments.routes";
 import { ticketsRouter } from "./modules/tickets/tickets.routes";
 import { blogRouter, blogAdminRouter } from "./modules/blog/blog.routes";
 import { pagesRouter, pagesAdminRouter } from "./modules/pages/pages.routes";
+import { analyticsRouter } from "./modules/analytics/analytics.routes";
 import { settingsRouter, settingsAdminRouter } from "./modules/settings/settings.routes";
 import { adminRouter } from "./modules/admin/admin.routes";
 
@@ -47,6 +48,7 @@ export function createApp() {
   app.use(blogRouter); // public blog
   app.use(pagesRouter); // public CMS pages
   app.use(settingsRouter); // public site settings (theme/hero overrides)
+  app.use(analyticsRouter); // public page-view beacon
   app.use("/admin/blog", blogAdminRouter); // before /admin so it matches first
   app.use("/admin/pages", pagesAdminRouter);
   app.use("/admin/settings", settingsAdminRouter);

@@ -261,6 +261,30 @@ model SiteSetting {
   @@map("site_settings")
 }
 
+// One storefront page view (first-party analytics; no cookies). visitorHash is
+// sha256(ip|user-agent|utc-day), so uniques are per-day and IPs are never stored.
+model Visit {
+  id          String   @id @default(cuid())
+  path        String
+  country     String   @default("??") // ISO 3166-1 alpha-2 from the CDN header
+  visitorHash String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([country, createdAt])
+  @@map("visits")
+}
+
+// Small named binary assets (e.g. the Enamad e-trust badge image in the footer).
+model SiteAsset {
+  key       String   @id
+  imageData Bytes
+  mimeType  String
+  updatedAt DateTime @updatedAt
+
+  @@map("site_assets")
+}
+
 // Uploaded media (images) referenced by URL inside blog post Markdown.
 model BlogMedia {
   id        String   @id @default(cuid())

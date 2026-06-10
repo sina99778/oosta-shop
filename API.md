@@ -160,7 +160,16 @@ Keys (all optional): `themePrimary`, `themePrimaryDark`, `themeAccent`,
 `themeAccentDark` (hex like `#0ea5e9` — buttons/links/gradients; `*Dark` falls
 back to the light value), `heroTitleEn`, `heroTitleFa`, `heroSubtitleEn`,
 `heroSubtitleFa` (home hero copy), `announcementEn`, `announcementFa`
-(announcement bar above the header). Public read: `GET /site-settings`.
+(announcement bar above the header), `footerAboutEn`, `footerAboutFa` (footer
+about text), `contactEmail`, `contactPhone`, `contactTelegram`,
+`contactInstagram` (footer contact column), `enamadLink` (URL the Enamad badge
+links to). Public read: `GET /site-settings` (also returns `enamadBadge: bool`).
+
+Enamad trust badge image (shown in the footer):
+
+- `POST /admin/settings/enamad` — multipart field `image`
+- `DELETE /admin/settings/enamad`
+- Public: `GET /site-assets/enamad`
 
 ```json
 { "themePrimary": "#7c3aed", "heroTitleFa": "اکانت‌های هوش مصنوعی، تحویل آنی" }

@@ -113,6 +113,7 @@ export const ticketsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(50),
 });
+export const reviewStatusSchema = z.object({ status: z.enum(["APPROVED", "REJECTED"]) });
 export const ticketReplySchema = z.object({ body: z.string().trim().min(1).max(5000) });
 export const ticketStatusSchema = z.object({ status: z.enum(["OPEN", "ANSWERED", "CLOSED"]) });
 

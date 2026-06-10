@@ -13,6 +13,7 @@ import { prisma } from "./lib/prisma";
 import { createBackup, restoreFromFile } from "./lib/backup";
 import { isAgentEnabled, runAgent } from "./lib/agent";
 import { isOpenRouterEnabled } from "./lib/openrouter";
+import { getVisitStats } from "./modules/analytics/analytics.service";
 import {
   IMAGE_MODELS,
   TEXT_MODELS,
@@ -44,8 +45,49 @@ function mainMenu() {
       Markup.button.callback("💾 Backup now", "backup"),
       Markup.button.callback("♻️ Restore", "restore"),
     ],
-    [Markup.button.callback("🧠 مدل‌ها", "models")],
+    [
+      Markup.button.callback("🧠 مدل‌ها", "models"),
+      Markup.button.callback("📈 بازدیدها", "visits"),
+    ],
   ]);
+}
+
+// "IR" -> 🇮🇷 (regional-indicator pair); unknown country -> 🌐.
+function countryFlag(cc: string): string {
+  if (!/^[A-Z]{2}$/.test(cc)) return "🌐";
+  return String.fromCodePoint(...[...cc].map((c) => 127397 + c.charCodeAt(0)));
+}
+
+async function visitsMessage(): Promise<string> {
+  const s = await getVisitStats();
+  const range = (label: string, r: { views: number; visitors: number }) =>
+    `${label}: ${r.views} بازدید · ${r.visitors} بازدیدکننده`;
+  const lines = [
+    "📈 آمار بازدید سایت",
+    "",
+    range("امروز", s.today),
+    range("۷ روز اخیر", s.week),
+    range("۳۰ روز اخیر", s.month),
+  ];
+  if (s.daily.length > 0) {
+    lines.push("", "📅 روز به روز (هفته‌ی اخیر):");
+    for (const d of s.daily) lines.push(`  ${d.day} — ${d.views} بازدید · ${d.visitors} نفر`);
+  }
+  if (s.countriesMonth.length > 0) {
+    lines.push("", "🌍 کشورها (۳۰ روز اخیر):");
+    for (const c of s.countriesMonth) {
+      lines.push(
+        `  ${countryFlag(c.country)} ${c.country === "??" ? "نامشخص" : c.country} — ${c.views}`,
+      );
+    }
+  }
+  if (s.month.views === 0) {
+    lines.push(
+      "",
+      "هنوز بازدیدی ثبت نشده. ردیابی از همین نسخه فعال شد — بعد از deploy آمار جمع می‌شود.",
+    );
+  }
+  return lines.join("\n");
 }
 
 // One row per model; the active one is marked. callback data carries the index
@@ -229,6 +271,15 @@ export function startBot(): void {
       "♻️ To restore, send me a backup file (.sql or .sql.gz) with the caption: restore",
       mainMenu(),
     );
+  });
+
+  bot.action("visits", async (ctx) => {
+    await ctx.answerCbQuery("Loading…");
+    try {
+      await ctx.reply(await visitsMessage(), mainMenu());
+    } catch (error) {
+      await ctx.reply(`❌ ${error instanceof Error ? error.message : String(error)}`, mainMenu());
+    }
   });
 
   // Runtime model selection (persisted in the DB; env stays the default).

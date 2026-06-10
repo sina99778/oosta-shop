@@ -15,9 +15,19 @@ import {
   createCategorySchema,
   createPlanSchema,
   createProductSchema,
+  inventoryQuerySchema,
+  ordersQuerySchema,
+  reviewStatusSchema,
+  reviewsQuerySchema,
+  ticketReplySchema,
+  ticketStatusSchema,
+  ticketsQuerySchema,
+  updateCategorySchema,
   updatePlanSchema,
   updateProductSchema,
 } from "../modules/admin/admin.schemas";
+import { getVisitStats } from "../modules/analytics/analytics.service";
+import { prisma } from "./prisma";
 import { createPostSchema, updatePostSchema } from "../modules/blog/blog.schemas";
 import { createPageSchema, updatePageSchema } from "../modules/pages/pages.schemas";
 import { settingsPatchSchema } from "../modules/settings/settings.schemas";
@@ -364,7 +374,7 @@ const TOOLS: Tool[] = [
   {
     name: "update_site_settings",
     description:
-      'Restyle the storefront without a redeploy. Keys: themePrimary / themePrimaryDark / themeAccent / themeAccentDark (hex like #0ea5e9 — buttons, links, gradients; Dark variants fall back to the light value), heroTitleEn / heroTitleFa / heroSubtitleEn / heroSubtitleFa (home hero copy per language), announcementEn / announcementFa (announcement bar above the header). Set a key to an empty string "" (or null) to revert it to the default.',
+      'Restyle and re-copy the storefront without a redeploy. Keys: themePrimary / themePrimaryDark / themeAccent / themeAccentDark (hex like #0ea5e9 — buttons, links, gradients; Dark variants fall back to the light value), heroTitleEn / heroTitleFa / heroSubtitleEn / heroSubtitleFa (home hero copy), announcementEn / announcementFa (bar above the header), footerAboutEn / footerAboutFa (footer about text), contactEmail / contactPhone / contactTelegram / contactInstagram (footer contact column), enamadLink (URL the Enamad trust badge links to). Set a key to an empty string "" (or null) to revert it to the default.',
     parameters: obj({
       themePrimary: str("hex color"),
       themePrimaryDark: str("hex color"),
@@ -376,6 +386,13 @@ const TOOLS: Tool[] = [
       heroSubtitleFa: str(),
       announcementEn: str(),
       announcementFa: str(),
+      footerAboutEn: str(),
+      footerAboutFa: str(),
+      contactEmail: str(),
+      contactPhone: str(),
+      contactTelegram: str("@handle or URL"),
+      contactInstagram: str("@handle or URL"),
+      enamadLink: str("https://trustseal.enamad.ir/?id=…"),
     }),
     run: (a) => settingsSvc.patchSettings(settingsPatchSchema.parse(a)),
   },
@@ -389,6 +406,118 @@ const TOOLS: Tool[] = [
       if (ids.length === 0) throw new Error("productIds must not be empty.");
       return adminSvc.reorderProducts(ids);
     },
+  },
+  {
+    name: "update_category",
+    description: "Rename a category or change its slug.",
+    parameters: obj({ id: str(), name: str(), slug: str() }, ["id"]),
+    run: (a) => {
+      const { id, ...rest } = a;
+      return adminSvc.updateCategory(String(id), updateCategorySchema.parse(rest));
+    },
+  },
+  {
+    name: "delete_category",
+    description: "Delete a category by id (fails if products still use it).",
+    parameters: obj({ id: str() }, ["id"]),
+    run: (a) => adminSvc.deleteCategory(String(a.id)),
+  },
+  {
+    name: "delete_product",
+    description:
+      "Delete a product by id. Refused if it has orders — set isActive=false via update_product instead.",
+    parameters: obj({ id: str() }, ["id"]),
+    run: (a) => adminSvc.deleteProduct(String(a.id)),
+  },
+  {
+    name: "delete_plan",
+    description: "Delete a plan by id.",
+    parameters: obj({ id: str() }, ["id"]),
+    run: (a) => adminSvc.deletePlan(String(a.id)),
+  },
+  {
+    name: "list_inventory",
+    description: "List deliverable stock, filterable by productId/planId/status.",
+    parameters: obj({
+      productId: str(),
+      planId: str(),
+      status: { type: "string", enum: ["AVAILABLE", "RESERVED", "SOLD"] },
+    }),
+    run: (a) => adminSvc.listInventory(inventoryQuerySchema.parse(a)),
+  },
+  {
+    name: "list_orders",
+    description: "List recent orders, optionally filtered by payment status.",
+    parameters: obj({
+      status: {
+        type: "string",
+        enum: ["PENDING", "PENDING_REVIEW", "PAID", "FAILED", "REJECTED", "REFUNDED", "EXPIRED"],
+      },
+    }),
+    run: (a) => adminSvc.listOrders(ordersQuerySchema.parse(a)),
+  },
+  {
+    name: "get_order",
+    description: "Get one order by id (buyer, items, payment, delivered credentials).",
+    parameters: obj({ id: str() }, ["id"]),
+    run: (a) => adminSvc.getOrder(String(a.id)),
+  },
+  {
+    name: "list_reviews",
+    description: "List customer reviews (status PENDING needs moderation).",
+    parameters: obj({ status: { type: "string", enum: ["PENDING", "APPROVED", "REJECTED"] } }),
+    run: (a) => adminSvc.listReviews(reviewsQuerySchema.parse(a)),
+  },
+  {
+    name: "set_review_status",
+    description: "Approve or reject a customer review.",
+    parameters: obj({ id: str(), status: { type: "string", enum: ["APPROVED", "REJECTED"] } }, [
+      "id",
+      "status",
+    ]),
+    run: (a) => adminSvc.setReviewStatus(String(a.id), reviewStatusSchema.parse(a).status),
+  },
+  {
+    name: "list_tickets",
+    description: "List support tickets (status OPEN needs a reply).",
+    parameters: obj({ status: { type: "string", enum: ["OPEN", "ANSWERED", "CLOSED"] } }),
+    run: (a) => adminSvc.listTickets(ticketsQuerySchema.parse(a)),
+  },
+  {
+    name: "get_ticket",
+    description: "Get a ticket with its full message thread.",
+    parameters: obj({ id: str() }, ["id"]),
+    run: (a) => adminSvc.getTicket(String(a.id)),
+  },
+  {
+    name: "reply_ticket",
+    description:
+      "Reply to a support ticket as the store (marks it ANSWERED). Write the reply in the customer's language, politely.",
+    parameters: obj({ id: str(), body: str("the reply text") }, ["id", "body"]),
+    run: async (a) => {
+      const admin = await prisma.user.findFirst({
+        where: { role: "ADMIN" },
+        select: { id: true },
+      });
+      if (!admin) throw new Error("No admin user exists to reply as.");
+      return adminSvc.replyTicket(String(a.id), admin.id, ticketReplySchema.parse(a));
+    },
+  },
+  {
+    name: "set_ticket_status",
+    description: "Change a ticket's status (OPEN / ANSWERED / CLOSED).",
+    parameters: obj(
+      { id: str(), status: { type: "string", enum: ["OPEN", "ANSWERED", "CLOSED"] } },
+      ["id", "status"],
+    ),
+    run: (a) => adminSvc.setTicketStatus(String(a.id), ticketStatusSchema.parse(a)),
+  },
+  {
+    name: "get_visit_stats",
+    description:
+      "Site traffic: today / last 7 days / last 30 days page views + unique visitors, daily series, and a per-country breakdown.",
+    parameters: obj({}),
+    run: () => getVisitStats(),
   },
 ];
 
@@ -404,8 +533,10 @@ Rules:
 - When a photo is attached (see [context]): use set_product_image (or add_product_gallery_image) for a product, or set_blog_cover for a blog post. To place a photo INSIDE blog text, call upload_blog_image to get a URL and then update_blog_post with the content containing ![alt](url). If the user doesn't say which item, use the most recent product/post id from [context].
 - When the user wants an image but NO photo is attached, call generate_image with a detailed ENGLISH prompt (subject, style, background, lighting), then place the result exactly like an attached photo. For product shots prefer clean e-commerce hero style.
 - Standalone pages (about, terms, FAQ, guides): create_page / update_page. They appear at /<locale>/p/<slug>.
-- Site look & feel: update_site_settings changes theme colors (hex) and the home hero/announcement copy live, per language (En/Fa keys). Read get_site_settings first when modifying.
+- Site look & feel: update_site_settings changes theme colors (hex), home hero/announcement copy, footer about text and contact info live, per language (En/Fa keys). Read get_site_settings first when modifying.
 - Product display order: update_product sortOrder (higher = earlier) or reorder_products with the full desired order.
+- Store operations: orders (list_orders/get_order), stock (list_inventory/add_inventory), reviews moderation (list_reviews/set_review_status), support tickets (list_tickets/get_ticket/reply_ticket — reply politely in the customer's language), and traffic (get_visit_stats).
+- Destructive tools (delete_product, delete_category, delete_plan, delete_page): only when the user explicitly asks to delete; otherwise prefer deactivating.
 - If a tool returns an error, read it, fix the arguments, and try again.
 - When finished, reply with a SHORT summary in Persian of exactly what you did (names, ids, links). Keep it concise.`;
 

@@ -20,28 +20,30 @@ export function AdminNav({
     tickets: string;
     blog: string;
     api: string;
+    settings: string;
   };
 }) {
   const pathname = usePathname();
   const base = `/${locale}/admin`;
-  const dashHref = `${base}/dashboard`;
-  const ordersHref = `${base}/orders`;
-  const receiptsHref = `${base}/receipts`;
-  const reviewsHref = `${base}/reviews`;
-  const ticketsHref = `${base}/tickets`;
-  const blogHref = `${base}/blog`;
-  const apiHref = `${base}/api-keys`;
-  const onDash = pathname.startsWith(dashHref);
-  const onOrders = pathname.startsWith(ordersHref);
-  const onReceipts = pathname.startsWith(receiptsHref);
-  const onReviews = pathname.startsWith(reviewsHref);
-  const onTickets = pathname.startsWith(ticketsHref);
-  const onBlog = pathname.startsWith(blogHref);
-  const onApi = pathname.startsWith(apiHref);
+
+  const tabs = [
+    { href: `${base}/dashboard`, label: labels.dashboard },
+    { href: base, label: labels.products, exactish: true },
+    { href: `${base}/orders`, label: labels.orders },
+    { href: `${base}/receipts`, label: labels.receipts },
+    { href: `${base}/reviews`, label: labels.reviews },
+    { href: `${base}/tickets`, label: labels.tickets },
+    { href: `${base}/blog`, label: labels.blog },
+    { href: `${base}/api-keys`, label: labels.api },
+    { href: `${base}/settings`, label: labels.settings },
+  ];
+
+  // "Products" is the catch-all tab: active only when no other tab matches.
+  const otherActive = tabs.some((t) => !t.exactish && pathname.startsWith(t.href));
 
   const tab = (active: boolean) =>
     cn(
-      "border-b-2 px-4 py-3 text-sm transition-colors",
+      "whitespace-nowrap border-b-2 px-4 py-3 text-sm transition-colors",
       active
         ? "border-primary text-foreground"
         : "border-transparent text-muted hover:text-foreground",
@@ -49,36 +51,16 @@ export function AdminNav({
 
   return (
     <div className="border-b border-border">
-      <Container className="flex gap-1">
-        <Link href={dashHref} className={tab(onDash)}>
-          {labels.dashboard}
-        </Link>
-        <Link
-          href={base}
-          className={tab(
-            !onDash && !onOrders && !onReceipts && !onReviews && !onTickets && !onBlog && !onApi,
-          )}
-        >
-          {labels.products}
-        </Link>
-        <Link href={ordersHref} className={tab(onOrders)}>
-          {labels.orders}
-        </Link>
-        <Link href={receiptsHref} className={tab(onReceipts)}>
-          {labels.receipts}
-        </Link>
-        <Link href={reviewsHref} className={tab(onReviews)}>
-          {labels.reviews}
-        </Link>
-        <Link href={ticketsHref} className={tab(onTickets)}>
-          {labels.tickets}
-        </Link>
-        <Link href={blogHref} className={tab(onBlog)}>
-          {labels.blog}
-        </Link>
-        <Link href={apiHref} className={tab(onApi)}>
-          {labels.api}
-        </Link>
+      <Container className="flex gap-1 overflow-x-auto">
+        {tabs.map((t) => (
+          <Link
+            key={t.href}
+            href={t.href}
+            className={tab(t.exactish ? !otherActive : pathname.startsWith(t.href))}
+          >
+            {t.label}
+          </Link>
+        ))}
       </Container>
     </div>
   );

@@ -5,10 +5,11 @@ import { Geist, Geist_Mono, Vazirmatn } from "next/font/google";
 import { notFound } from "next/navigation";
 import { getDictionary } from "./dictionaries";
 import { dirFor, isLocale, locales } from "@/lib/i18n";
-import { getSiteSettings, localizedSetting, themeCss } from "@/lib/settings";
+import { getSiteConfig, localizedSetting, themeCss } from "@/lib/settings";
 import { Providers } from "@/components/providers";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
+import { Track } from "@/components/track";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -37,9 +38,9 @@ export default async function LocaleLayout({
   const fontClass = locale === "fa" ? "font-fa" : "font-sans";
 
   // Runtime overrides set by the admin / AI agent (theme colors + announcement).
-  const settings = await getSiteSettings();
-  const themeOverrides = themeCss(settings);
-  const announcement = localizedSetting(settings, "announcement", locale);
+  const config = await getSiteConfig();
+  const themeOverrides = themeCss(config.settings);
+  const announcement = localizedSetting(config.settings, "announcement", locale);
 
   return (
     <html
@@ -56,6 +57,7 @@ export default async function LocaleLayout({
         />
         {themeOverrides ? <style dangerouslySetInnerHTML={{ __html: themeOverrides }} /> : null}
         <Providers>
+          <Track />
           {announcement ? (
             <div className="bg-brand-gradient px-4 py-2 text-center text-sm font-medium text-white">
               {announcement}
@@ -63,7 +65,7 @@ export default async function LocaleLayout({
           ) : null}
           <Header locale={locale} dict={dict.nav} themeLabel={dict.common.toggleTheme} />
           <main className="flex-1">{children}</main>
-          <Footer locale={locale} dict={dict.footer} nav={dict.nav} />
+          <Footer locale={locale} dict={dict.footer} nav={dict.nav} config={config} />
         </Providers>
       </body>
     </html>

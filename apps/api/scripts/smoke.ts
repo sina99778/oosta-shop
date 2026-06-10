@@ -1129,6 +1129,106 @@ async function testPagesAndSettings(): Promise<void> {
     "",
   );
 
+  // ---- Visit tracking ----
+  const before = await prisma.visit.count();
+  const track = await inject(app, {
+    method: "POST",
+    url: "/track",
+    headers: {
+      "content-type": "application/json",
+      "x-country-code": "ir",
+      "user-agent": "Mozilla/5.0 (smoke test)",
+      "ar-real-ip": "5.5.5.5",
+    },
+    payload: JSON.stringify({ path: `/fa/products?x=1#y` }),
+    remoteAddress: ip,
+  });
+  const visits = await prisma.visit.findMany({ orderBy: { createdAt: "desc" }, take: 1 });
+  record(
+    "track -> 204, country+clean path stored",
+    track.statusCode === 204 &&
+      (await prisma.visit.count()) === before + 1 &&
+      visits[0]?.country === "IR" &&
+      visits[0]?.path === "/fa/products",
+    `status=${track.statusCode} country=${visits[0]?.country} path=${visits[0]?.path}`,
+  );
+  const trackBot = await inject(app, {
+    method: "POST",
+    url: "/track",
+    headers: { "content-type": "application/json", "user-agent": "Googlebot/2.1" },
+    payload: JSON.stringify({ path: "/fa" }),
+    remoteAddress: ip,
+  });
+  record(
+    "track ignores bots",
+    trackBot.statusCode === 204 && (await prisma.visit.count()) === before + 1,
+    "",
+  );
+  await prisma.visit.deleteMany({ where: { id: visits[0]?.id ?? "" } });
+
+  // ---- Enamad badge upload / serve / delete ----
+  const eBoundary = "----enamad" + suffix;
+  const CRLF2 = "\r\n";
+  const eBytes = Buffer.from("FAKE-ENAMAD-PNG");
+  const ePayload = Buffer.concat([
+    Buffer.from(
+      `--${eBoundary}${CRLF2}Content-Disposition: form-data; name="image"; filename="e.png"${CRLF2}Content-Type: image/png${CRLF2}${CRLF2}`,
+      "utf8",
+    ),
+    eBytes,
+    Buffer.from(`${CRLF2}--${eBoundary}--${CRLF2}`, "utf8"),
+  ]);
+  const eUp = await inject(app, {
+    method: "POST",
+    url: "/admin/settings/enamad",
+    headers: {
+      authorization: `Bearer ${adminToken}`,
+      "content-type": `multipart/form-data; boundary=${eBoundary}`,
+    },
+    payload: ePayload,
+    remoteAddress: ip,
+  });
+  const eServe = await get("/site-assets/enamad");
+  const eFlag = body(await get("/site-settings")).enamadBadge;
+  record(
+    "enamad upload -> served publicly + flag true",
+    eUp.statusCode === 200 &&
+      eServe.statusCode === 200 &&
+      Buffer.from(eServe.rawPayload).equals(eBytes) &&
+      eFlag === true,
+    `up=${eUp.statusCode} serve=${eServe.statusCode}`,
+  );
+  const eDel = await inject(app, {
+    method: "DELETE",
+    url: "/admin/settings/enamad",
+    headers: { authorization: `Bearer ${adminToken}` },
+    remoteAddress: ip,
+  });
+  record(
+    "enamad delete -> 404 after",
+    eDel.statusCode === 200 && (await get("/site-assets/enamad")).statusCode === 404,
+    "",
+  );
+
+  // New settings keys validate.
+  record(
+    "enamadLink must be a URL -> 400",
+    (await patch("/admin/settings", { enamadLink: "not-a-url" }, adminToken)).statusCode === 400,
+    "",
+  );
+  const eLink = await patch(
+    "/admin/settings",
+    { enamadLink: "https://trustseal.enamad.ir/?id=123", contactEmail: "info@oostaai.store" },
+    adminToken,
+  );
+  record(
+    "contact/enamad settings stored",
+    eLink.statusCode === 200 &&
+      obj(body(eLink).settings).enamadLink === "https://trustseal.enamad.ir/?id=123",
+    `status=${eLink.statusCode}`,
+  );
+  await patch("/admin/settings", { enamadLink: null, contactEmail: null }, adminToken);
+
   // Internal prefs stored in the same table (agent.* model choices) must never
   // leak through the public settings endpoint.
   await prisma.siteSetting.upsert({

@@ -15,11 +15,24 @@ export type SiteSettings = Partial<{
   heroSubtitleFa: string;
   announcementEn: string;
   announcementFa: string;
+  footerAboutEn: string;
+  footerAboutFa: string;
+  contactEmail: string;
+  contactPhone: string;
+  contactTelegram: string;
+  contactInstagram: string;
+  enamadLink: string;
 }>;
 
+export type SiteConfig = { settings: SiteSettings; enamadBadge: boolean };
+
+export async function getSiteConfig(): Promise<SiteConfig> {
+  const data = await fetchJson<SiteConfig>("/site-settings");
+  return { settings: data?.settings ?? {}, enamadBadge: data?.enamadBadge ?? false };
+}
+
 export async function getSiteSettings(): Promise<SiteSettings> {
-  const data = await fetchJson<{ settings: SiteSettings }>("/site-settings");
-  return data?.settings ?? {};
+  return (await getSiteConfig()).settings;
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -60,7 +73,7 @@ export function themeCss(s: SiteSettings): string {
 // Locale-aware text override; falls back to the other language when one is missing.
 export function localizedSetting(
   s: SiteSettings,
-  key: "heroTitle" | "heroSubtitle" | "announcement",
+  key: "heroTitle" | "heroSubtitle" | "announcement" | "footerAbout",
   locale: string,
 ): string | null {
   const fa = s[`${key}Fa`];

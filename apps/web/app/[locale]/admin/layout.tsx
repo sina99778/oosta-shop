@@ -29,6 +29,7 @@ export default async function AdminLayout({
           tickets: dict.admin.ticketsTab,
           blog: dict.admin.blogTab,
           api: dict.admin.apiTab,
+          settings: dict.admin.settingsTab,
         }}
       />
       {children}
