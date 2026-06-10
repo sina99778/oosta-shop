@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDictionary } from "./dictionaries";
 import { isLocale } from "@/lib/i18n";
+import { getSiteSettings, localizedSetting } from "@/lib/settings";
 import { Container } from "@/components/ui/container";
 import { HomeSections } from "@/components/home-sections";
 
@@ -29,6 +30,11 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
   const dict = await getDictionary(locale);
   const trust = [dict.home.trust1, dict.home.trust2, dict.home.trust3];
 
+  // Hero copy can be overridden live from the admin / AI agent.
+  const settings = await getSiteSettings();
+  const heroTitle = localizedSetting(settings, "heroTitle", locale) ?? dict.home.heroTitle;
+  const heroSubtitle = localizedSetting(settings, "heroSubtitle", locale) ?? dict.home.heroSubtitle;
+
   return (
     <>
       <section className="relative overflow-hidden border-b border-border animate-fade-in">
@@ -40,9 +46,9 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
             {dict.home.heroBadge}
           </span>
           <h1 className="mx-auto mt-6 max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
-            {dict.home.heroTitle}
+            {heroTitle}
           </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg text-muted">{dict.home.heroSubtitle}</p>
+          <p className="mx-auto mt-5 max-w-2xl text-lg text-muted">{heroSubtitle}</p>
           <div className="mt-8 flex justify-center">
             <Link
               href={`/${locale}/products`}

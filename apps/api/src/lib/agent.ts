@@ -1,11 +1,15 @@
 // AI agent for the Telegram admin bot. The admin sends a natural-language command;
-// Gemini (function calling) plans and calls the tools below, which run the real
-// admin/blog services in-process. Returns a short Persian summary when done.
+// the LLM (function calling) plans and calls the tools below, which run the real
+// admin/blog/pages/settings services in-process. OpenRouter is the preferred
+// provider when OPENROUTER_API_KEY is set (any frontier model + image generation);
+// Gemini is used otherwise. Returns a short Persian summary when done.
 
 import { env } from "../config/env";
 import { ZodError } from "zod";
 import * as adminSvc from "../modules/admin/admin.service";
 import * as blogSvc from "../modules/blog/blog.service";
+import * as pagesSvc from "../modules/pages/pages.service";
+import * as settingsSvc from "../modules/settings/settings.service";
 import {
   bulkInventorySchema,
   createCategorySchema,
@@ -15,6 +19,15 @@ import {
   updateProductSchema,
 } from "../modules/admin/admin.schemas";
 import { createPostSchema, updatePostSchema } from "../modules/blog/blog.schemas";
+import { createPageSchema, updatePageSchema } from "../modules/pages/pages.schemas";
+import { settingsPatchSchema } from "../modules/settings/settings.schemas";
+import {
+  chatWithTools,
+  generateImage,
+  isOpenRouterEnabled,
+  type OrMessage,
+  type OrToolDef,
+} from "./openrouter";
 
 export type PendingImage = { buffer: Buffer; mimeType: string };
 type ToolCtx = { image?: PendingImage };
@@ -30,6 +43,7 @@ type Tool = {
 // Remembered across calls so a follow-up photo can target the last item.
 let lastProductId: string | null = null;
 let lastPostId: string | null = null;
+let lastPageId: string | null = null;
 
 const apiPublicBase = () => `${env.WEB_BASE_URL.replace(/\/$/, "")}/api`;
 
@@ -104,7 +118,8 @@ const TOOLS: Tool[] = [
   },
   {
     name: "update_product",
-    description: "Update fields of an existing product by id.",
+    description:
+      "Update fields of an existing product by id. sortOrder controls the listing position (higher = earlier).",
     parameters: obj(
       {
         id: str(),
@@ -114,6 +129,7 @@ const TOOLS: Tool[] = [
         shortDescription: str(),
         isFeatured: bool(),
         isActive: bool(),
+        sortOrder: num("higher = shown earlier in listings"),
         metaTitle: str(),
         metaDescription: str(),
       },
@@ -266,6 +282,113 @@ const TOOLS: Tool[] = [
       return { url: `${apiPublicBase()}/blog-media/${m.id}` };
     },
   },
+  {
+    name: "generate_image",
+    description:
+      "Generate an image from a text prompt (product shots, blog covers, illustrations). The result becomes the ATTACHED image — place it afterwards with set_product_image, add_product_gallery_image, set_blog_cover or upload_blog_image. Write the prompt in English and make it detailed (subject, style, background, lighting).",
+    parameters: obj({ prompt: str("detailed English description of the desired image") }, [
+      "prompt",
+    ]),
+    run: async (a, ctx) => {
+      if (!isOpenRouterEnabled()) {
+        throw new Error("Image generation requires OPENROUTER_API_KEY to be set.");
+      }
+      const image = await generateImage(String(a.prompt));
+      ctx.image = { buffer: image.buffer, mimeType: image.mimeType };
+      return {
+        ok: true,
+        note: "Image generated and attached. Now place it with set_product_image / add_product_gallery_image / set_blog_cover / upload_blog_image.",
+      };
+    },
+  },
+  {
+    name: "list_pages",
+    description: "List all standalone CMS pages (served at /<locale>/p/<slug> on the site).",
+    parameters: obj({}),
+    run: () => pagesSvc.listAll(),
+  },
+  {
+    name: "create_page",
+    description:
+      "Create a standalone page (about, terms, FAQ, landing …) served at /<locale>/p/<slug>. content is Markdown (images: ![alt](url), video: !video <url>). status defaults to PUBLISHED.",
+    parameters: obj(
+      {
+        title: str(),
+        slug: str("lowercase ascii, hyphenated"),
+        content: str("Markdown body"),
+        status: { type: "string", enum: ["DRAFT", "PUBLISHED"] },
+      },
+      ["title", "slug", "content"],
+    ),
+    run: async (a) => {
+      const p = await pagesSvc.createPage(createPageSchema.parse(a));
+      lastPageId = p.id;
+      return { ...p, url: `${env.WEB_BASE_URL.replace(/\/$/, "")}/fa/p/${p.slug}` };
+    },
+  },
+  {
+    name: "update_page",
+    description:
+      "Update a page by id (title, slug, content, status). If id is omitted, the most recently created page is used.",
+    parameters: obj(
+      {
+        id: str(),
+        title: str(),
+        slug: str(),
+        content: str(),
+        status: { type: "string", enum: ["DRAFT", "PUBLISHED"] },
+      },
+      [],
+    ),
+    run: (a) => {
+      const { id, ...rest } = a;
+      const target = (id as string) || lastPageId;
+      if (!target) throw new Error("No page id given and no recent page to use.");
+      return pagesSvc.updatePage(String(target), updatePageSchema.parse(rest));
+    },
+  },
+  {
+    name: "delete_page",
+    description: "Delete a page by id.",
+    parameters: obj({ id: str() }, ["id"]),
+    run: (a) => pagesSvc.deletePage(String(a.id)),
+  },
+  {
+    name: "get_site_settings",
+    description:
+      "Read the current site-wide overrides (theme colors, hero text, announcement bar). Missing keys mean the built-in default is in effect.",
+    parameters: obj({}),
+    run: () => settingsSvc.getSettings(),
+  },
+  {
+    name: "update_site_settings",
+    description:
+      'Restyle the storefront without a redeploy. Keys: themePrimary / themePrimaryDark / themeAccent / themeAccentDark (hex like #0ea5e9 — buttons, links, gradients; Dark variants fall back to the light value), heroTitleEn / heroTitleFa / heroSubtitleEn / heroSubtitleFa (home hero copy per language), announcementEn / announcementFa (announcement bar above the header). Set a key to an empty string "" (or null) to revert it to the default.',
+    parameters: obj({
+      themePrimary: str("hex color"),
+      themePrimaryDark: str("hex color"),
+      themeAccent: str("hex color"),
+      themeAccentDark: str("hex color"),
+      heroTitleEn: str(),
+      heroTitleFa: str(),
+      heroSubtitleEn: str(),
+      heroSubtitleFa: str(),
+      announcementEn: str(),
+      announcementFa: str(),
+    }),
+    run: (a) => settingsSvc.patchSettings(settingsPatchSchema.parse(a)),
+  },
+  {
+    name: "reorder_products",
+    description:
+      "Reorder the product listing: pass product ids in the desired display order (first = shown first). Products not listed fall behind these, newest first.",
+    parameters: obj({ productIds: { type: "array", items: str() } }, ["productIds"]),
+    run: async (a) => {
+      const ids = ((a.productIds as unknown[]) ?? []).map(String);
+      if (ids.length === 0) throw new Error("productIds must not be empty.");
+      return adminSvc.reorderProducts(ids);
+    },
+  },
 ];
 
 const SYSTEM = `You are the admin assistant for the "oostaAI" digital-goods store (AI accounts, licenses, gift cards). You manage the store by calling the provided tools.
@@ -278,6 +401,10 @@ Rules:
 - Write all human content (descriptions, blog posts, excerpts) in the SAME language the user used (usually Persian), unless asked otherwise. Make it high quality and SEO-friendly.
 - New blog posts/products can be created as DRAFT unless the user asks to publish.
 - When a photo is attached (see [context]): use set_product_image (or add_product_gallery_image) for a product, or set_blog_cover for a blog post. To place a photo INSIDE blog text, call upload_blog_image to get a URL and then update_blog_post with the content containing ![alt](url). If the user doesn't say which item, use the most recent product/post id from [context].
+- When the user wants an image but NO photo is attached, call generate_image with a detailed ENGLISH prompt (subject, style, background, lighting), then place the result exactly like an attached photo. For product shots prefer clean e-commerce hero style.
+- Standalone pages (about, terms, FAQ, guides): create_page / update_page. They appear at /<locale>/p/<slug>.
+- Site look & feel: update_site_settings changes theme colors (hex) and the home hero/announcement copy live, per language (En/Fa keys). Read get_site_settings first when modifying.
+- Product display order: update_product sortOrder (higher = earlier) or reorder_products with the full desired order.
 - If a tool returns an error, read it, fix the arguments, and try again.
 - When finished, reply with a SHORT summary in Persian of exactly what you did (names, ids, links). Keep it concise.`;
 
@@ -380,24 +507,15 @@ async function runTool(
 }
 
 export function isAgentEnabled(): boolean {
-  return Boolean(env.GEMINI_API_KEY);
+  return Boolean(env.OPENROUTER_API_KEY || env.GEMINI_API_KEY);
 }
 
-// Runs the agent loop for a single instruction. opts.image makes a photo available
-// to the image tools; opts.onStep is called with each tool name (for progress UI).
-export async function runAgent(
-  instruction: string,
-  opts: { image?: PendingImage; onStep?: (note: string) => void } = {},
+// Gemini-native function-calling loop (used when no OpenRouter key is set).
+async function runGeminiLoop(
+  text: string,
+  ctx: ToolCtx,
+  onStep?: (note: string) => void,
 ): Promise<string> {
-  if (!env.GEMINI_API_KEY) return "هوش مصنوعی تنظیم نشده است (GEMINI_API_KEY).";
-
-  const ctx: ToolCtx = { image: opts.image };
-  const notes: string[] = [];
-  if (opts.image) notes.push("A photo is attached to this message.");
-  if (lastProductId) notes.push(`Most recent product id: ${lastProductId}.`);
-  if (lastPostId) notes.push(`Most recent blog post id: ${lastPostId}.`);
-  const text = notes.length ? `${instruction}\n\n[context] ${notes.join(" ")}` : instruction;
-
   const contents: Content[] = [{ role: "user", parts: [{ text }] }];
 
   for (let step = 0; step < MAX_STEPS; step++) {
@@ -420,7 +538,7 @@ export async function runAgent(
 
     const responseParts: Part[] = [];
     for (const call of calls) {
-      opts.onStep?.(call.functionCall.name);
+      onStep?.(call.functionCall.name);
       const response = await runTool(call.functionCall.name, call.functionCall.args ?? {}, ctx);
       responseParts.push({ functionResponse: { name: call.functionCall.name, response } });
     }
@@ -428,4 +546,71 @@ export async function runAgent(
   }
 
   return "به محدودیت تعداد مراحل رسیدم. لطفاً درخواست را ساده‌تر بفرست.";
+}
+
+// OpenRouter (OpenAI-compatible) tool-calling loop — preferred provider.
+async function runOpenRouterLoop(
+  text: string,
+  ctx: ToolCtx,
+  onStep?: (note: string) => void,
+): Promise<string> {
+  const orTools: OrToolDef[] = TOOLS.map((t) => ({
+    type: "function",
+    function: { name: t.name, description: t.description, parameters: t.parameters },
+  }));
+  const messages: OrMessage[] = [
+    { role: "system", content: SYSTEM },
+    { role: "user", content: text },
+  ];
+
+  for (let step = 0; step < MAX_STEPS; step++) {
+    const reply = await chatWithTools(messages, orTools);
+    messages.push({
+      role: "assistant",
+      content: reply.content ?? null,
+      ...(reply.tool_calls?.length ? { tool_calls: reply.tool_calls } : {}),
+    });
+
+    const calls = reply.tool_calls ?? [];
+    if (calls.length === 0) {
+      return (reply.content ?? "").trim() || "انجام شد.";
+    }
+
+    for (const call of calls) {
+      onStep?.(call.function.name);
+      let args: Record<string, unknown> = {};
+      try {
+        args = JSON.parse(call.function.arguments || "{}") as Record<string, unknown>;
+      } catch {
+        // Leave args empty; the tool's validation will surface a useful error.
+      }
+      const response = await runTool(call.function.name, args, ctx);
+      messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(response) });
+    }
+  }
+
+  return "به محدودیت تعداد مراحل رسیدم. لطفاً درخواست را ساده‌تر بفرست.";
+}
+
+// Runs the agent loop for a single instruction. opts.image makes a photo available
+// to the image tools; opts.onStep is called with each tool name (for progress UI).
+export async function runAgent(
+  instruction: string,
+  opts: { image?: PendingImage; onStep?: (note: string) => void } = {},
+): Promise<string> {
+  if (!isAgentEnabled()) {
+    return "هوش مصنوعی تنظیم نشده است (OPENROUTER_API_KEY یا GEMINI_API_KEY).";
+  }
+
+  const ctx: ToolCtx = { image: opts.image };
+  const notes: string[] = [];
+  if (opts.image) notes.push("A photo is attached to this message.");
+  if (lastProductId) notes.push(`Most recent product id: ${lastProductId}.`);
+  if (lastPostId) notes.push(`Most recent blog post id: ${lastPostId}.`);
+  if (lastPageId) notes.push(`Most recent page id: ${lastPageId}.`);
+  const text = notes.length ? `${instruction}\n\n[context] ${notes.join(" ")}` : instruction;
+
+  return isOpenRouterEnabled()
+    ? runOpenRouterLoop(text, ctx, opts.onStep)
+    : runGeminiLoop(text, ctx, opts.onStep);
 }

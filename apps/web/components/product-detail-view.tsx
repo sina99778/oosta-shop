@@ -51,7 +51,9 @@ export function ProductDetailView({
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewMsg, setReviewMsg] = useState<string | null>(null);
 
-  const [reviewsList, setReviewsList] = useState<Array<ProductDetail["reviews"][number] & { isPendingLocal?: boolean }>>([]);
+  const [reviewsList, setReviewsList] = useState<
+    Array<ProductDetail["reviews"][number] & { isPendingLocal?: boolean }>
+  >([]);
 
   useEffect(() => {
     if (data?.product) {
@@ -127,7 +129,7 @@ export function ProductDetailView({
     setReviewMsg(null);
     try {
       await api.post(`/products/${product.id}/reviews`, { rating, comment }, token);
-      
+
       const newReview = {
         id: `pending-${Date.now()}`,
         rating,

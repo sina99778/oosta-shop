@@ -44,6 +44,18 @@ const EnvSchema = z.object({
   // Tried automatically if the primary model is overloaded (503). Empty disables it.
   GEMINI_FALLBACK_MODEL: z.string().default("gemini-2.5-flash"),
 
+  // OpenRouter (openrouter.ai) — preferred LLM provider for the Telegram AI agent
+  // when set (Gemini stays as the fallback provider). One key unlocks every model.
+  OPENROUTER_API_KEY: z.string().optional(),
+  // Best tool-calling + Persian quality per June 2026 evals ($3/$15 per M tokens).
+  // Cheaper: "google/gemini-3.5-flash" ($1.50/$9) or "openai/gpt-5.4-mini" ($0.75/$4.50).
+  OPENROUTER_MODEL: z.string().default("anthropic/claude-sonnet-4.6"),
+  // Tried automatically when the primary model errors/overloads. Empty disables it.
+  OPENROUTER_FALLBACK_MODEL: z.string().default("google/gemini-3.5-flash"),
+  // Image generation for the agent (~$0.04/image, GA "nano banana"). Higher quality:
+  // "google/gemini-3.1-flash-image-preview" (~$0.07) or "google/gemini-3-pro-image-preview".
+  OPENROUTER_IMAGE_MODEL: z.string().default("google/gemini-2.5-flash-image"),
+
   // Telegram admin bot (optional; the bot stays disabled unless both are set).
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_ADMIN_ID: z.preprocess(

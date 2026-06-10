@@ -31,6 +31,8 @@ export const createProductSchema = z.object({
   description: z.string().trim().min(1).max(20000),
   specs: z.array(specRow).max(50).optional(),
   isFeatured: z.boolean().optional(),
+  // Manual listing position: higher pins earlier on /products (0 = natural order).
+  sortOrder: z.coerce.number().int().min(-1000).max(100000).optional(),
   metaTitle: z.string().trim().max(200).nullable().optional(),
   metaDescription: z.string().trim().max(400).nullable().optional(),
   image: z.string().trim().min(1).nullable().optional(),

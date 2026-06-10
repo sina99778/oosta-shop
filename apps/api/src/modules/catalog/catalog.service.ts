@@ -153,7 +153,8 @@ export async function listProducts(query: ListProductsQuery) {
     where,
     include: { category: true, plans: { where: { isActive: true } } },
     omit: omitImageData,
-    orderBy: { createdAt: "desc" },
+    // Manual ordering wins (higher sortOrder pins earlier), newest breaks ties.
+    orderBy: [{ sortOrder: "desc" }, { createdAt: "desc" }],
   });
 
   const ids = products.map((p) => p.id);
@@ -318,7 +319,7 @@ async function getRelated(productId: string, categoryId: string, limit: number) 
     where: { isActive: true, categoryId, id: { not: productId } },
     include: { category: true, plans: { where: { isActive: true } } },
     omit: omitImageData,
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ sortOrder: "desc" }, { createdAt: "desc" }],
     take: limit,
   });
   const ids = products.map((p) => p.id);

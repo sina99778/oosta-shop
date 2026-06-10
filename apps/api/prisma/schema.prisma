@@ -111,6 +111,8 @@ model Product {
   // Structured key/value spec rows, e.g. [{ "label": "Warranty", "value": "30 days" }]
   specs            Json?
   isFeatured       Boolean @default(false)
+  // Manual ordering on listing pages (higher comes first; ties fall back to newest).
+  sortOrder        Int     @default(0)
   // SEO overrides (fall back to name / shortDescription when empty)
   metaTitle        String?
   metaDescription  String?
@@ -232,6 +234,31 @@ model BlogPost {
 
   @@index([status, publishedAt])
   @@map("blog_posts")
+}
+
+// Standalone CMS page (e.g. "about-us", "terms") served at /p/<slug> on the web.
+// Body is Markdown (same renderer as blog posts). Editable by admins and the AI agent.
+model Page {
+  id        String     @id @default(cuid())
+  slug      String     @unique
+  title     String
+  content   String // Markdown
+  status    PostStatus @default(PUBLISHED)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([status])
+  @@map("pages")
+}
+
+// Site-wide key/value settings (theme colors, hero text, announcement bar).
+// Keys are constrained by the Zod schema in settings.schemas.ts — not free-form.
+model SiteSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("site_settings")
 }
 
 // Uploaded media (images) referenced by URL inside blog post Markdown.

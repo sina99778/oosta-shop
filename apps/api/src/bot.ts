@@ -291,7 +291,7 @@ export function startBot(): void {
     if (!isAgentEnabled()) {
       await bot.telegram.sendMessage(
         chatId,
-        "🤖 AI is not configured (set GEMINI_API_KEY).",
+        "🤖 AI is not configured (set OPENROUTER_API_KEY or GEMINI_API_KEY).",
         mainMenu(),
       );
       return;

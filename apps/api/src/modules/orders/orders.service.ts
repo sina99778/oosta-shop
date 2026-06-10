@@ -262,12 +262,12 @@ export async function verifyAndDeliver(authority: string, status: string) {
   } catch (error) {
     if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
       await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "FAILED" } });
-      
+
       // Notify admin about stock exhaustion and manual refund requirement
       void notifyAdmin(
         `⚠️ *کمبود موجودی در حین پرداخت*\n\n` +
-        `سفارش *#${order.id.slice(-8)}* با مبلغ ${Number(order.totalAmount)} ${order.currency} پرداخت شد، اما موجودی محصول به اتمام رسیده بود.\n` +
-        `وضعیت سفارش به FAILED تغییر یافت. لطفا نسبت به بازگردانی وجه کاربر یا شارژ مجدد انبار اقدام نمایید.`
+          `سفارش *#${order.id.slice(-8)}* با مبلغ ${Number(order.totalAmount)} ${order.currency} پرداخت شد، اما موجودی محصول به اتمام رسیده بود.\n` +
+          `وضعیت سفارش به FAILED تغییر یافت. لطفا نسبت به بازگردانی وجه کاربر یا شارژ مجدد انبار اقدام نمایید.`,
       ).catch(() => {});
 
       throw new AppError(

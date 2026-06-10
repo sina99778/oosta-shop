@@ -1049,6 +1049,117 @@ async function testApiKeys(): Promise<void> {
   );
 }
 
+async function testPagesAndSettings(): Promise<void> {
+  ip = "10.10.0.6";
+  const suffix = Math.floor(Math.random() * 1e9)
+    .toString()
+    .padStart(9, "0");
+  const slug = `about-${suffix}`;
+  const adminToken = String(
+    body(await post("/auth/login", { identifier: "admin@oosta.local", password: "Admin@12345" }))
+      .token,
+  );
+
+  // ---- CMS pages ----
+  const create = await post(
+    "/admin/pages",
+    { title: "About us", slug, content: "# Hello\n\nWe sell **digital** goods." },
+    adminToken,
+  );
+  record("create page -> 201", create.statusCode === 201, `status=${create.statusCode}`);
+  const pageId = String(body(create).id);
+
+  const pub = await get(`/pages/${slug}`);
+  record(
+    "public page by slug -> 200 with content",
+    pub.statusCode === 200 && typeof obj(body(pub).page).content === "string",
+    `status=${pub.statusCode}`,
+  );
+
+  const draft = await patch(`/admin/pages/${pageId}`, { status: "DRAFT" }, adminToken);
+  record(
+    "unpublish page -> DRAFT",
+    draft.statusCode === 200 && obj(body(draft).page).status === "DRAFT",
+    `status=${draft.statusCode}`,
+  );
+  record("draft page -> public 404", (await get(`/pages/${slug}`)).statusCode === 404, "");
+  record("admin pages no token -> 401", (await get("/admin/pages")).statusCode === 401, "");
+
+  const delPage = await inject(app, {
+    method: "DELETE",
+    url: `/admin/pages/${pageId}`,
+    headers: { authorization: `Bearer ${adminToken}` },
+    remoteAddress: ip,
+  });
+  record("delete page -> 200", delPage.statusCode === 200, `status=${delPage.statusCode}`);
+
+  // ---- Site settings ----
+  const patched = await patch(
+    "/admin/settings",
+    { themePrimary: "#7c3aed", heroTitleFa: `تست ${suffix}` },
+    adminToken,
+  );
+  record(
+    "patch settings -> stored",
+    patched.statusCode === 200 && obj(body(patched).settings).themePrimary === "#7c3aed",
+    `status=${patched.statusCode}`,
+  );
+  const pubSettings = await get("/site-settings");
+  record(
+    "public settings expose override",
+    pubSettings.statusCode === 200 && obj(body(pubSettings).settings).themePrimary === "#7c3aed",
+    `status=${pubSettings.statusCode}`,
+  );
+  const badColor = await patch("/admin/settings", { themePrimary: "red" }, adminToken);
+  record("invalid hex color -> 400", badColor.statusCode === 400, `status=${badColor.statusCode}`);
+  // Clear via "" (the AI-agent form) and null (the REST form) — both must work.
+  const cleared = await patch(
+    "/admin/settings",
+    { themePrimary: "", heroTitleFa: null },
+    adminToken,
+  );
+  record(
+    "clear settings -> override removed",
+    cleared.statusCode === 200 && obj(body(cleared).settings).themePrimary === undefined,
+    `status=${cleared.statusCode}`,
+  );
+  record(
+    "patch settings no token -> 401",
+    (await patch("/admin/settings", { themePrimary: "#000000" })).statusCode === 401,
+    "",
+  );
+
+  // ---- Product sortOrder pins listing position ----
+  const cats = (await prisma.category.findMany({ take: 1 })) as Array<{ id: string }>;
+  if (cats.length > 0) {
+    const mk = (n: string) =>
+      post(
+        "/admin/products",
+        {
+          name: `Sort ${n} ${suffix}`,
+          slug: `sort-${n}-${suffix}`,
+          description: "Sorting smoke product",
+          type: "ACCOUNT",
+          categoryId: cats[0].id,
+        },
+        adminToken,
+      );
+    const a = String(obj((await mk("a").then(body)).product).id);
+    const b = String(obj((await mk("b").then(body)).product).id);
+    // b was created later (newest-first would rank it before a); pin a above b.
+    await patch(`/admin/products/${a}`, { sortOrder: 10 }, adminToken);
+    const list = body(await get("/products?pageSize=50")).items as Array<{ id: string }>;
+    const posA = list.findIndex((p) => p.id === a);
+    const posB = list.findIndex((p) => p.id === b);
+    record(
+      "sortOrder pins product earlier",
+      posA !== -1 && posB !== -1 && posA < posB,
+      `posA=${posA} posB=${posB}`,
+    );
+    await prisma.product.deleteMany({ where: { id: { in: [a, b] } } });
+  }
+}
+
 async function testTickets(): Promise<void> {
   ip = "10.10.0.7";
   const suffix = Math.floor(Math.random() * 1e9)
@@ -1229,6 +1340,7 @@ async function main(): Promise<void> {
   await testRichness();
   await testApiKeys();
   await testBlog();
+  await testPagesAndSettings();
   await testTickets();
   await testSecurity();
   testRoleGuard();

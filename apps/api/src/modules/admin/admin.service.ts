@@ -97,6 +97,7 @@ export async function listProducts() {
     type: p.type,
     isActive: p.isActive,
     isFeatured: p.isFeatured,
+    sortOrder: p.sortOrder,
     image: p.image,
     hasImage: p.imageMimeType != null,
     category: { id: p.category.id, name: p.category.name, slug: p.category.slug },
@@ -115,6 +116,7 @@ export async function createProduct(input: CreateProductInput) {
       description: input.description,
       specs: (input.specs ?? undefined) as Prisma.InputJsonValue | undefined,
       isFeatured: input.isFeatured ?? false,
+      sortOrder: input.sortOrder ?? 0,
       metaTitle: input.metaTitle ?? null,
       metaDescription: input.metaDescription ?? null,
       image: input.image ?? null,
@@ -149,6 +151,7 @@ export async function getProduct(id: string) {
     description: product.description,
     specs: specsOf(product.specs),
     isFeatured: product.isFeatured,
+    sortOrder: product.sortOrder,
     metaTitle: product.metaTitle,
     metaDescription: product.metaDescription,
     image: product.image,
@@ -180,6 +183,7 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
   if (input.description !== undefined) data.description = input.description;
   if (input.specs !== undefined) data.specs = input.specs as Prisma.InputJsonValue;
   if (input.isFeatured !== undefined) data.isFeatured = input.isFeatured;
+  if (input.sortOrder !== undefined) data.sortOrder = input.sortOrder;
   if (input.metaTitle !== undefined) data.metaTitle = input.metaTitle;
   if (input.metaDescription !== undefined) data.metaDescription = input.metaDescription;
   if (input.image !== undefined) data.image = input.image;
@@ -188,6 +192,26 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
   if (input.categoryId !== undefined) data.category = { connect: { id: input.categoryId } };
   return prisma.product.update({ where: { id }, data });
 }
+// Reorders the public listing: listed ids get sortOrder N..1 (first = top) and
+// every other product resets to 0 (falls behind, newest first) — one transaction,
+// so a bad id or mid-write failure never leaves the listing half-reordered.
+export async function reorderProducts(ids: string[]) {
+  const found = await prisma.product.findMany({
+    where: { id: { in: ids } },
+    select: { id: true },
+  });
+  if (found.length !== ids.length) {
+    throw new AppError(404, "NOT_FOUND", "One or more product ids do not exist");
+  }
+  await prisma.$transaction([
+    prisma.product.updateMany({ where: { id: { notIn: ids } }, data: { sortOrder: 0 } }),
+    ...ids.map((id, i) =>
+      prisma.product.update({ where: { id }, data: { sortOrder: ids.length - i } }),
+    ),
+  ]);
+  return { ok: true, ordered: ids.length };
+}
+
 export async function deleteProduct(id: string) {
   await ensureProduct(id);
   const orderItems = await prisma.orderItem.count({ where: { productId: id } });

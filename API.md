@@ -135,6 +135,46 @@ uploaded image with `![alt](<media url>)` and a video with `!video <url>`
 
 ---
 
+## Pages (standalone CMS pages)
+
+Served publicly at `https://oostaai.store/<locale>/p/<slug>` (e.g. about, terms, FAQ).
+
+| Method | Path               | Body                                          |
+| ------ | ------------------ | --------------------------------------------- |
+| GET    | `/admin/pages`     | list pages                                    |
+| GET    | `/admin/pages/:id` | one page                                      |
+| POST   | `/admin/pages`     | `{ title, slug, content (Markdown), status }` |
+| PATCH  | `/admin/pages/:id` | partial update                                |
+| DELETE | `/admin/pages/:id` | delete                                        |
+
+`status` defaults to `PUBLISHED`. Public reads: `GET /pages` and `GET /pages/:slug`.
+
+---
+
+## Site settings (theme & copy, no redeploy)
+
+- `GET /admin/settings` → current overrides
+- `PATCH /admin/settings` → merge-patch; set a key to `null` (or `""`) to revert to the default
+
+Keys (all optional): `themePrimary`, `themePrimaryDark`, `themeAccent`,
+`themeAccentDark` (hex like `#0ea5e9` — buttons/links/gradients; `*Dark` falls
+back to the light value), `heroTitleEn`, `heroTitleFa`, `heroSubtitleEn`,
+`heroSubtitleFa` (home hero copy), `announcementEn`, `announcementFa`
+(announcement bar above the header). Public read: `GET /site-settings`.
+
+```json
+{ "themePrimary": "#7c3aed", "heroTitleFa": "اکانت‌های هوش مصنوعی، تحویل آنی" }
+```
+
+---
+
+## Product ordering
+
+`PATCH /admin/products/:id` accepts `sortOrder` (int). Higher = shown earlier on
+listing pages; ties fall back to newest-first. Default is `0`.
+
+---
+
 ## Orders, reviews, tickets, stats (read/manage)
 
 - `GET /admin/orders?status=PAID` · `GET /admin/orders/:id`

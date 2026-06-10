@@ -36,5 +36,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
+  const pages = await fetchJson<{ pages: { slug: string }[] }>("/pages");
+  for (const page of pages?.pages ?? []) {
+    for (const locale of locales) {
+      entries.push({
+        url: `${site}/${locale}/p/${page.slug}`,
+        changeFrequency: "monthly",
+        priority: 0.5,
+      });
+    }
+  }
+
   return entries;
 }
