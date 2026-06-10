@@ -3,10 +3,14 @@
 // the admin or the AI agent restyle the storefront without a redeploy.
 
 import { prisma } from "../../lib/prisma";
-import type { SettingsPatch, SiteSettings } from "./settings.schemas";
+import { SETTING_KEYS, type SettingsPatch, type SiteSettings } from "./settings.schemas";
 
 export async function getSettings(): Promise<SiteSettings> {
-  const rows = await prisma.siteSetting.findMany();
+  // Only the public theme/copy keys — the SiteSetting table also stores internal
+  // prefs (e.g. agent.* model choices) that must not leak through /site-settings.
+  const rows = await prisma.siteSetting.findMany({
+    where: { key: { in: [...SETTING_KEYS] } },
+  });
   return Object.fromEntries(rows.map((r) => [r.key, r.value])) as SiteSettings;
 }
 

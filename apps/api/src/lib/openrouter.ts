@@ -108,12 +108,15 @@ async function callWithRetry(
 
 // One turn of the agent loop: returns the assistant message (text and/or tool calls).
 // The full tools array must be passed on EVERY call, including after tool results.
+// `primaryModel` overrides env.OPENROUTER_MODEL (runtime selection from the bot).
 export async function chatWithTools(
   messages: OrMessage[],
   tools: OrToolDef[],
+  primaryModel?: string,
 ): Promise<OrAssistantMessage> {
-  const models = [env.OPENROUTER_MODEL];
-  if (env.OPENROUTER_FALLBACK_MODEL && env.OPENROUTER_FALLBACK_MODEL !== env.OPENROUTER_MODEL) {
+  const primary = primaryModel || env.OPENROUTER_MODEL;
+  const models = [primary];
+  if (env.OPENROUTER_FALLBACK_MODEL && env.OPENROUTER_FALLBACK_MODEL !== primary) {
     models.push(env.OPENROUTER_FALLBACK_MODEL);
   }
   return callWithRetry(models, (model) => ({
@@ -125,11 +128,15 @@ export async function chatWithTools(
   }));
 }
 
-// Text-to-image via the configured image model. Returns raw bytes decoded from
-// the base64 data URL in message.images[0].
-export async function generateImage(prompt: string): Promise<{ buffer: Buffer; mimeType: string }> {
-  const message = await callWithRetry([env.OPENROUTER_IMAGE_MODEL], () => ({
-    model: env.OPENROUTER_IMAGE_MODEL,
+// Text-to-image via the configured image model (overridable at runtime). Returns
+// raw bytes decoded from the base64 data URL in message.images[0].
+export async function generateImage(
+  prompt: string,
+  imageModel?: string,
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  const model = imageModel || env.OPENROUTER_IMAGE_MODEL;
+  const message = await callWithRetry([model], () => ({
+    model,
     messages: [{ role: "user", content: prompt }],
     modalities: ["image", "text"],
     image_config: { aspect_ratio: "1:1" },

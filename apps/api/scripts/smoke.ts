@@ -1129,6 +1129,17 @@ async function testPagesAndSettings(): Promise<void> {
     "",
   );
 
+  // Internal prefs stored in the same table (agent.* model choices) must never
+  // leak through the public settings endpoint.
+  await prisma.siteSetting.upsert({
+    where: { key: "agent.textModel" },
+    create: { key: "agent.textModel", value: "smoke/test-model" },
+    update: { value: "smoke/test-model" },
+  });
+  const leak = body(await get("/site-settings")).settings as Record<string, unknown>;
+  record("agent.* prefs not leaked publicly", leak["agent.textModel"] === undefined, "");
+  await prisma.siteSetting.deleteMany({ where: { key: "agent.textModel" } });
+
   // ---- Product sortOrder pins listing position ----
   const cats = (await prisma.category.findMany({ take: 1 })) as Array<{ id: string }>;
   if (cats.length > 0) {

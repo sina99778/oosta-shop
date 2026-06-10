@@ -28,9 +28,10 @@ import {
   type OrMessage,
   type OrToolDef,
 } from "./openrouter";
+import { getAgentModels, parseModelHints } from "./agentPrefs";
 
 export type PendingImage = { buffer: Buffer; mimeType: string };
-type ToolCtx = { image?: PendingImage };
+type ToolCtx = { image?: PendingImage; imageModel?: string };
 
 type JsonSchema = Record<string, unknown>;
 type Tool = {
@@ -293,7 +294,7 @@ const TOOLS: Tool[] = [
       if (!isOpenRouterEnabled()) {
         throw new Error("Image generation requires OPENROUTER_API_KEY to be set.");
       }
-      const image = await generateImage(String(a.prompt));
+      const image = await generateImage(String(a.prompt), ctx.imageModel);
       ctx.image = { buffer: image.buffer, mimeType: image.mimeType };
       return {
         ok: true,
@@ -552,6 +553,7 @@ async function runGeminiLoop(
 async function runOpenRouterLoop(
   text: string,
   ctx: ToolCtx,
+  textModel: string,
   onStep?: (note: string) => void,
 ): Promise<string> {
   const orTools: OrToolDef[] = TOOLS.map((t) => ({
@@ -564,7 +566,7 @@ async function runOpenRouterLoop(
   ];
 
   for (let step = 0; step < MAX_STEPS; step++) {
-    const reply = await chatWithTools(messages, orTools);
+    const reply = await chatWithTools(messages, orTools, textModel);
     messages.push({
       role: "assistant",
       content: reply.content ?? null,
@@ -610,7 +612,11 @@ export async function runAgent(
   if (lastPageId) notes.push(`Most recent page id: ${lastPageId}.`);
   const text = notes.length ? `${instruction}\n\n[context] ${notes.join(" ")}` : instruction;
 
-  return isOpenRouterEnabled()
-    ? runOpenRouterLoop(text, ctx, opts.onStep)
-    : runGeminiLoop(text, ctx, opts.onStep);
+  if (!isOpenRouterEnabled()) return runGeminiLoop(text, ctx, opts.onStep);
+
+  // Effective models: per-request hint ("با کلود …") -> stored bot choice -> env.
+  const stored = await getAgentModels();
+  const hints = parseModelHints(instruction);
+  ctx.imageModel = hints.image ?? stored.image;
+  return runOpenRouterLoop(text, ctx, hints.text ?? stored.text, opts.onStep);
 }

@@ -12,6 +12,14 @@ import { env } from "./config/env";
 import { prisma } from "./lib/prisma";
 import { createBackup, restoreFromFile } from "./lib/backup";
 import { isAgentEnabled, runAgent } from "./lib/agent";
+import { isOpenRouterEnabled } from "./lib/openrouter";
+import {
+  IMAGE_MODELS,
+  TEXT_MODELS,
+  getAgentModels,
+  setAgentImageModel,
+  setAgentTextModel,
+} from "./lib/agentPrefs";
 import {
   approveReceipt,
   getReceiptImage,
@@ -36,7 +44,22 @@ function mainMenu() {
       Markup.button.callback("💾 Backup now", "backup"),
       Markup.button.callback("♻️ Restore", "restore"),
     ],
+    [Markup.button.callback("🧠 مدل‌ها", "models")],
   ]);
+}
+
+// One row per model; the active one is marked. callback data carries the index
+// (kept short — Telegram caps callback_data at 64 bytes).
+function modelKeyboard(kind: "t" | "i", current: string) {
+  const list = kind === "t" ? TEXT_MODELS : IMAGE_MODELS;
+  return Markup.inlineKeyboard(
+    list.map((m, i) => [
+      Markup.button.callback(
+        `${m.slug === current ? "✅ " : ""}${m.label} — ${m.price}`,
+        `mdl_${kind}_${i}`,
+      ),
+    ]),
+  );
 }
 
 function receiptCaption(r: {
@@ -183,7 +206,7 @@ export function startBot(): void {
   // /start opens the button menu. Plain text messages go to the AI agent.
   bot.start((ctx) =>
     ctx.reply(
-      "👋 پنل ادمین oostaAI\n\nیک گزینه را انتخاب کن، یا همین‌جا فارسی دستور بده تا دستیار هوش مصنوعی انجامش بده — مثلاً:\n«یک محصول اکانت اسپاتیفای با قیمت ۱۵۰۰۰۰ بساز» یا «یک پست وبلاگ درباره‌ی خرید امن بنویس».",
+      "👋 پنل ادمین oostaAI\n\nیک گزینه را انتخاب کن، یا همین‌جا فارسی دستور بده تا دستیار هوش مصنوعی انجامش بده — مثلاً:\n«یک محصول اکانت اسپاتیفای با قیمت ۱۵۰۰۰۰ بساز» یا «یک پست وبلاگ درباره‌ی خرید امن بنویس».\n\n🧠 از دکمه‌ی «مدل‌ها» مدل هوش مصنوعی را عوض کن، یا در خود دستور بگو: «با کلود …»، «با جی‌پی‌تی …»، «با جمنای …».",
       mainMenu(),
     ),
   );
@@ -206,6 +229,53 @@ export function startBot(): void {
       "♻️ To restore, send me a backup file (.sql or .sql.gz) with the caption: restore",
       mainMenu(),
     );
+  });
+
+  // Runtime model selection (persisted in the DB; env stays the default).
+  bot.action("models", async (ctx) => {
+    await ctx.answerCbQuery();
+    if (!isOpenRouterEnabled()) {
+      await ctx.reply(
+        "🧠 انتخاب مدل فقط با OPENROUTER_API_KEY فعال است (الان ایجنت روی Gemini مستقیم کار می‌کند).",
+        mainMenu(),
+      );
+      return;
+    }
+    const current = await getAgentModels();
+    await ctx.reply(
+      `🧠 مدل متن (دستورات، توضیحات، بلاگ):\nفعلی: ${current.text}`,
+      modelKeyboard("t", current.text),
+    );
+    await ctx.reply(`🎨 مدل تولید عکس:\nفعلی: ${current.image}`, modelKeyboard("i", current.image));
+    await ctx.reply(
+      "نکته: برای یک دستورِ تکی هم می‌توانی مدل را عوض کنی — مثلاً «با کلود توضیحات محصول X را بنویس» یا «این عکس را با جی‌پی‌تی بساز».",
+      mainMenu(),
+    );
+  });
+
+  bot.action(/^mdl_([ti])_(\d+)$/, async (ctx) => {
+    const kind = ctx.match[1] as "t" | "i";
+    const list = kind === "t" ? TEXT_MODELS : IMAGE_MODELS;
+    const model = list[Number(ctx.match[2])];
+    if (!model) {
+      await ctx.answerCbQuery("Unknown model");
+      return;
+    }
+    try {
+      await (kind === "t" ? setAgentTextModel(model.slug) : setAgentImageModel(model.slug));
+      await ctx.answerCbQuery(`✅ ${model.label}`);
+      // Cosmetic refresh; re-clicking the active model makes Telegram throw
+      // "message is not modified" — the preference is already saved, so ignore.
+      await ctx
+        .editMessageText(
+          `${kind === "t" ? "🧠 مدل متن" : "🎨 مدل تولید عکس"}:\nفعلی: ${model.slug}`,
+          modelKeyboard(kind, model.slug),
+        )
+        .catch(() => {});
+    } catch (error) {
+      await ctx.answerCbQuery("Failed");
+      await ctx.reply(`❌ ${error instanceof Error ? error.message : String(error)}`, mainMenu());
+    }
   });
 
   // Card-to-card receipts.
