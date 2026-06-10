@@ -17,11 +17,12 @@ export async function getBySlug(req: Request, res: Response): Promise<void> {
 }
 export async function cover(req: Request, res: Response): Promise<void> {
   const { data, mimeType } = await blog.getCover(String(req.params.id));
-  sendImage(res, data, mimeType, "public, max-age=300");
+  sendImage(res, data, mimeType, "public, max-age=3600, stale-while-revalidate=86400");
 }
 export async function media(req: Request, res: Response): Promise<void> {
   const { data, mimeType } = await blog.getMedia(String(req.params.id));
-  sendImage(res, data, mimeType, "public, max-age=86400");
+  // Media ids are immutable (every upload gets a new id) — cache for a year.
+  sendImage(res, data, mimeType, "public, max-age=31536000, immutable");
 }
 
 // Admin

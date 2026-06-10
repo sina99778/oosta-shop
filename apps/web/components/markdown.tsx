@@ -22,6 +22,8 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
           key={key}
           src={img[2]}
           alt={img[1]}
+          loading="lazy"
+          decoding="async"
           className="my-3 inline-block max-h-[28rem] rounded-xl border border-border"
         />
       );

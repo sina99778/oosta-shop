@@ -23,17 +23,21 @@ export async function productBySlug(req: Request, res: Response): Promise<void> 
   res.json({ product: await catalog.getProductBySlug(String(req.params.slug)) });
 }
 
+// 1h fresh + a day of stale-while-revalidate: browsers/CDN serve instantly and
+// refresh in the background; a replaced product image shows up within the hour.
+const IMAGE_CACHE = "public, max-age=3600, stale-while-revalidate=86400";
+
 export async function productImage(req: Request, res: Response): Promise<void> {
   const { data, mimeType } = await catalog.getProductImage(String(req.params.id));
   res.setHeader("Content-Type", mimeType);
-  res.setHeader("Cache-Control", "public, max-age=300");
+  res.setHeader("Cache-Control", IMAGE_CACHE);
   res.send(data);
 }
 
 export async function galleryImage(req: Request, res: Response): Promise<void> {
   const { data, mimeType } = await catalog.getGalleryImage(String(req.params.id));
   res.setHeader("Content-Type", mimeType);
-  res.setHeader("Cache-Control", "public, max-age=300");
+  res.setHeader("Cache-Control", IMAGE_CACHE);
   res.send(data);
 }
 

@@ -1,11 +1,12 @@
-"use client";
+// Server component: categories + bestsellers are fetched on the server (cached
+// 60s by fetchJson), so the homepage paints complete — no client spinners and
+// no extra browser round-trips.
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { useApi } from "@/lib/use-api";
+import { fetchJson } from "@/lib/seo";
 import { ProductCard } from "@/components/product-card";
 import { Container } from "@/components/ui/container";
-import { Spinner } from "@/components/ui/spinner";
 import type { Locale } from "@/lib/i18n";
 import type { Category, ProductSummary } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
@@ -21,9 +22,14 @@ function SectionTitle({ children }: { children: ReactNode }) {
   );
 }
 
-export function HomeSections({ locale, dict }: { locale: Locale; dict: Dictionary }) {
-  const categories = useApi<{ categories: Category[] }>("/categories");
-  const best = useApi<{ products: ProductSummary[] }>("/products/bestselling?limit=8");
+export async function HomeSections({ locale, dict }: { locale: Locale; dict: Dictionary }) {
+  const [categoriesData, bestData] = await Promise.all([
+    fetchJson<{ categories: Category[] }>("/categories"),
+    fetchJson<{ products: ProductSummary[] }>("/products/bestselling?limit=8"),
+  ]);
+  const categories = categoriesData?.categories ?? [];
+  const best = bestData?.products ?? [];
+
   const labels = {
     from: dict.common.from,
     inStock: dict.common.inStock,
@@ -35,15 +41,13 @@ export function HomeSections({ locale, dict }: { locale: Locale; dict: Dictionar
 
   return (
     <Container className="space-y-16 py-16">
-      <section>
-        <div className="mb-6">
-          <SectionTitle>{dict.home.shopByCategory}</SectionTitle>
-        </div>
-        {categories.loading ? (
-          <Spinner />
-        ) : (
+      {categories.length > 0 && (
+        <section>
+          <div className="mb-6">
+            <SectionTitle>{dict.home.shopByCategory}</SectionTitle>
+          </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {categories.data?.categories.map((category, i) => (
+            {categories.map((category, i) => (
               <Link
                 key={category.id}
                 href={`/${locale}/products?category=${category.slug}`}
@@ -60,8 +64,8 @@ export function HomeSections({ locale, dict }: { locale: Locale; dict: Dictionar
               </Link>
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
       <section>
         <div className="mb-6 flex items-end justify-between">
@@ -73,11 +77,9 @@ export function HomeSections({ locale, dict }: { locale: Locale; dict: Dictionar
             {dict.common.viewAll} →
           </Link>
         </div>
-        {best.loading ? (
-          <Spinner />
-        ) : best.data && best.data.products.length > 0 ? (
+        {best.length > 0 ? (
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {best.data.products.map((product) => (
+            {best.map((product) => (
               <ProductCard key={product.id} product={product} locale={locale} labels={labels} />
             ))}
           </div>

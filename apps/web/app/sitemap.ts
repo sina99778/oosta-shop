@@ -14,7 +14,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     entries.push({ url: `${site}/${locale}/blog`, changeFrequency: "daily", priority: 0.6 });
   }
 
-  const data = await fetchJson<{ items: { slug: string }[] }>("/products?pageSize=50");
+  const data = await fetchJson<{ items: { slug: string }[] }>("/products?pageSize=50", 0);
   for (const product of data?.items ?? []) {
     for (const locale of locales) {
       entries.push({
@@ -25,7 +25,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
-  const blog = await fetchJson<{ posts: { slug: string }[] }>("/blog");
+  const blog = await fetchJson<{ posts: { slug: string }[] }>("/blog", 0);
   for (const post of blog?.posts ?? []) {
     for (const locale of locales) {
       entries.push({
@@ -36,7 +36,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
-  const pages = await fetchJson<{ pages: { slug: string }[] }>("/pages");
+  const pages = await fetchJson<{ pages: { slug: string }[] }>("/pages", 0);
   for (const page of pages?.pages ?? []) {
     for (const locale of locales) {
       entries.push({

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { getDictionary } from "../dictionaries";
 import { isLocale } from "@/lib/i18n";
 import { Container } from "@/components/ui/container";
@@ -9,9 +10,10 @@ import { assetUrl } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import type { BlogPostSummary } from "@/lib/types";
 
-export const revalidate = 300;
-
 export default async function BlogPage({ params }: { params: Promise<{ locale: string }> }) {
+  // Request-time render + 60s cached data (a build-time prerender would bake
+  // an empty post list into the static shell).
+  await connection();
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const dict = await getDictionary(locale);

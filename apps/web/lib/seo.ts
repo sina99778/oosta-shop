@@ -23,12 +23,17 @@ export function apiOrigin(): string {
   return API;
 }
 
-export async function fetchJson<T>(path: string): Promise<T | null> {
+// Cached by default (Next data cache, refreshed in the background every
+// `revalidateSeconds`) so repeat page renders cost ~0 API round-trips.
+// Pass 0 to bypass the cache (rarely needed — e.g. the sitemap).
+export async function fetchJson<T>(path: string, revalidateSeconds = 60): Promise<T | null> {
   try {
     // Hard 5s cap: a slow/unreachable API degrades the page (defaults render)
     // instead of hanging the request until the gateway times out.
     const res = await fetch(`${INTERNAL_API}${path}`, {
-      cache: "no-store",
+      ...(revalidateSeconds > 0
+        ? { next: { revalidate: revalidateSeconds } }
+        : { cache: "no-store" as const }),
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;

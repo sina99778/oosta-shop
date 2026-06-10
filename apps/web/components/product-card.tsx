@@ -39,6 +39,8 @@ export function ProductCard({
             <img
               src={image}
               alt={product.name}
+              loading="lazy"
+              decoding="async"
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           ) : (

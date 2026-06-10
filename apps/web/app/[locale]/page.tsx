@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { getDictionary } from "./dictionaries";
 import { isLocale } from "@/lib/i18n";
 import { getSiteSettings, localizedSetting } from "@/lib/settings";
@@ -57,6 +58,9 @@ function FeatureIcon({ d }: { d: string }) {
 }
 
 export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
+  // Render at request time (never bake build-time data into the static shell),
+  // while fetchJson results still come from the 60s data cache — fast AND fresh.
+  await connection();
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const dict = await getDictionary(locale);
