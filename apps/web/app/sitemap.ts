@@ -14,8 +14,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     entries.push({ url: `${site}/${locale}/blog`, changeFrequency: "daily", priority: 0.6 });
   }
 
-  const data = await fetchJson<{ items: { slug: string }[] }>("/products?pageSize=50", 0);
-  for (const product of data?.items ?? []) {
+  // Page through the whole catalog (the API caps pageSize at 50) so products
+  // beyond the first page still appear in the sitemap.
+  type ProductsPage = { items: { slug: string }[]; pagination: { totalPages: number } };
+  const first = await fetchJson<ProductsPage>("/products?pageSize=50&page=1", 0);
+  const productSlugs = [...(first?.items ?? [])];
+  const totalPages = Math.min(first?.pagination?.totalPages ?? 1, 50); // hard cap, safety
+  for (let page = 2; page <= totalPages; page++) {
+    const next = await fetchJson<ProductsPage>(`/products?pageSize=50&page=${page}`, 0);
+    productSlugs.push(...(next?.items ?? []));
+  }
+  for (const product of productSlugs) {
     for (const locale of locales) {
       entries.push({
         url: `${site}/${locale}/products/${product.slug}`,

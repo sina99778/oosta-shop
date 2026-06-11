@@ -60,6 +60,9 @@ export default async function ProductDetailPage({
   // Server-fetch for Product structured data (JSON-LD). The view re-fetches client-side.
   const data = await fetchJson<{ product: ProductDetail }>(`/products/${slug}`);
   const p = data?.product;
+  // A missing/inactive product must be a real 404 (matches blog/[slug] and p/[slug]),
+  // not a 200 soft-404 that search engines penalize.
+  if (!p) notFound();
   const jsonLd = p
     ? {
         "@context": "https://schema.org",

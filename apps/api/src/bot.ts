@@ -207,7 +207,6 @@ async function sendReceipts(chatId: number, status: "PENDING" | undefined): Prom
       : `🗂 Showing ${items.length} most recent receipt(s):`,
   );
   for (const r of items) {
-    const { data, mimeType } = await getReceiptImage(r.id);
     const caption = receiptCaption(r);
     const buttons =
       r.status === "PENDING"
@@ -219,6 +218,9 @@ async function sendReceipts(chatId: number, status: "PENDING" | undefined): Prom
           ])
         : undefined;
     try {
+      // Loading the image is inside the try so one unreadable receipt is skipped
+      // (text-only fallback) instead of aborting the whole queue.
+      const { data, mimeType } = await getReceiptImage(r.id);
       if (mimeType === "application/pdf") {
         await bot.telegram.sendDocument(
           chatId,
@@ -307,7 +309,7 @@ async function ticketsMessage(): Promise<string> {
 
 async function sendBackup(chatId: number): Promise<void> {
   if (!bot) return;
-  const file = await createBackup();
+  const { file, cleanup } = await createBackup();
   try {
     await bot.telegram.sendDocument(
       chatId,
@@ -315,7 +317,7 @@ async function sendBackup(chatId: number): Promise<void> {
       { caption: "🗄️ oostaAI database backup" },
     );
   } finally {
-    await unlink(file).catch(() => {});
+    await cleanup();
   }
 }
 
@@ -350,6 +352,15 @@ export function startBot(): void {
       return;
     }
     return next();
+  });
+
+  // Global safety net: any handler error is reported to the admin instead of
+  // crashing the update (Telegraf's default handler sets exitCode=1 and rethrows).
+  bot.catch(async (error, ctx) => {
+    console.error("[telegram] handler error", error);
+    await ctx
+      .reply(`❌ ${error instanceof Error ? error.message : String(error)}`, mainMenu())
+      .catch(() => {});
   });
 
   // /start opens the button menu. Plain text messages go to the AI agent.

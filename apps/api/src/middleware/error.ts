@@ -63,6 +63,9 @@ export function errorHandler(
 
   if (statusCode >= 500) {
     console.error(err);
+    // Never leak raw internal error text to clients in production; the full
+    // error is in the server logs above.
+    if (env.isProduction) message = "Something went wrong";
   }
 
   const error: Record<string, unknown> = { code, message };

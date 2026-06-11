@@ -544,6 +544,14 @@ export async function approveReceipt(id: string, input: ReviewReceiptInput) {
   if (receipt.order.paymentProvider !== "CARD_TO_CARD") {
     throw new AppError(400, "NOT_CARD_TO_CARD", "This receipt is not for a card-to-card order");
   }
+  // Idempotency: an order can carry several PENDING receipts (re-uploads). Once
+  // one is approved and the order is PAID, approving another must not re-deliver.
+  if (receipt.status !== "PENDING") {
+    throw new AppError(409, "ALREADY_REVIEWED", "This receipt was already reviewed");
+  }
+  if (receipt.order.paymentStatus === "PAID") {
+    throw new AppError(409, "ALREADY_PAID", "This order is already paid and delivered");
+  }
   await deliverOrder(receipt.orderId, `card:${receipt.id}`);
   await prisma.receipt.update({
     where: { id },
@@ -556,12 +564,17 @@ export async function approveReceipt(id: string, input: ReviewReceiptInput) {
   return serializeReceipt(await loadReceiptForReview(id));
 }
 
-// Reject: keep the receipt (status REJECTED) and move the order back out of "paid".
-// If the order was already PAID (undoing an accidental approval) it becomes REFUNDED.
+// Reject a receipt. Three cases:
+//  - this receipt delivered the order (APPROVED + order PAID): undo it — REFUND
+//    the order and release its inventory back to AVAILABLE.
+//  - a stale duplicate on an order another receipt already PAID: just mark the
+//    receipt REJECTED; leave the order PAID and its inventory untouched.
+//  - the order is not yet paid: normal reject — move the order to REJECTED.
 export async function rejectReceipt(id: string, input: ReviewReceiptInput) {
   const receipt = await loadReceiptForReview(id);
-  const wasPaid = receipt.order.paymentStatus === "PAID";
-  const nextStatus = wasPaid ? "REFUNDED" : "REJECTED";
+  const undo = receipt.status === "APPROVED" && receipt.order.paymentStatus === "PAID";
+  const orderAlreadyPaidElsewhere =
+    receipt.status !== "APPROVED" && receipt.order.paymentStatus === "PAID";
 
   await prisma.$transaction(async (tx) => {
     await tx.receipt.update({
@@ -569,12 +582,15 @@ export async function rejectReceipt(id: string, input: ReviewReceiptInput) {
       data: { status: "REJECTED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
     });
 
-    await tx.order.update({
-      where: { id: receipt.orderId },
-      data: { paymentStatus: nextStatus },
-    });
+    // Don't touch a sale that a different receipt completed.
+    if (!orderAlreadyPaidElsewhere) {
+      await tx.order.update({
+        where: { id: receipt.orderId },
+        data: { paymentStatus: undo ? "REFUNDED" : "REJECTED" },
+      });
+    }
 
-    if (wasPaid) {
+    if (undo) {
       const orderItems = await tx.orderItem.findMany({
         where: { orderId: receipt.orderId },
         select: { id: true },

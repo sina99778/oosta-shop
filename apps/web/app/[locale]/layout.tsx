@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { getDictionary } from "./dictionaries";
 import { dirFor, isLocale, locales } from "@/lib/i18n";
 import { getSiteConfig, localizedSetting, themeCss } from "@/lib/settings";
+import { siteUrl } from "@/lib/seo";
 import { Providers } from "@/components/providers";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
@@ -15,10 +16,34 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 const vazirmatn = Vazirmatn({ variable: "--font-vazirmatn", subsets: ["arabic"] });
 
-export const metadata: Metadata = {
-  title: "oostaAI — Digital products, delivered instantly",
-  description: "AI accounts, licenses, and gift cards with automatic instant delivery.",
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  if (!isLocale(locale)) return {};
+  const dict = await getDictionary(locale);
+  const base = siteUrl();
+  return {
+    metadataBase: new URL(base),
+    title: { default: dict.meta.title, template: `%s — oostaAI` },
+    description: dict.meta.description,
+    alternates: {
+      canonical: `/${locale}`,
+      // hreflang cross-linking between the locale variants for search engines.
+      languages: { en: "/en", fa: "/fa", "x-default": "/fa" },
+    },
+    openGraph: {
+      title: dict.meta.title,
+      description: dict.meta.description,
+      url: `${base}/${locale}`,
+      siteName: "oostaAI",
+      locale: locale === "fa" ? "fa_IR" : "en_US",
+      type: "website",
+    },
+  };
+}
 
 export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));

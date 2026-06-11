@@ -14,7 +14,12 @@ export function LocaleSwitcher({ current }: { current: Locale }) {
     if (locale === current) return;
     const segments = pathname.split("/");
     segments[1] = locale; // replace the locale segment
-    router.push(segments.join("/") || `/${locale}`);
+    // Preserve the query string (e.g. ?category=…) so filters survive a language
+    // switch. Read it at click time from the live URL — using the useSearchParams
+    // hook here would force every page (this is in the global header) into a CSR
+    // bail-out needing a Suspense boundary.
+    const query = typeof window !== "undefined" ? window.location.search : "";
+    router.push((segments.join("/") || `/${locale}`) + query);
   }
 
   return (

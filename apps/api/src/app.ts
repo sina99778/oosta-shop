@@ -24,7 +24,10 @@ export function createApp() {
   const app = express();
 
   app.disable("x-powered-by");
-  app.set("trust proxy", 1); // trust the first proxy (correct client IP for rate limiting)
+  // Production chain is client -> ArvanCloud edge -> nginx -> Express (2 trusted
+  // hops), so req.ip resolves to the real visitor. With only 1, every visitor
+  // behind the same CDN edge shared one rate-limit bucket (site-wide 429s).
+  app.set("trust proxy", env.isProduction ? 2 : 1);
 
   // Security + parsing
   app.use(helmet());

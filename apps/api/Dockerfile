@@ -25,5 +25,6 @@ COPY --from=build /app/apps/api/dist ./dist
 COPY --from=build /app/apps/api/package.json ./package.json
 COPY --from=build /app/apps/api/prisma ./prisma
 EXPOSE 4000
-# Apply pending migrations, then start the server.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+# Apply pending migrations, then start the server. `exec` makes node PID 1 so it
+# receives SIGTERM directly (graceful shutdown) instead of being SIGKILLed.
+CMD ["sh", "-c", "npx prisma migrate deploy && exec node dist/index.js"]

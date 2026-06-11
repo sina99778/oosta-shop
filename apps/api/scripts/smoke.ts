@@ -369,6 +369,11 @@ async function testOrders(): Promise<void> {
     verify1.statusCode === 200 && body(verify1).status === "paid",
     `status=${verify1.statusCode}`,
   );
+  record(
+    "verify response carries NO credentials (public endpoint)",
+    body(verify1).order === undefined && !JSON.stringify(body(verify1)).includes("accountPassword"),
+    JSON.stringify(body(verify1)),
+  );
 
   const detail1 = await get(`/orders/${orderId1}`, token);
   const ord1 = obj(body(detail1).order);
@@ -638,6 +643,11 @@ async function testCardToCard(): Promise<void> {
     .toString()
     .padStart(9, "0");
 
+  const soldCount = (planId: string) =>
+    prisma.inventoryItem.count({ where: { planId, status: "SOLD" } });
+  const availCount = (planId: string) =>
+    prisma.inventoryItem.count({ where: { planId, status: "AVAILABLE" } });
+
   const signup = await post("/auth/signup", {
     name: "C2C Tester",
     email: `c2c_${suffix}@example.com`,
@@ -740,7 +750,89 @@ async function testCardToCard(): Promise<void> {
     `status=${recNoAuth.statusCode}`,
   );
 
+  // ---- Duplicate-receipt safety: approving one receipt then rejecting a stale
+  // second receipt must NOT reverse the paid order or free its inventory. ----
+  const enablePay = await patch(
+    "/admin/settings/payments",
+    { cardEnabled: true, cardNumber: "6219861012345678", cardHolder: "Tester", cardBank: "Bank" },
+    adminToken,
+  );
+  const c2cCreate = await post(
+    "/orders",
+    { items: [{ planId: plan.id, quantity: 1 }], method: "card_to_card" },
+    token,
+  );
+  record(
+    "enable card-to-card + create order -> 201",
+    enablePay.statusCode === 200 && c2cCreate.statusCode === 201,
+    `enable=${enablePay.statusCode} create=${c2cCreate.statusCode} body=${JSON.stringify(body(c2cCreate)).slice(0, 200)}`,
+  );
+  const c2cOrder = obj(body(c2cCreate).order);
+  const c2cId = String(c2cOrder.id);
+
+  const uploadReceipt = async () => {
+    const b = "----rcp" + Math.floor(Math.random() * 1e9);
+    const payload = Buffer.concat([
+      Buffer.from(
+        `--${b}\r\nContent-Disposition: form-data; name="receipt"; filename="r.png"\r\nContent-Type: image/png\r\n\r\n`,
+        "utf8",
+      ),
+      Buffer.from("FAKE-RECEIPT"),
+      Buffer.from(`\r\n--${b}--\r\n`, "utf8"),
+    ]);
+    return inject(app, {
+      method: "POST",
+      url: `/orders/${c2cId}/receipt`,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": `multipart/form-data; boundary=${b}`,
+      },
+      payload,
+      remoteAddress: ip,
+    });
+  };
+  const up1 = await uploadReceipt();
+  const up2 = await uploadReceipt();
+  record(
+    "two receipts upload on one order -> 201",
+    up1.statusCode === 201 && up2.statusCode === 201,
+    `s1=${up1.statusCode} s2=${up2.statusCode}`,
+  );
+  const receiptA = String(body(up1).receiptId);
+  const receiptB = String(body(up2).receiptId);
+
+  const approveA = await post(`/admin/receipts/${receiptA}/approve`, {}, adminToken);
+  record(
+    "approve receipt A -> order PAID + inventory SOLD",
+    approveA.statusCode === 200 &&
+      (await prisma.order.findUnique({ where: { id: c2cId } }))?.paymentStatus === "PAID" &&
+      (await soldCount(plan.id)) === 1,
+    `status=${approveA.statusCode}`,
+  );
+  const rejectB = await post(`/admin/receipts/${receiptB}/reject`, {}, adminToken);
+  const afterReject = await prisma.order.findUnique({ where: { id: c2cId } });
+  record(
+    "reject stale receipt B does NOT reverse paid order or free stock",
+    rejectB.statusCode === 200 &&
+      afterReject?.paymentStatus === "PAID" &&
+      (await soldCount(plan.id)) === 1 &&
+      (await availCount(plan.id)) === 0,
+    `orderStatus=${afterReject?.paymentStatus} sold=${await soldCount(plan.id)}`,
+  );
+  const reApprove = await post(`/admin/receipts/${receiptA}/approve`, {}, adminToken);
+  record(
+    "re-approve already-reviewed receipt -> 409",
+    reApprove.statusCode === 409,
+    `status=${reApprove.statusCode}`,
+  );
+  await patch(
+    "/admin/settings/payments",
+    { cardEnabled: null, cardNumber: null, cardHolder: null, cardBank: null },
+    adminToken,
+  );
+
   // Cleanup
+  await prisma.receipt.deleteMany({ where: { order: { userId } } });
   await prisma.order.deleteMany({ where: { userId } });
   await prisma.inventoryItem.deleteMany({ where: { productId: product.id } });
   await prisma.productPlan.deleteMany({ where: { productId: product.id } });

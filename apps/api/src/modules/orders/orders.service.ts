@@ -120,7 +120,13 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
     }
   }
 
-  const currency = plans[0]?.currency ?? env.ZARINPAL_CURRENCY;
+  // All line items must share one currency — summing across currencies (and
+  // stamping the order with plans[0]) would charge a wrong total.
+  const currencies = new Set(input.items.map((i) => planMap.get(i.planId)!.currency));
+  if (currencies.size > 1) {
+    throw new AppError(400, "MIXED_CURRENCY", "All items in an order must use the same currency");
+  }
+  const currency = planMap.get(input.items[0].planId)?.currency ?? env.ZARINPAL_CURRENCY;
   let total = new Prisma.Decimal(0);
   const itemsData = input.items.map((item) => {
     const plan = planMap.get(item.planId)!;
@@ -237,8 +243,11 @@ export async function verifyAndDeliver(authority: string, status: string) {
   const order = await prisma.order.findUnique({ where: { paymentAuthority: authority } });
   if (!order) throw new AppError(404, "NOT_FOUND", "No order found for this payment");
 
+  // This endpoint is public (the gateway redirects the browser here with the
+  // authority in the URL), so it must NEVER return the order's credentials —
+  // only the status. The buyer reads the vault via the authenticated GET /orders/:id.
   if (order.paymentStatus === "PAID") {
-    return { status: "paid" as const, order: await getOrderDetail(order.userId, order.id) };
+    return { status: "paid" as const, orderId: order.id };
   }
 
   if (status !== "OK") {
@@ -282,7 +291,7 @@ export async function verifyAndDeliver(authority: string, status: string) {
   // Tell the admin about the sale (and any plan that just ran low) — fire & forget.
   void notifySale(order.id).catch(() => {});
 
-  return { status: "paid" as const, order: await getOrderDetail(order.userId, order.id) };
+  return { status: "paid" as const, orderId: order.id };
 }
 
 const LOW_STOCK_ALERT = 5;
