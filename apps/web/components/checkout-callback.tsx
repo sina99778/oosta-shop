@@ -21,7 +21,7 @@ export function CheckoutCallback({ locale, dict }: { locale: Locale; dict: Dicti
     const authority = searchParams.get("Authority");
     const status = searchParams.get("Status");
     if (!authority || !status) {
-      setMessage(dict.checkout.missingParams);
+      queueMicrotask(() => setMessage(dict.checkout.missingParams));
       return;
     }
 

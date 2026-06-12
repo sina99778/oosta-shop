@@ -61,7 +61,7 @@ export type GatewayPatch = z.infer<typeof gatewayPatchSchema>;
 const parseBool = (value: string | undefined, dflt: boolean) =>
   value === undefined ? dflt : value === "true";
 
-export async function getGatewayConfig(): Promise<GatewayConfig> {
+async function loadGatewayConfig(): Promise<GatewayConfig> {
   const rows = await prisma.siteSetting.findMany({
     where: { key: { in: KEYS.map((k) => KEY_PREFIX + k) } },
   });
@@ -78,13 +78,38 @@ export async function getGatewayConfig(): Promise<GatewayConfig> {
   };
 }
 
+// True when the configured online provider is the test "mock" gateway but the
+// environment forbids it (production without ALLOW_MOCK_PAYMENTS_IN_PRODUCTION).
+// Enforced only when actually STARTING an online payment — never on reads, so the
+// public checkout config, card-to-card flow and the admin/bot/agent recovery
+// screens keep working and can switch the provider back.
+export function isOnlinePaymentBlocked(config: GatewayConfig): boolean {
+  return env.isProduction && config.provider === "mock" && !env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION;
+}
+
+export function assertOnlinePaymentAllowed(config: GatewayConfig): void {
+  if (isOnlinePaymentBlocked(config)) {
+    throw new AppError(
+      503,
+      "UNSAFE_PAYMENT_CONFIG",
+      "Online payments are unavailable (test gateway disabled in production)",
+    );
+  }
+}
+
+// Read path — never throws on an unsafe provider. Callers that EXECUTE an online
+// payment must additionally call assertOnlinePaymentAllowed(config).
+export async function getGatewayConfig(): Promise<GatewayConfig> {
+  return loadGatewayConfig();
+}
+
 const PLACEHOLDER_MERCHANT = "00000000-0000-0000-0000-000000000000";
 
 export async function patchGatewayConfig(patch: GatewayPatch): Promise<GatewayConfig> {
   // Refuse a state where the REAL gateway is active with the placeholder merchant
   // (mirrors the env.ts production boot guard — one mis-tap in the bot would
   // otherwise break every online checkout).
-  const current = await getGatewayConfig();
+  const current = await loadGatewayConfig();
   const next = {
     provider:
       patch.provider === undefined ? current.provider : (patch.provider ?? env.PAYMENT_PROVIDER),
@@ -99,6 +124,9 @@ export async function patchGatewayConfig(patch: GatewayPatch): Promise<GatewayCo
       "MERCHANT_REQUIRED",
       "Set a real Zarinpal merchant id before enabling the Zarinpal gateway",
     );
+  }
+  if (env.isProduction && next.provider === "mock" && !env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION) {
+    throw new AppError(400, "MOCK_DISABLED", "Mock payments are disabled in production");
   }
 
   const ops = Object.entries(patch).map(([key, value]) => {

@@ -17,6 +17,10 @@ const EnvSchema = z.object({
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
 
   PAYMENT_PROVIDER: z.enum(["mock", "zarinpal"]).default("mock"),
+  ALLOW_MOCK_PAYMENTS_IN_PRODUCTION: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
   ZARINPAL_MERCHANT_ID: z.string().default("00000000-0000-0000-0000-000000000000"),
   ZARINPAL_SANDBOX: z
     .string()
@@ -90,6 +94,11 @@ function loadEnv() {
     const problems: string[] = [];
     if (data.JWT_SECRET === "dev-only-secret-change-me") {
       problems.push("JWT_SECRET must be set to a strong, unique value in production");
+    }
+    if (data.PAYMENT_PROVIDER === "mock" && !data.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION) {
+      problems.push(
+        "PAYMENT_PROVIDER=mock is disabled in production; use Zarinpal or explicitly set ALLOW_MOCK_PAYMENTS_IN_PRODUCTION=true for a controlled test environment",
+      );
     }
     if (
       data.PAYMENT_PROVIDER === "zarinpal" &&

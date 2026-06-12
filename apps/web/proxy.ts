@@ -1,7 +1,8 @@
-// Locale routing (Next.js Middleware). Redirects any path
-// without a locale prefix to the visitor's preferred (or default) locale.
+// Locale routing (Next.js Proxy). Redirects any path without a locale prefix
+// to the visitor's preferred (or default) locale.
 
 import { NextResponse, type NextRequest } from "next/server";
+
 import { defaultLocale, locales } from "@/lib/i18n";
 
 function getLocale(request: NextRequest): string {
@@ -15,7 +16,7 @@ function getLocale(request: NextRequest): string {
   return defaultLocale;
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hasLocale = locales.some(
     (locale) => pathname === `/${locale}` || pathname.startsWith(`/${locale}/`),

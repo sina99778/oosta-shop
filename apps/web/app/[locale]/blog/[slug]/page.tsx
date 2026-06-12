@@ -17,6 +17,10 @@ async function load(slug: string): Promise<BlogPostDetail | null> {
   return data?.post ?? null;
 }
 
+function safeJsonLd(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -65,10 +69,7 @@ export default async function BlogPostPage({
 
   return (
     <Container className="max-w-3xl py-10">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }} />
       <Link href={`/${locale}/blog`} className="text-sm text-muted hover:text-foreground">
         ← {dict.blog.back}
       </Link>

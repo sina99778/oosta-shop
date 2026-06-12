@@ -11,6 +11,8 @@ import { createApp } from "../src/app";
 import { prisma } from "../src/lib/prisma";
 import { requireRole } from "../src/middleware/auth";
 import { AppError } from "../src/utils/httpError";
+import { signAccessToken } from "../src/lib/jwt";
+import { getPaymentProviderForOrder } from "../src/modules/payments/provider";
 
 const app = createApp();
 // Per-actor IP, reassigned at the start of each test group so their auth rate-limit
@@ -133,6 +135,7 @@ async function testAuth(): Promise<void> {
   );
   const loginPhone = await post("/auth/login", { identifier: phone, password });
   record("login(phone) -> 200", loginPhone.statusCode === 200, `status=${loginPhone.statusCode}`);
+  const phoneUserId = String(obj(body(signupPhone).user).id);
 
   // /me with valid token
   const meOk = await get("/auth/me", emailToken);
@@ -143,6 +146,15 @@ async function testAuth(): Promise<void> {
     `status=${meOk.statusCode}`,
   );
   record("/me does NOT leak passwordHash", meUser?.passwordHash === undefined, "");
+
+  // A stale/forged role claim must not override the user's current DB role.
+  const forgedAdmin = signAccessToken({ sub: emailUserId, role: "ADMIN" });
+  const forgedAccess = await get("/admin/products", forgedAdmin);
+  record(
+    "JWT role claim is refreshed from DB -> 403",
+    forgedAccess.statusCode === 403,
+    `status=${forgedAccess.statusCode}`,
+  );
 
   // /me unauthorized cases
   const meNoToken = await get("/auth/me");
@@ -187,6 +199,23 @@ async function testAuth(): Promise<void> {
     }
   }
   record("auth rate limiter trips (429)", limited, "");
+
+  // The unique index must turn a concurrent signup race into 201 + 409, not 500.
+  const raceEmail = `race_${suffix}@example.com`;
+  const raceResults = await Promise.all([
+    post("/auth/signup", { name: "Race A", email: raceEmail, password }),
+    post("/auth/signup", { name: "Race B", email: raceEmail, password }),
+  ]);
+  const raceStatuses = raceResults.map((r) => r.statusCode).sort();
+  record(
+    "concurrent duplicate signup -> 201 + 409",
+    raceStatuses[0] === 201 && raceStatuses[1] === 409,
+    raceStatuses.join(","),
+  );
+
+  await prisma.user.deleteMany({
+    where: { OR: [{ id: { in: [emailUserId, phoneUserId] } }, { email: raceEmail }] },
+  });
 }
 
 function testRoleGuard(): void {
@@ -215,6 +244,17 @@ function testRoleGuard(): void {
     "requireRole blocks anonymous -> 401",
     anonBlocked instanceof AppError && anonBlocked.statusCode === 401,
     String(anonBlocked),
+  );
+
+  record(
+    "stored MANUAL order always selects mock verifier",
+    getPaymentProviderForOrder("MANUAL").name === "MANUAL",
+    getPaymentProviderForOrder("MANUAL").name,
+  );
+  record(
+    "stored ZARINPAL order always selects Zarinpal verifier",
+    getPaymentProviderForOrder("ZARINPAL").name === "ZARINPAL",
+    getPaymentProviderForOrder("ZARINPAL").name,
   );
 }
 

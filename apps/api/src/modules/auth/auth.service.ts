@@ -26,14 +26,23 @@ export async function registerUser(input: SignupInput): Promise<AuthResult> {
   }
 
   const passwordHash = await hashPassword(input.password);
-  const user = await prisma.user.create({
-    data: {
-      name: input.name,
-      email: input.email ?? null,
-      phone: input.phone ?? null,
-      passwordHash,
-    },
-  });
+  let user: User;
+  try {
+    user = await prisma.user.create({
+      data: {
+        name: input.name,
+        email: input.email ?? null,
+        phone: input.phone ?? null,
+        passwordHash,
+      },
+    });
+  } catch (error) {
+    // The pre-check improves UX, but only the unique index closes concurrent races.
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
+      throw new AppError(409, "CONFLICT", "An account with this email or phone already exists");
+    }
+    throw error;
+  }
 
   return { user: toPublicUser(user), token: signAccessToken({ sub: user.id, role: user.role }) };
 }

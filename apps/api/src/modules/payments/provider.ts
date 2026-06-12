@@ -8,7 +8,7 @@
 
 import type { PaymentProvider } from "@prisma/client";
 import { env } from "../../config/env";
-import { getGatewayConfig } from "../../lib/gatewayConfig";
+import { assertOnlinePaymentAllowed, getGatewayConfig } from "../../lib/gatewayConfig";
 import { AppError } from "../../utils/httpError";
 
 export type CreatePaymentInput = {
@@ -22,8 +22,14 @@ export type CreatePaymentResult = {
   provider: PaymentProvider;
   authority: string;
   redirectUrl: string;
+  verificationContext?: Record<string, string | boolean>;
 };
-export type VerifyPaymentArgs = { authority: string; amount: number; currency: string };
+export type VerifyPaymentArgs = {
+  authority: string;
+  amount: number;
+  currency: string;
+  verificationContext?: unknown;
+};
 export type VerifyPaymentResult = { success: boolean; refId: string | null };
 
 export interface PaymentProviderAdapter {
@@ -56,6 +62,28 @@ function zarinpalBase(sandbox: boolean): string {
   return sandbox ? "https://sandbox.zarinpal.com" : "https://payment.zarinpal.com";
 }
 
+async function zarinpalRequest<T>(
+  sandbox: boolean,
+  path: string,
+  body: Record<string, unknown>,
+): Promise<T> {
+  try {
+    const response = await fetch(`${zarinpalBase(sandbox)}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      throw new AppError(502, "PAYMENT_GATEWAY_ERROR", `Zarinpal returned HTTP ${response.status}`);
+    }
+    return (await response.json()) as T;
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError(502, "PAYMENT_GATEWAY_ERROR", "Zarinpal request failed or timed out");
+  }
+}
+
 const zarinpalProvider: PaymentProviderAdapter = {
   name: "ZARINPAL",
   async createPayment({ amount, currency: orderCurrency, description, callbackUrl }) {
@@ -69,18 +97,17 @@ const zarinpalProvider: PaymentProviderAdapter = {
       finalAmount = amount * 10;
     }
 
-    const response = await fetch(`${zarinpalBase(gw.zarinpalSandbox)}/pg/v4/payment/request.json`, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({
+    const json = await zarinpalRequest<{ data?: { code?: number; authority?: string } }>(
+      gw.zarinpalSandbox,
+      "/pg/v4/payment/request.json",
+      {
         merchant_id: gw.zarinpalMerchantId,
         amount: Math.round(finalAmount),
         currency: targetCurrency,
         description,
         callback_url: callbackUrl,
-      }),
-    });
-    const json = (await response.json()) as { data?: { code?: number; authority?: string } };
+      },
+    );
     const authority = json.data?.authority;
     if (!authority || json.data?.code !== 100) {
       throw new AppError(502, "PAYMENT_INIT_FAILED", "Failed to initialize Zarinpal payment");
@@ -89,12 +116,30 @@ const zarinpalProvider: PaymentProviderAdapter = {
       provider: "ZARINPAL",
       authority,
       redirectUrl: `${zarinpalBase(gw.zarinpalSandbox)}/pg/StartPay/${authority}`,
+      verificationContext: {
+        merchantId: gw.zarinpalMerchantId,
+        sandbox: gw.zarinpalSandbox,
+        targetCurrency,
+      },
     };
   },
-  async verifyPayment({ authority, amount, currency: orderCurrency }) {
-    const gw = await getGatewayConfig();
+  async verifyPayment({ authority, amount, currency: orderCurrency, verificationContext }) {
+    const saved =
+      verificationContext && typeof verificationContext === "object"
+        ? (verificationContext as Record<string, unknown>)
+        : null;
+    const hasCompleteSavedContext =
+      typeof saved?.merchantId === "string" &&
+      typeof saved?.sandbox === "boolean" &&
+      (saved?.targetCurrency === "IRR" || saved?.targetCurrency === "IRT");
+    const current = hasCompleteSavedContext ? null : await getGatewayConfig();
+    const merchantId =
+      typeof saved?.merchantId === "string" ? saved.merchantId : current!.zarinpalMerchantId;
+    const sandbox = typeof saved?.sandbox === "boolean" ? saved.sandbox : current!.zarinpalSandbox;
+    const savedCurrency = saved?.targetCurrency;
+    const targetCurrency =
+      savedCurrency === "IRR" || savedCurrency === "IRT" ? savedCurrency : env.ZARINPAL_CURRENCY;
     let finalAmount = amount;
-    const targetCurrency = env.ZARINPAL_CURRENCY; // "IRR" or "IRT"
 
     if (orderCurrency === "IRR" && targetCurrency === "IRT") {
       finalAmount = amount / 10;
@@ -102,16 +147,15 @@ const zarinpalProvider: PaymentProviderAdapter = {
       finalAmount = amount * 10;
     }
 
-    const response = await fetch(`${zarinpalBase(gw.zarinpalSandbox)}/pg/v4/payment/verify.json`, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({
-        merchant_id: gw.zarinpalMerchantId,
+    const json = await zarinpalRequest<{ data?: { code?: number; ref_id?: number } }>(
+      sandbox,
+      "/pg/v4/payment/verify.json",
+      {
+        merchant_id: merchantId,
         amount: Math.round(finalAmount),
         authority,
-      }),
-    });
-    const json = (await response.json()) as { data?: { code?: number; ref_id?: number } };
+      },
+    );
     const code = json.data?.code;
     // 100 = verified now, 101 = already verified
     if (code === 100 || code === 101) {
@@ -123,5 +167,18 @@ const zarinpalProvider: PaymentProviderAdapter = {
 
 export async function getPaymentProvider(): Promise<PaymentProviderAdapter> {
   const gw = await getGatewayConfig();
+  // Block starting a real online payment through the test gateway in production.
+  assertOnlinePaymentAllowed(gw);
   return gw.provider === "zarinpal" ? zarinpalProvider : mockProvider;
+}
+
+// Payment callbacks must use the provider stored on the order. Looking at the
+// current runtime setting would let a gateway switch change how an old session
+// is verified (most dangerously, Zarinpal -> mock).
+export function getPaymentProviderForOrder(
+  provider: PaymentProvider | null,
+): PaymentProviderAdapter {
+  if (provider === "ZARINPAL") return zarinpalProvider;
+  if (provider === "MANUAL") return mockProvider;
+  throw new AppError(409, "INVALID_PAYMENT_PROVIDER", "Order has no online payment provider");
 }

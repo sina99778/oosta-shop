@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ProductMark } from "@/components/product-mark";
 import { formatPrice } from "@/lib/format";
 import { productImageUrl } from "@/lib/api";
 import type { Locale } from "@/lib/i18n";
@@ -20,6 +20,16 @@ function stars(n: number): string {
   return "★★★★★☆☆☆☆☆".slice(5 - r, 10 - r);
 }
 
+function categoryName(product: ProductSummary, locale: Locale): string {
+  if (locale !== "fa") return product.category.name;
+  const names: Record<string, string> = {
+    "ai-accounts": "اکانت‌های هوش مصنوعی",
+    "software-licenses": "لایسنس نرم‌افزار",
+    "gift-cards": "گیفت‌کارت",
+  };
+  return names[product.category.slug] ?? product.category.name;
+}
+
 export function ProductCard({
   product,
   locale,
@@ -32,50 +42,63 @@ export function ProductCard({
   const image = productImageUrl(product);
   return (
     <Link href={`/${locale}/products/${product.slug}`} className="group block">
-      <Card className="flex h-full flex-col overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:border-primary hover:shadow-glow">
-        <div className="relative -mx-5 -mt-5 mb-3 aspect-[16/10] overflow-hidden border-b border-border bg-surface">
-          {image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={image}
-              alt={product.name}
-              loading="lazy"
-              decoding="async"
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-muted/40">
-              {product.name.charAt(0)}
-            </div>
-          )}
-          <div className="absolute inset-x-2 top-2 flex items-start justify-between">
-            {product.isFeatured ? <Badge tone="primary">{labels.featured}</Badge> : <span />}
+      <article className="relative flex h-full min-h-[300px] flex-col overflow-hidden border border-border bg-card p-4 transition-all duration-200 hover:-translate-y-1 hover:border-primary hover:shadow-glow">
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div className="relative size-20 overflow-hidden">
+            {image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={image}
+                alt={product.name}
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full rounded-md object-cover transition-transform duration-300 group-hover:scale-105"
+              />
+            ) : (
+              <ProductMark
+                name={product.name}
+                slug={product.slug}
+                type={product.type}
+                className="size-20"
+              />
+            )}
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                product.inStock ? "text-success" : "text-danger"
+              }`}
+            >
+              <span
+                className={`size-2 rounded-full ${product.inStock ? "bg-success" : "bg-danger"}`}
+              />
+              {product.inStock ? labels.inStock : labels.outOfStock}
+            </span>
+            {product.isFeatured && (
+              <Badge tone="sale" className="rounded-sm">
+                {labels.featured}
+              </Badge>
+            )}
             {product.discountPercent > 0 && (
-              <Badge tone="sale">
+              <Badge tone="sale" className="rounded-sm">
                 {product.discountPercent}% {labels.off}
               </Badge>
             )}
           </div>
         </div>
 
-        <div className="mb-2 flex items-start justify-between gap-2">
-          <span className="text-xs text-muted">{product.category.name}</span>
-          <Badge tone={product.inStock ? "success" : "danger"}>
-            {product.inStock ? labels.inStock : labels.outOfStock}
-          </Badge>
-        </div>
-
-        <h3 className="font-semibold leading-snug group-hover:text-primary">{product.name}</h3>
+        <h3 className="text-lg font-black leading-snug group-hover:text-primary">{product.name}</h3>
+        <p className="mt-1 text-sm text-muted">{categoryName(product, locale)}</p>
 
         {product.ratingCount > 0 && (
-          <p className="mt-1 text-xs text-amber-400">
+          <p className="mt-3 text-xs text-accent">
             {stars(product.ratingAverage)}{" "}
             <span className="text-muted">({product.ratingCount})</span>
           </p>
         )}
 
         {product.priceFrom !== null && (
-          <div className="mt-auto flex items-end justify-between gap-2 pt-4">
+          <div className="mt-auto pt-5">
             <div>
               {product.lowStock && (
                 <p className="mb-1 text-xs text-danger">
@@ -90,11 +113,12 @@ export function ProductCard({
                   </span>
                 )}
               </p>
-              <p className="text-base font-bold text-foreground">
+              <p className="text-xl font-black text-foreground">
                 {formatPrice(product.priceFrom, product.currency, locale)}
               </p>
             </div>
-            <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-border text-muted transition-all group-hover:border-transparent group-hover:bg-brand-gradient group-hover:text-white">
+            <span className="mt-4 flex h-10 items-center justify-between border border-border px-3 text-sm font-bold transition-all group-hover:border-primary group-hover:text-primary">
+              <span>{product.inStock ? labels.inStock : labels.outOfStock}</span>
               <svg
                 width="16"
                 height="16"
@@ -111,7 +135,7 @@ export function ProductCard({
             </span>
           </div>
         )}
-      </Card>
+      </article>
     </Link>
   );
 }

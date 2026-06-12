@@ -4,6 +4,7 @@
 
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/httpError";
+import { isSafeRasterMime } from "../../middleware/upload";
 import { SETTING_KEYS, type SettingsPatch, type SiteSettings } from "./settings.schemas";
 
 export async function getSettings(): Promise<SiteSettings> {
@@ -49,11 +50,9 @@ export async function getEnamadBadge() {
 
 // Raster types only — image/svg+xml is active content and must never be served
 // from our origin, even when uploaded by an admin (defense in depth).
-const BADGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
-
 export async function setEnamadBadge(file: { buffer: Buffer; mimetype: string } | undefined) {
   if (!file) throw new AppError(400, "NO_FILE", "An image file is required");
-  if (!BADGE_MIMES.has(file.mimetype.toLowerCase())) {
+  if (!isSafeRasterMime(file.mimetype)) {
     throw new AppError(400, "BAD_FILE_TYPE", "Badge must be a PNG/JPEG/WebP/GIF image");
   }
   await prisma.siteAsset.upsert({

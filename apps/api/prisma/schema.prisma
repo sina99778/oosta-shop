@@ -362,6 +362,9 @@ model Order {
   paymentProvider  PaymentProvider?
   paymentAuthority String?          @unique
   paymentRefId     String?
+  // Immutable provider settings needed to verify this specific payment session.
+  // Runtime gateway settings may change while the buyer is on the gateway page.
+  paymentMetadata  Json?
 
   receipts  Receipt[]
 

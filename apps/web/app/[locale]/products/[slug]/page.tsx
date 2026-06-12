@@ -12,6 +12,10 @@ function imageFor(p: ProductDetail): string | undefined {
   return undefined;
 }
 
+function safeJsonLd(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -98,7 +102,7 @@ export default async function ProductDetailPage({
       {jsonLd && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }}
         />
       )}
       <ProductDetailView locale={locale} slug={slug} dict={dict} />

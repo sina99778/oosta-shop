@@ -4,6 +4,12 @@
 
 import multer from "multer";
 
+export const SAFE_RASTER_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+export function isSafeRasterMime(mimetype: string): boolean {
+  return SAFE_RASTER_MIMES.has(mimetype.toLowerCase());
+}
+
 const imageUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 }, // 5 MB

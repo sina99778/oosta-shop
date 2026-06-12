@@ -89,17 +89,19 @@ export function AdminProductDetail({
   useEffect(() => {
     if (data?.product) {
       const p = data.product;
-      setName(p.name);
-      setSlug(p.slug);
-      setShortDesc(p.shortDescription ?? "");
-      setDesc(p.description);
-      setMetaTitle(p.metaTitle ?? "");
-      setMetaDescription(p.metaDescription ?? "");
-      setSpecs(p.specs.length ? p.specs : []);
-      setFeatured(p.isFeatured);
-      setType(p.type);
-      setCatId(p.category.id);
-      setActive(p.isActive);
+      queueMicrotask(() => {
+        setName(p.name);
+        setSlug(p.slug);
+        setShortDesc(p.shortDescription ?? "");
+        setDesc(p.description);
+        setMetaTitle(p.metaTitle ?? "");
+        setMetaDescription(p.metaDescription ?? "");
+        setSpecs(p.specs.length ? p.specs : []);
+        setFeatured(p.isFeatured);
+        setType(p.type);
+        setCatId(p.category.id);
+        setActive(p.isActive);
+      });
     }
   }, [data]);
 

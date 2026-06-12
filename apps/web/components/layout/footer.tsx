@@ -30,7 +30,7 @@ function socialHref(value: string, base: string): string {
 
 function FooterLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link href={href} className="text-sm text-muted transition-colors hover:text-foreground">
+    <Link href={href} className="text-sm text-muted transition-colors hover:text-primary">
       {label}
     </Link>
   );
@@ -82,20 +82,17 @@ export function Footer({
   ) : null;
 
   return (
-    <footer className="mt-20 border-t border-border bg-surface/40">
-      <div className="h-px bg-brand-gradient opacity-60" />
+    <footer className="mt-20 border-t-2 border-primary bg-[#0d0d0d] text-[#f7f3ea]">
       <Container className="grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-4">
           <Link
             href={base}
-            className="flex items-center gap-2 text-lg font-extrabold tracking-tight"
+            className="flex items-center gap-2 text-2xl font-black tracking-[-0.06em]"
           >
-            <span className="grid size-9 place-items-center rounded-xl bg-brand-gradient text-white shadow-glow">
-              o
-            </span>
             <span>
-              oosta<span className="text-gradient">AI</span>
+              oosta<span className="text-primary">AI</span>
             </span>
+            <span className="size-2 rounded-full bg-primary" />
           </Link>
           <p className="text-sm font-medium text-muted">{dict.tagline}</p>
           <p className="text-sm leading-relaxed text-muted">{about}</p>
@@ -164,7 +161,7 @@ export function Footer({
         </div>
       </Container>
 
-      <div className="border-t border-border">
+      <div className="border-t border-[#393939]">
         <Container className="flex flex-col items-center justify-between gap-2 py-5 text-sm text-muted sm:flex-row">
           <p>© {year} oostaAI</p>
           <p>{dict.rights}</p>

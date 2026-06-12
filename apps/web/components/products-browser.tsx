@@ -19,7 +19,7 @@ export function ProductsBrowser({ locale, dict }: { locale: Locale; dict: Dictio
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    setPage(1);
+    queueMicrotask(() => setPage(1));
   }, [category]);
 
   const query = new URLSearchParams({ page: String(page), pageSize: "12" });

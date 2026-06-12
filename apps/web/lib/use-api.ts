@@ -15,11 +15,13 @@ export function useApi<T>(path: string | null, token?: string): State<T> {
 
   useEffect(() => {
     if (path === null) {
-      setState({ data: null, error: null, loading: false });
+      queueMicrotask(() => setState({ data: null, error: null, loading: false }));
       return;
     }
     let active = true;
-    setState({ data: null, error: null, loading: true });
+    queueMicrotask(() => {
+      if (active) setState({ data: null, error: null, loading: true });
+    });
     api
       .get<T>(path, token)
       .then((data) => {

@@ -4,6 +4,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/httpError";
+import { isSafeRasterMime } from "../../middleware/upload";
 import { deliverOrder, lowStockWarning } from "../orders/orders.service";
 import { notifyAdmin } from "../../bot";
 import { generateSeo, isAiEnabled } from "../../lib/gemini";
@@ -228,7 +229,7 @@ export async function setProductImage(
   file: { buffer: Buffer; mimetype: string } | undefined,
 ) {
   if (!file) throw new AppError(400, "NO_FILE", "An image file is required");
-  if (!file.mimetype.startsWith("image/")) {
+  if (!isSafeRasterMime(file.mimetype)) {
     throw new AppError(400, "BAD_FILE_TYPE", "Product image must be an image (JPG/PNG/WebP)");
   }
   await ensureProduct(id);
@@ -613,7 +614,7 @@ export async function addGalleryImage(
   file: { buffer: Buffer; mimetype: string } | undefined,
 ) {
   if (!file) throw new AppError(400, "NO_FILE", "An image file is required");
-  if (!file.mimetype.startsWith("image/")) {
+  if (!isSafeRasterMime(file.mimetype)) {
     throw new AppError(400, "BAD_FILE_TYPE", "Gallery image must be an image (JPG/PNG/WebP)");
   }
   await ensureProduct(productId);

@@ -13,7 +13,7 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "eslint .",
+    "lint": "eslint . && npm run lint -w @oosta/web",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "dev:api": "npm run dev -w @oosta/api",

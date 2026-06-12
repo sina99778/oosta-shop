@@ -6,6 +6,7 @@ import type { NextFunction, Request, Response } from "express";
 import type { Role } from "@prisma/client";
 import { verifyAccessToken } from "../lib/jwt";
 import { looksLikeApiKey, resolveApiKey } from "../lib/apiKey";
+import { prisma } from "../lib/prisma";
 import { AppError } from "../utils/httpError";
 
 // Accepts either a user JWT (Authorization: Bearer <jwt>) OR an API key
@@ -45,12 +46,31 @@ export async function authenticate(
     next(new AppError(401, "UNAUTHORIZED", "Missing or invalid Authorization header"));
     return;
   }
+  // Only a bad/expired JWT is a 401. A DB error during the authorization lookup
+  // must propagate to the error handler (500) — not masquerade as an auth failure
+  // that makes clients drop a valid session during a transient outage.
+  let payload;
   try {
-    const payload = verifyAccessToken(bearer);
-    req.user = { id: payload.sub, role: payload.role };
-    next();
+    payload = verifyAccessToken(bearer);
   } catch {
     next(new AppError(401, "UNAUTHORIZED", "Invalid or expired token"));
+    return;
+  }
+  try {
+    // The JWT proves identity, but authorization comes from current DB state so
+    // deleting or demoting an admin revokes access immediately instead of after 7d.
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, role: true },
+    });
+    if (!user) {
+      next(new AppError(401, "UNAUTHORIZED", "User no longer exists"));
+      return;
+    }
+    req.user = user;
+    next();
+  } catch (error) {
+    next(error);
   }
 }
 

@@ -2,6 +2,7 @@
 
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/httpError";
+import { isSafeRasterMime } from "../../middleware/upload";
 import type { CreatePostInput, UpdatePostInput } from "./blog.schemas";
 
 // ---------------- Public ----------------
@@ -171,7 +172,7 @@ export async function deletePost(id: string) {
 
 export async function setCover(id: string, file: { buffer: Buffer; mimetype: string } | undefined) {
   if (!file) throw new AppError(400, "NO_FILE", "An image file is required");
-  if (!file.mimetype.startsWith("image/")) {
+  if (!isSafeRasterMime(file.mimetype)) {
     throw new AppError(400, "BAD_FILE_TYPE", "Cover must be an image");
   }
   const exists = await prisma.blogPost.findUnique({ where: { id }, select: { id: true } });
@@ -185,7 +186,7 @@ export async function setCover(id: string, file: { buffer: Buffer; mimetype: str
 
 export async function addMedia(file: { buffer: Buffer; mimetype: string } | undefined) {
   if (!file) throw new AppError(400, "NO_FILE", "An image file is required");
-  if (!file.mimetype.startsWith("image/")) {
+  if (!isSafeRasterMime(file.mimetype)) {
     throw new AppError(400, "BAD_FILE_TYPE", "Media must be an image");
   }
   const media = await prisma.blogMedia.create({

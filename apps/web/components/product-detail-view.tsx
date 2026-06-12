@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/lib/use-api";
 import { useAuth } from "@/lib/auth";
-import { api, ApiError, assetUrl, productImageUrl } from "@/lib/api";
+import { api, ApiError, assetUrl } from "@/lib/api";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,9 +57,10 @@ export function ProductDetailView({
 
   useEffect(() => {
     if (data?.product) {
-      setReviewsList(data.product.reviews);
+      const reviews = data.product.reviews;
+      queueMicrotask(() => setReviewsList(reviews));
     }
-  }, [data?.product?.reviews]);
+  }, [data]);
 
   if (loading) {
     return (
@@ -109,7 +110,7 @@ export function ProductDetailView({
         return;
       }
       if (res.payment?.redirectUrl) {
-        window.location.href = res.payment.redirectUrl;
+        window.location.assign(res.payment.redirectUrl);
         return;
       }
       setBuyError(dict.common.somethingWrong);

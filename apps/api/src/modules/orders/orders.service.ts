@@ -9,7 +9,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { env } from "../../config/env";
 import { AppError } from "../../utils/httpError";
-import { getPaymentProvider } from "../payments/provider";
+import { getPaymentProvider, getPaymentProviderForOrder } from "../payments/provider";
 import { getGatewayConfig } from "../../lib/gatewayConfig";
 import { notifyAdmin } from "../../bot";
 import type { CreateOrderInput } from "./orders.schemas";
@@ -185,17 +185,29 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
     },
   });
 
-  const payment = await provider.createPayment({
-    orderId: order.id,
-    amount: Number(total),
-    currency: order.currency,
-    description: `Order ${order.id}`,
-    callbackUrl: `${env.WEB_BASE_URL}/checkout/callback`,
-  });
+  let payment;
+  try {
+    payment = await provider.createPayment({
+      orderId: order.id,
+      amount: Number(total),
+      currency: order.currency,
+      description: `Order ${order.id}`,
+      callbackUrl: `${env.WEB_BASE_URL}/checkout/callback`,
+    });
+  } catch (error) {
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { paymentStatus: "FAILED" },
+    });
+    throw error;
+  }
 
   await prisma.order.update({
     where: { id: order.id },
-    data: { paymentAuthority: payment.authority },
+    data: {
+      paymentAuthority: payment.authority,
+      ...(payment.verificationContext ? { paymentMetadata: payment.verificationContext } : {}),
+    },
   });
 
   return {
@@ -255,11 +267,12 @@ export async function verifyAndDeliver(authority: string, status: string) {
     return { status: "failed" as const };
   }
 
-  const provider = await getPaymentProvider();
+  const provider = getPaymentProviderForOrder(order.paymentProvider);
   const verification = await provider.verifyPayment({
     authority,
     amount: Number(order.totalAmount),
     currency: order.currency,
+    verificationContext: order.paymentMetadata,
   });
   if (!verification.success) {
     await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "FAILED" } });

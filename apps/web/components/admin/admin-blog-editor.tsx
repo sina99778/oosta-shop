@@ -59,12 +59,14 @@ export function AdminBlogEditor({
   useEffect(() => {
     if (data?.post) {
       const p = data.post;
-      setTitle(p.title);
-      setSlug(p.slug);
-      setSlugTouched(true);
-      setExcerpt(p.excerpt ?? "");
-      setContent(p.content);
-      setStatus(p.status);
+      queueMicrotask(() => {
+        setTitle(p.title);
+        setSlug(p.slug);
+        setSlugTouched(true);
+        setExcerpt(p.excerpt ?? "");
+        setContent(p.content);
+        setStatus(p.status);
+      });
     }
   }, [data]);
 

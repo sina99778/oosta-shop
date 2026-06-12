@@ -37,10 +37,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const stored = window.localStorage.getItem(TOKEN_KEY);
     if (!stored) {
-      setLoading(false);
+      queueMicrotask(() => setLoading(false));
       return;
     }
-    setToken(stored);
+    queueMicrotask(() => setToken(stored));
     api
       .get<{ user: AuthUser }>("/auth/me", stored)
       .then((data) => setUser(data.user))

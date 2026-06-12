@@ -7,7 +7,6 @@ import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
 import { api, ApiError } from "@/lib/api";
 import { Container } from "@/components/ui/container";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";

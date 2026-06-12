@@ -71,6 +71,7 @@ export default async function LocaleLayout({
     <html
       lang={locale}
       dir={dirFor(locale)}
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} ${vazirmatn.variable} h-full antialiased`}
     >
       <body className={`flex min-h-full flex-col bg-background text-foreground ${fontClass}`}>

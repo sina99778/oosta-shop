@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 // Minimal, dependency-free, XSS-safe Markdown renderer. Supports headings
 // (# … ####), unordered (- / *) and ordered (1.) lists, blockquotes (>),
 // horizontal rules (---), bold (**x**), italic (*x*), inline code (`x`),
@@ -31,7 +32,6 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
     }
     const img = part.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
     if (img && safe(img[2])) {
-      // eslint-disable-next-line @next/next/no-img-element
       return (
         <img
           key={key}
