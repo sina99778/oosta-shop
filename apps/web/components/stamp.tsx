@@ -255,6 +255,54 @@ export function BrandStamp({
   );
 }
 
+// Compact round postmark showing an order's state ("delivered", "awaiting
+// payment"…). `tone` picks the ink: red = franked/delivered, ink = in progress,
+// muted = closed without delivery.
+export function StatusPostmark({
+  label,
+  tone,
+  className,
+}: {
+  label: string;
+  tone: "delivered" | "progress" | "closed";
+  className?: string;
+}) {
+  const ink =
+    tone === "delivered"
+      ? "border-primary text-primary"
+      : tone === "progress"
+        ? "border-foreground/70 text-foreground border-dashed"
+        : "border-muted/60 text-muted";
+  return (
+    <span
+      className={cn(
+        "grid size-[78px] shrink-0 -rotate-12 place-items-center rounded-full border-2 p-1 text-center text-[11px] leading-tight font-extrabold",
+        ink,
+        className,
+      )}
+    >
+      <span className="grid size-full place-items-center rounded-full border border-current/40 px-1">
+        {label}
+      </span>
+    </span>
+  );
+}
+
+// Envelope frame: a card with an airmail-striped top edge.
+export function Envelope({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "overflow-hidden rounded-[14px] border border-border bg-card shadow-card",
+        className,
+      )}
+    >
+      <div aria-hidden className="airmail h-1.5" />
+      {children}
+    </div>
+  );
+}
+
 // Small diamond bullet used in trust lists.
 export function Diamond({ children }: { children: ReactNode }) {
   return (

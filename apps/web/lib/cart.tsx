@@ -12,6 +12,8 @@ export type CartLine = {
   productId: string;
   productSlug: string;
   productName: string;
+  // Optional for carts saved before it existed; only used to draw the stamp.
+  productType?: "ACCOUNT" | "LICENSE" | "GIFTCARD";
   planLabel: string;
   unitPrice: number;
   currency: string;

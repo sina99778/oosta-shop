@@ -137,6 +137,7 @@ export function ProductDetailView({
         productId: product.id,
         productSlug: product.slug,
         productName: product.name,
+        productType: product.type,
         planLabel: plan.label,
         unitPrice: plan.effectivePrice,
         currency: plan.currency,

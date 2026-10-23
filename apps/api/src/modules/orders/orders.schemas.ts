@@ -14,6 +14,8 @@ export const createOrderSchema = z.object({
     .max(20),
   // "online" → payment gateway (Zarinpal/mock); "card_to_card" → manual transfer + receipt.
   method: z.enum(["online", "card_to_card"]).default("online"),
+  // Storefront language, so the gateway returns the buyer to the same locale.
+  locale: z.enum(["fa", "en"]).optional(),
 });
 
 // Optional note the buyer can attach to a card-to-card receipt (tracking no, last 4, etc.).

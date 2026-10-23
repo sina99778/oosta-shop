@@ -13,7 +13,7 @@ export async function placeOrder(
   locale: string,
   token: string,
 ): Promise<{ href: string; external: boolean }> {
-  const res = await api.post<CreateOrderResponse>("/orders", { items, method }, token);
+  const res = await api.post<CreateOrderResponse>("/orders", { items, method, locale }, token);
   if (method === "card_to_card") {
     return { href: `/${locale}/checkout/card/${res.order.id}`, external: false };
   }

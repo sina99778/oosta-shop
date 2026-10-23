@@ -6,11 +6,11 @@ import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CredentialField } from "@/components/credential-field";
-import { orderStatusTone } from "@/lib/order-status";
+import { Envelope, ProductStamp, StatusPostmark } from "@/components/stamp";
+import { postmarkTone } from "@/lib/order-status";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import type { Credential, OrderDetail as OrderDetailDto } from "@/lib/types";
@@ -36,6 +36,7 @@ export function OrderDetail({
   );
   const d = dict.dashboard;
   const statusMap = d.status as Record<string, string>;
+  const short = d.statusShort as Record<string, string>;
   const status = data?.order.paymentStatus;
 
   useEffect(() => {
@@ -64,24 +65,38 @@ export function OrderDetail({
   return (
     <Container className="py-10 animate-fade-in">
       <Link href={`/${locale}/dashboard`} className="text-sm text-muted hover:text-foreground">
-        ← {d.backToDashboard}
+        → {d.backToDashboard}
       </Link>
 
-      <div className="mt-4 flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">
-          {d.orderNo} #{order.id.slice(-8)}
-        </h1>
-        <Badge tone={orderStatusTone(order.paymentStatus)}>
-          {statusMap[order.paymentStatus] ?? order.paymentStatus}
-        </Badge>
-      </div>
-      <p className="mt-1 text-sm text-muted">
-        {formatDate(order.createdAt, locale)} ·{" "}
-        {formatPrice(order.totalAmount, order.currency, locale)}
-      </p>
+      <Envelope className="mt-4">
+        <div className="flex items-center justify-between gap-4 p-5 sm:p-6">
+          <div className="min-w-0">
+            <p className="font-mono text-xs text-muted" dir="ltr">
+              #{order.id.slice(-8).toUpperCase()}
+            </p>
+            <h1 className="mt-1 text-2xl font-black">
+              {d.orderNo} #{order.id.slice(-8)}
+            </h1>
+            <p className="mt-1 text-sm text-muted">
+              {formatDate(order.createdAt, locale)} ·{" "}
+              <strong className="text-foreground">
+                {formatPrice(order.totalAmount, order.currency, locale)}
+              </strong>
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              {statusMap[order.paymentStatus] ?? order.paymentStatus}
+            </p>
+          </div>
+          <StatusPostmark
+            label={short[order.paymentStatus] ?? order.paymentStatus}
+            tone={postmarkTone(order.paymentStatus)}
+            className="size-[92px] text-xs"
+          />
+        </div>
+      </Envelope>
 
       {order.paymentStatus === "PAID_UNFULFILLED" && (
-        <Card className="mt-4 border-primary/40" role="status">
+        <Card className="mt-4 rounded-[14px] border-primary/40" role="status">
           <p className="text-sm">{d.unfulfilledBody}</p>
           <Link
             href={`/${locale}/support`}
@@ -94,7 +109,7 @@ export function OrderDetail({
       )}
 
       {order.paymentProvider === "CARD_TO_CARD" && order.cardToCard && (
-        <Card className="mt-4" role="status">
+        <Card className="mt-4 rounded-[14px]" role="status">
           {order.paymentStatus === "PENDING_REVIEW" ? (
             <>
               <p className="text-sm">{d.awaitingReview}</p>
@@ -120,32 +135,62 @@ export function OrderDetail({
 
       <div className="mt-6 space-y-4">
         {order.items.map((item) => (
-          <Card key={item.id}>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="font-semibold">{item.product.name}</p>
+          <div
+            key={item.id}
+            className="overflow-hidden rounded-[14px] border border-border bg-card shadow-card"
+          >
+            <div className="flex items-center gap-4 p-5">
+              <ProductStamp
+                slug={item.product.slug}
+                type={item.product.type}
+                name={item.product.name}
+                size="sm"
+                tilt={-3}
+                hole="var(--c-card)"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="font-extrabold">
+                  <bdi>{item.product.name}</bdi>
+                </p>
                 <p className="text-sm text-muted">
-                  {item.plan.label} · ×{item.quantity}
+                  <bdi>{item.plan.label}</bdi> · ×{item.quantity}
                 </p>
               </div>
-              <span className="font-semibold">
+              <span className="shrink-0 font-bold">
                 {formatPrice(item.lineTotal, order.currency, locale)}
               </span>
             </div>
 
-            <div className="mt-4">
-              <p className="mb-2 text-sm font-medium">{d.vault}</p>
+            <div className="border-t border-dashed border-border bg-surface/60 p-5">
+              <p className="mb-3 flex items-center gap-2 text-sm font-extrabold">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden
+                >
+                  <rect x="4" y="10" width="16" height="11" rx="2" />
+                  <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+                </svg>
+                {d.vault}
+              </p>
               {item.credentials.length === 0 ? (
                 <p className="text-sm text-muted">{d.noCredentials}</p>
               ) : (
-                <div className="space-y-2">
-                  {item.credentials.map((cred) => (
-                    <CredentialBlock key={cred.id} cred={cred} dict={dict} />
-                  ))}
-                </div>
+                <>
+                  <div className="space-y-2">
+                    {item.credentials.map((cred) => (
+                      <CredentialBlock key={cred.id} cred={cred} dict={dict} />
+                    ))}
+                  </div>
+                  <p className="mt-3 text-xs leading-6 text-muted">{d.privateNote}</p>
+                </>
               )}
             </div>
-          </Card>
+          </div>
         ))}
       </div>
     </Container>
@@ -156,7 +201,7 @@ function CredentialBlock({ cred, dict }: { cred: Credential; dict: Dictionary })
   const d = dict.dashboard;
   const labels = { reveal: d.reveal, hide: d.hide, copy: d.copy, copied: d.copied };
   return (
-    <div className="space-y-2 rounded-lg border border-border p-3">
+    <div className="space-y-2 rounded-[10px] border border-dashed border-border bg-card p-3">
       {cred.accountEmail && (
         <CredentialField label={d.fields.accountEmail} value={cred.accountEmail} {...labels} />
       )}

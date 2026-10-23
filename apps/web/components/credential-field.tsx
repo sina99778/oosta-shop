@@ -32,7 +32,7 @@ export function CredentialField({
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2">
+    <div className="flex items-center justify-between gap-3 rounded-[8px] bg-surface px-3 py-2">
       <div className="min-w-0">
         <p className="text-xs text-muted">{label}</p>
         <p className="truncate font-mono text-sm" dir="ltr">

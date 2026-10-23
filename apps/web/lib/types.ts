@@ -189,6 +189,9 @@ export type OrderSummary = {
   createdAt: string;
   paidAt: string | null;
   expiresAt?: string | null;
+  paymentProvider?: string | null;
+  // First few products in the order (for the dashboard's stamps).
+  products?: { name: string; slug: string; type: ProductType }[];
 };
 
 export type Credential = {

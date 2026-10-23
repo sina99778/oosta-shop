@@ -6,3 +6,12 @@ export function orderStatusTone(status: string): "success" | "muted" | "danger" 
   if (status === "PENDING" || status === "PENDING_REVIEW") return "muted";
   return "danger";
 }
+
+// Ink for the order's postmark on the "vault" pages.
+export function postmarkTone(status: string): "delivered" | "progress" | "closed" {
+  if (status === "PAID") return "delivered";
+  if (status === "PENDING" || status === "PENDING_REVIEW" || status === "PAID_UNFULFILLED") {
+    return "progress";
+  }
+  return "closed";
+}

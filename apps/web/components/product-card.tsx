@@ -72,8 +72,8 @@ export function ProductCard({
         </div>
 
         <div className="flex flex-1 flex-col gap-1 p-3 sm:p-4">
-          <h3 className="text-base font-extrabold leading-snug group-hover:text-primary" dir="auto">
-            {product.name}
+          <h3 className="text-base font-extrabold leading-snug group-hover:text-primary">
+            <bdi>{product.name}</bdi>
           </h3>
           <p className="text-[13px] text-muted">{categoryName(product.category, locale)}</p>
 

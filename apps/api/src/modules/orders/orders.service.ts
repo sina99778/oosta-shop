@@ -269,7 +269,7 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
       amount: Number(total),
       currency: order.currency,
       description: `Order ${order.id}`,
-      callbackUrl: `${env.WEB_BASE_URL}/checkout/callback`,
+      callbackUrl: `${env.WEB_BASE_URL}${input.locale ? `/${input.locale}` : ""}/checkout/callback`,
     });
   } catch (error) {
     await closeUnpaidOrder(order.id, "FAILED");
@@ -515,14 +515,23 @@ export async function listOrders(userId: string) {
   const orders = await prisma.order.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
-    include: { _count: { select: { items: true } } },
+    include: {
+      _count: { select: { items: true } },
+      // First few products, so the dashboard can draw each order's stamps.
+      items: {
+        take: 3,
+        select: { product: { select: { name: true, slug: true, type: true } } },
+      },
+    },
   });
   return orders.map((order) => ({
     id: order.id,
     totalAmount: Number(order.totalAmount),
     currency: order.currency,
     paymentStatus: order.paymentStatus,
+    paymentProvider: order.paymentProvider,
     itemCount: order._count.items,
+    products: order.items.map((item) => item.product),
     createdAt: order.createdAt,
     paidAt: order.paidAt,
     expiresAt: order.paymentStatus === "PENDING" ? order.expiresAt : null,

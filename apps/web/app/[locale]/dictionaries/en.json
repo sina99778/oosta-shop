@@ -129,11 +129,11 @@
   },
   "checkout": {
     "verifying": "Confirming your payment…",
-    "successTitle": "Payment successful",
-    "successBody": "Your purchase is ready — view the delivered details in your dashboard.",
+    "successTitle": "Your envelope arrived.",
+    "successBody": "Payment is franked and the contents are in your vault right now.",
     "failTitle": "Payment failed",
     "failBody": "Your payment was not completed. You have not been charged.",
-    "viewOrders": "Go to dashboard",
+    "viewOrders": "Open the envelope",
     "backToStore": "Back to store",
     "missingParams": "Missing payment information.",
     "chooseMethod": "Choose a payment method",
@@ -169,18 +169,18 @@
     "orderRef": "Order number"
   },
   "dashboard": {
-    "orders": "Your orders",
-    "noOrders": "You haven't placed any orders yet.",
-    "orderNo": "Order",
+    "orders": "Your vault",
+    "noOrders": "No envelopes have reached your vault yet.",
+    "orderNo": "Envelope",
     "items": "items",
     "viewDetails": "View details",
-    "vault": "Account vault",
-    "noCredentials": "Credentials appear here once payment is confirmed.",
+    "vault": "Envelope contents",
+    "noCredentials": "Not franked yet — the contents appear here once payment is confirmed.",
     "reveal": "Reveal",
     "hide": "Hide",
     "copy": "Copy",
     "copied": "Copied",
-    "backToDashboard": "Back to dashboard",
+    "backToDashboard": "Vault",
     "completePayment": "Complete payment",
     "awaitingReview": "Your receipt is awaiting review.",
     "fields": {
@@ -202,7 +202,26 @@
     "reservedUntil": "Stock for this order is reserved for you until:",
     "autoRefresh": "This page refreshes automatically.",
     "reviewEta": "Receipts are usually reviewed within 30 minutes during business hours.",
-    "unfulfilledBody": "We received your payment; the order will be delivered as soon as we restock. Contact support with any questions."
+    "unfulfilledBody": "We received your payment; the order will be delivered as soon as we restock. Contact support with any questions.",
+    "vaultSubtitle": "Every order is an envelope. Franked envelopes are ready to open.",
+    "statDelivered": "Envelopes delivered",
+    "statWaiting": "In progress",
+    "statSpent": "Total spent",
+    "openEnvelope": "Open envelope",
+    "emptyBody": "Pick your first stamp — its envelope lands right here.",
+    "browse": "Browse products",
+    "privateNote": "Only you can see these details, and they are stored encrypted. Keep them somewhere safe.",
+    "itemsInEnvelope": "items in this envelope",
+    "statusShort": {
+      "PENDING": "Awaiting payment",
+      "PENDING_REVIEW": "In review",
+      "PAID": "Delivered",
+      "PAID_UNFULFILLED": "On its way",
+      "FAILED": "Failed",
+      "REJECTED": "Rejected",
+      "REFUNDED": "Refunded",
+      "EXPIRED": "Expired"
+    }
   },
   "blog": {
     "title": "Blog",
@@ -500,7 +519,7 @@
   "cart": {
     "title": "Your envelope",
     "empty": "Your envelope is empty.",
-    "browse": "Browse products",
+    "browse": "Pick a stamp",
     "remove": "Remove",
     "total": "Total",
     "checkout": "Pay & deliver instantly",
@@ -508,6 +527,10 @@
     "priceNote": "The final price is calculated by the server when you place the order.",
     "reserveNote": "After you place the order, stock is reserved for you for a limited time.",
     "clear": "Empty the envelope",
-    "items": "items"
+    "items": "stamps",
+    "linesTitle": "Stamps in this envelope",
+    "readyToSend": "Ready to send",
+    "sendTitle": "Send the envelope",
+    "emptyBody": "Stamps you pick sit together here, so one payment delivers them all at once."
   }
 }
