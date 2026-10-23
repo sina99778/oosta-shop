@@ -1,20 +1,21 @@
 import Link from "next/link";
 import { fetchJson } from "@/lib/seo";
-import { formatPrice } from "@/lib/format";
 import { ProductCard } from "@/components/product-card";
-import { ProductMark } from "@/components/product-mark";
+import { Diamond, Postmark, ProductStamp, StampArt } from "@/components/stamp";
 import { Container } from "@/components/ui/container";
+import { categoryName } from "@/lib/category-name";
 import type { Locale } from "@/lib/i18n";
-import type { Category, ProductSummary } from "@/lib/types";
+import type { Category, ProductSummary, ProductType } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 
-const CATEGORY_ICONS: Record<string, string> = {
-  "ai-accounts": "AI",
-  "software-licenses": "⌁",
-  "gift-cards": "□",
+// Category slug -> which stamp series art represents it.
+const SERIES: Record<string, { type: ProductType; slug: string }> = {
+  "ai-accounts": { type: "ACCOUNT", slug: "chatgpt" },
+  "software-licenses": { type: "LICENSE", slug: "windows" },
+  "gift-cards": { type: "GIFTCARD", slug: "google-play" },
 };
 
-function ArrowIcon() {
+function ChevronIcon() {
   return (
     <svg
       width="18"
@@ -22,32 +23,11 @@ function ArrowIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.2"
+      aria-hidden
+      className="ltr:-scale-x-100"
     >
-      <path d="M5 12h14M13 6l6 6-6 6" />
-    </svg>
-  );
-}
-
-function FeatureIcon({ kind }: { kind: "bolt" | "shield" | "headset" | "return" }) {
-  const paths = {
-    bolt: "M13 2 3 14h7l-1 8 10-12h-7l1-8z",
-    shield: "M12 22s8-3.5 8-10V5l-8-3-8 3v7c0 6.5 8 10 8 10z",
-    headset: "M4 14v-2a8 8 0 0 1 16 0v2M4 14h3v6H5a1 1 0 0 1-1-1v-5Zm16 0h-3v6h2a1 1 0 0 0 1-1v-5Z",
-    return: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5",
-  };
-  return (
-    <svg
-      width="22"
-      height="22"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d={paths[kind]} />
+      <path d="M15 6l-6 6 6 6" />
     </svg>
   );
 }
@@ -69,65 +49,10 @@ export async function HomeSections({
   ]);
   const categories = categoriesData?.categories ?? [];
   const best = bestData?.products ?? [];
+  const h = dict.home;
+  const base = `/${locale}`;
 
-  const copy =
-    locale === "fa"
-      ? {
-          heroAccent: "فوری مال توئه",
-          kicker: "تحویل فوری",
-          primaryCta: "بزن بریم",
-          live: "موجودی زنده",
-          product: "محصول",
-          price: "قیمت از",
-          stock: "موجودی",
-          delivery: "تحویل",
-          instant: "آنی",
-          allProducts: "مشاهده همه محصولات",
-          customers: "خرید مستقیم و تحویل کاملاً خودکار",
-          categoryAll: "همه",
-          newPopular: "جدید و محبوب",
-          dashboardTitle: "در داشبوردت تحویل بگیر",
-          paymentSuccess: "پرداخت موفق",
-          deliveredInfo: "اطلاعات تحویل",
-          ready: "آماده مشاهده",
-          email: "ایمیل / ورود",
-          password: "رمز عبور",
-          viewDashboard: "مشاهده در داشبورد",
-          categoryNames: {
-            "ai-accounts": "اکانت‌های AI",
-            "software-licenses": "لایسنس نرم‌افزار",
-            "gift-cards": "گیفت‌کارت",
-          } as Record<string, string>,
-        }
-      : {
-          heroAccent: "instantly yours",
-          kicker: "Instant delivery",
-          primaryCta: "Start shopping",
-          live: "Live inventory",
-          product: "Product",
-          price: "From",
-          stock: "Stock",
-          delivery: "Delivery",
-          instant: "Instant",
-          allProducts: "View all products",
-          customers: "Direct purchase with fully automatic delivery",
-          categoryAll: "All",
-          newPopular: "New and popular",
-          dashboardTitle: "Delivered to your dashboard",
-          paymentSuccess: "Payment successful",
-          deliveredInfo: "Delivery details",
-          ready: "Ready to view",
-          email: "Email / Login",
-          password: "Password",
-          viewDashboard: "View in dashboard",
-          categoryNames: {
-            "ai-accounts": "AI accounts",
-            "software-licenses": "Software licenses",
-            "gift-cards": "Gift cards",
-          } as Record<string, string>,
-        };
-
-  const labels = {
+  const cardLabels = {
     from: dict.common.from,
     inStock: dict.common.inStock,
     outOfStock: dict.common.outOfStock,
@@ -136,260 +61,196 @@ export async function HomeSections({
     left: dict.product.left,
   };
 
-  const liveProducts = best.slice(0, 5);
+  // Three stamps stuck on the hero envelope: real bestsellers when we have them.
+  const envelopeStamps = best.slice(0, 3);
+  const stampSpots = [
+    "top-[120px] end-[60px] rotate-[5deg]",
+    "top-[150px] end-[196px] -rotate-[4deg]",
+    "top-[110px] start-[40px] rotate-[9deg]",
+  ];
 
   return (
     <>
-      {/* Always-dark hero: scope the dark palette here so brand colors keep AA contrast in light mode too. */}
-      <section className="dark relative overflow-hidden border-b border-border bg-[#0d0d0d] text-[#f7f3ea]">
-        <div className="signal-grid pointer-events-none absolute inset-0 opacity-30" />
-        <div className="signal-halftone pointer-events-none absolute -end-24 top-10 h-[420px] w-[440px] opacity-70" />
-        <Container className="relative grid gap-10 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:py-16">
-          <div className="lg:pe-6">
-            <span className="inline-flex items-center gap-2 border border-primary px-4 py-2 text-sm font-black text-primary">
-              <FeatureIcon kind="bolt" />
-              {copy.kicker}
-            </span>
-            <h1 className="signal-display mt-7 max-w-3xl text-5xl sm:text-6xl lg:text-7xl xl:text-[86px]">
-              <span className="block">{heroTitle}</span>
-              <span className="mt-2 block text-primary">{copy.heroAccent}</span>
-            </h1>
-            <p className="mt-7 max-w-2xl text-base leading-8 text-[#bdb7ae] sm:text-lg">
-              {heroSubtitle}
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                href={`/${locale}/products`}
-                className="inline-flex h-14 min-w-44 items-center justify-center gap-3 bg-primary px-7 text-base font-black text-primary-foreground transition-colors hover:bg-primary-hover"
-              >
-                <FeatureIcon kind="bolt" />
-                {copy.primaryCta}
-              </Link>
-              <Link
-                href={`/${locale}/products`}
-                className="inline-flex h-14 min-w-44 items-center justify-center gap-3 border border-[#f7f3ea] px-7 text-base font-black transition-colors hover:border-primary hover:text-primary"
-              >
-                {dict.home.browse}
-                <span className="rtl:-scale-x-100">
-                  <ArrowIcon />
-                </span>
-              </Link>
-            </div>
-            <div className="mt-7 flex flex-wrap gap-x-6 gap-y-3 text-sm text-[#c9c3b9]">
-              <span className="inline-flex items-center gap-2">
-                <FeatureIcon kind="bolt" />
-                {dict.home.trust1}
-              </span>
-              <span className="inline-flex items-center gap-2">
-                <FeatureIcon kind="shield" />
-                {dict.home.trust2}
-              </span>
-              <span className="inline-flex items-center gap-2">
-                <FeatureIcon kind="headset" />
-                {dict.home.trust3}
-              </span>
-            </div>
-          </div>
-
-          <div className="border-2 border-accent bg-[#111] p-4 shadow-[10px_10px_0_0_#ffd500] sm:p-5">
-            <div className="mb-4 flex items-center gap-4">
-              <span className="h-px flex-1 bg-accent/50" />
-              <h2 className="bg-accent px-5 py-2 text-lg font-black text-black sm:text-xl">
-                <span className="me-2 inline-block size-2.5 animate-pulse rounded-full bg-primary" />
-                {copy.live}
-              </h2>
-              <span className="h-px flex-1 bg-accent/50" />
-            </div>
-            <div className="grid grid-cols-[minmax(0,1.65fr)_0.85fr_0.7fr_0.65fr] gap-2 border-b border-[#494949] px-2 pb-3 text-xs font-bold text-accent sm:text-sm">
-              <span>{copy.product}</span>
-              <span>{copy.price}</span>
-              <span>{copy.stock}</span>
-              <span>{copy.delivery}</span>
-            </div>
-            <div>
-              {liveProducts.map((product) => (
-                <Link
-                  key={product.id}
-                  href={`/${locale}/products/${product.slug}`}
-                  className="grid grid-cols-[minmax(0,1.65fr)_0.85fr_0.7fr_0.65fr] items-center gap-2 border-b border-[#393939] px-2 py-3 text-xs transition-colors hover:bg-white/5 sm:text-sm"
-                >
-                  <span className="flex min-w-0 items-center gap-2 font-bold">
-                    <ProductMark
-                      name={product.name}
-                      slug={product.slug}
-                      type={product.type}
-                      className="size-9"
-                    />
-                    <span className="truncate" dir="ltr">
-                      {product.name.replace(" Account", "")}
-                    </span>
-                  </span>
-                  <span className="truncate font-bold">
-                    {product.priceFrom !== null
-                      ? formatPrice(product.priceFrom, product.currency, locale)
-                      : "—"}
-                  </span>
-                  <span
-                    className={`inline-flex items-center gap-1.5 ${
-                      product.inStock ? "text-emerald-400" : "text-red-400"
-                    }`}
-                  >
-                    <i
-                      className={`size-2 rounded-full ${
-                        product.inStock ? "bg-emerald-400" : "bg-red-400"
-                      }`}
-                    />
-                    {product.inStock ? dict.common.inStock : dict.common.outOfStock}
-                  </span>
-                  <span className="inline-flex items-center gap-1 text-accent">
-                    <FeatureIcon kind="bolt" />
-                    {copy.instant}
-                  </span>
-                </Link>
-              ))}
-            </div>
+      {/* ---- Hero: the promise + an airmail envelope ---- */}
+      <Container className="grid items-center gap-12 py-12 lg:grid-cols-2 lg:py-16">
+        <div className="flex flex-col gap-5">
+          <span className="flex items-center gap-2 text-sm font-bold text-primary">
+            <span aria-hidden className="w-6 border-t-2 border-primary" />
+            {h.heroKicker}
+          </span>
+          <h1 className="text-4xl leading-[1.3] font-black tracking-tight sm:text-5xl">
+            {heroTitle}
+            <br />
+            <span className="text-primary">{h.heroAccent}</span>
+          </h1>
+          <p className="max-w-xl text-base leading-8 text-muted sm:text-lg sm:leading-9">
+            {heroSubtitle}
+          </p>
+          <div className="flex flex-wrap gap-3">
             <Link
-              href={`/${locale}/products`}
-              className="mt-4 flex h-12 items-center justify-between bg-accent px-5 font-black text-black transition-colors hover:bg-yellow-300"
+              href={`${base}/products`}
+              className="inline-flex h-13 items-center gap-2 rounded-[10px] bg-primary px-6 font-extrabold text-primary-foreground transition-colors hover:bg-primary-hover"
             >
-              {copy.allProducts}
-              <span className="rtl:-scale-x-100">
-                <ArrowIcon />
-              </span>
+              {h.browse}
+              <ChevronIcon />
             </Link>
+            <a
+              href="#how"
+              className="inline-flex h-13 items-center rounded-[10px] border border-foreground px-5 font-bold transition-colors hover:border-primary hover:text-primary"
+            >
+              {h.howCta}
+            </a>
           </div>
-        </Container>
-      </section>
+          <ul className="mt-2 flex flex-wrap gap-x-7 gap-y-2 border-t border-dashed border-border pt-4 text-sm text-muted">
+            <Diamond>{h.trust1}</Diamond>
+            <Diamond>{h.trust2}</Diamond>
+            <Diamond>{h.trust3}</Diamond>
+          </ul>
+        </div>
 
-      <section className="signal-ticker border-b border-t border-black">
-        <Container className="grid grid-cols-2 divide-x divide-black/20 py-0 md:grid-cols-4 rtl:divide-x-reverse">
-          {[
-            ["bolt", dict.home.featInstantTitle, dict.home.featInstantText],
-            ["shield", dict.home.featSecureTitle, dict.home.featSecureText],
-            ["headset", dict.home.featSupportTitle, dict.home.featSupportText],
-            ["return", dict.home.featWarrantyTitle, dict.home.featWarrantyText],
-          ].map(([kind, title, text]) => (
-            <div key={title} className="flex min-h-24 items-center gap-3 px-3 py-4 sm:px-5">
-              <span className="text-primary">
-                <FeatureIcon kind={kind as "bolt" | "shield" | "headset" | "return"} />
-              </span>
-              <div>
-                <p className="font-black">{title}</p>
-                <p className="mt-1 hidden text-xs text-black/60 sm:block">{text}</p>
+        <div aria-hidden className="airmail rounded-md p-2.5">
+          <div className="relative h-[340px] overflow-hidden rounded-sm bg-[#f6f1e7] text-[#1b2433] sm:h-[380px]">
+            <div className="absolute inset-x-7 top-6 flex justify-between text-[13px] text-[#6d6656]">
+              <div className="flex w-[46%] flex-col gap-1.5">
+                <span>{h.envelopeTo}</span>
+                <span className="border-b border-[#cfc5b2] pb-1 font-bold text-[#1b2433]">
+                  {h.envelopeDashboard}
+                </span>
+                <span className="border-b border-[#cfc5b2] pb-1">{h.envelopeVault}</span>
               </div>
-            </div>
-          ))}
-        </Container>
-      </section>
-
-      <Container className="grid gap-8 py-10 lg:grid-cols-[330px_minmax(0,1fr)] lg:py-14">
-        <aside className="h-fit border border-accent bg-card p-4 lg:sticky lg:top-24">
-          <h2 className="flex items-center gap-2 text-lg font-black text-accent">
-            <span className="text-2xl">□</span>
-            {copy.dashboardTitle}
-          </h2>
-          <div className="mt-4 border border-border bg-background">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3 text-xs">
-              <span dir="ltr">#ORD-4587</span>
-              <span className="bg-success/20 px-2 py-1 font-bold text-success">
-                {copy.paymentSuccess}
+              <span className="font-mono text-xs tracking-[2px]" dir="ltr">
+                PAR AVION
               </span>
             </div>
-            <div className="flex items-center gap-3 border-b border-border p-4">
-              <ProductMark
-                name="ChatGPT Plus"
-                slug="chatgpt-plus"
-                type="ACCOUNT"
-                className="size-12"
-              />
-              <div>
-                <p className="font-black" dir="ltr">
-                  ChatGPT Plus
-                </p>
-                <p className="text-xs text-muted">{dict.product.instantDelivery}</p>
-              </div>
-            </div>
-            <div className="space-y-3 p-4 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="font-bold">{copy.deliveredInfo}</span>
-                <span className="text-accent">✓</span>
-              </div>
-              <div className="flex items-center justify-between border-t border-border pt-3">
-                <span className="text-muted">{copy.email}</span>
-                <span dir="ltr">user@example.com</span>
-              </div>
-              <div className="flex items-center justify-between border-t border-border pt-3">
-                <span className="text-muted">{copy.password}</span>
-                <span dir="ltr">••••••••</span>
-              </div>
-              <p className="border-t border-border pt-3 text-xs text-success">● {copy.ready}</p>
-            </div>
+            {envelopeStamps.map((p, i) => (
+              <span key={p.id} className={`absolute ${stampSpots[i]}`}>
+                <ProductStamp
+                  slug={p.slug}
+                  type={p.type}
+                  name={p.name}
+                  size={i === 1 ? "lg" : "md"}
+                  hole="#f6f1e7"
+                  series={categoryName(p.category, locale)}
+                />
+              </span>
+            ))}
+            <Postmark
+              label={h.postmarkLabel}
+              id="hero-postmark"
+              className="absolute bottom-6 start-16 w-[230px] -rotate-12 text-[rgba(160,40,22,0.82)]"
+            />
           </div>
-          <Link
-            href={`/${locale}/dashboard`}
-            className="mt-4 flex h-12 items-center justify-between bg-accent px-4 font-black text-black hover:bg-yellow-300"
-          >
-            {copy.viewDashboard}
-            <span className="rtl:-scale-x-100">
-              <ArrowIcon />
-            </span>
-          </Link>
-        </aside>
-
-        <div>
-          {categories.length > 0 && (
-            <nav className="grid border border-border sm:grid-cols-2 lg:grid-cols-4">
-              <Link
-                href={`/${locale}/products`}
-                className="flex min-h-16 items-center justify-center gap-3 bg-accent px-4 font-black text-black"
-              >
-                <span className="text-xl">▦</span>
-                {copy.categoryAll}
-              </Link>
-              {categories.map((category) => (
-                <Link
-                  key={category.id}
-                  href={`/${locale}/products?category=${category.slug}`}
-                  className="flex min-h-16 items-center justify-center gap-3 border-t border-border px-4 font-black transition-colors hover:bg-primary hover:text-primary-foreground sm:border-s sm:border-t-0"
-                >
-                  <span className="text-xl text-primary">
-                    {CATEGORY_ICONS[category.slug] ?? "•"}
-                  </span>
-                  {copy.categoryNames[category.slug] ?? category.name}
-                </Link>
-              ))}
-            </nav>
-          )}
-
-          <section className="mt-8">
-            <div className="mb-5 flex items-center justify-between gap-4">
-              <h2 className="flex items-center gap-3 text-2xl font-black">
-                <span className="h-7 w-1 bg-primary" />
-                {copy.newPopular}
-              </h2>
-              <Link
-                href={`/${locale}/products`}
-                className="text-sm font-bold text-primary hover:underline"
-              >
-                {dict.common.viewAll}
-              </Link>
-            </div>
-            {best.length > 0 ? (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {best.slice(0, 4).map((product) => (
-                  <ProductCard key={product.id} product={product} locale={locale} labels={labels} />
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted">{dict.home.noProducts}</p>
-            )}
-            <p className="mt-5 flex items-center gap-2 text-sm text-muted">
-              <span className="size-2 rounded-full bg-success" />
-              {copy.customers}
-            </p>
-          </section>
         </div>
       </Container>
+
+      {/* ---- The three series ---- */}
+      {categories.length > 0 && (
+        <section aria-labelledby="series-title">
+          <Container className="pb-12">
+            <h2 id="series-title" className="text-2xl font-black">
+              {h.seriesTitle}
+            </h2>
+            <p className="mt-1 text-sm text-muted">{h.seriesSubtitle}</p>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {categories.map((c) => {
+                const series = SERIES[c.slug] ?? { type: "ACCOUNT" as ProductType, slug: c.slug };
+                return (
+                  <Link
+                    key={c.id}
+                    href={`${base}/products?category=${c.slug}`}
+                    className="group flex items-center gap-5 rounded-[14px] border border-border bg-card p-4 shadow-card transition-colors hover:border-primary/50"
+                  >
+                    <ProductStamp
+                      slug={series.slug}
+                      type={series.type}
+                      name={c.name}
+                      size="sm"
+                      hole="var(--c-card)"
+                    />
+                    <span className="flex flex-col gap-0.5">
+                      <strong className="text-lg group-hover:text-primary">
+                        {categoryName(c, locale)}
+                      </strong>
+                      <span className="text-sm text-muted">
+                        {new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US").format(
+                          c.productCount,
+                        )}{" "}
+                        {h.seriesItems}
+                      </span>
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </Container>
+        </section>
+      )}
+
+      {/* ---- Bestsellers ---- */}
+      <section aria-labelledby="best-title">
+        <Container className="pb-14">
+          <div className="mb-5 flex items-end justify-between gap-4">
+            <div>
+              <h2 id="best-title" className="text-2xl font-black">
+                {h.bestsellers}
+              </h2>
+              <p className="mt-1 text-sm text-muted">{h.bestsellersSubtitle}</p>
+            </div>
+            <Link
+              href={`${base}/products`}
+              className="shrink-0 border-b border-foreground text-sm font-bold hover:border-primary hover:text-primary"
+            >
+              {h.allProducts}
+            </Link>
+          </div>
+          {best.length === 0 ? (
+            <p className="text-muted">{h.noProducts}</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+              {best.map((p) => (
+                <ProductCard key={p.id} product={p} locale={locale} labels={cardLabels} />
+              ))}
+            </div>
+          )}
+        </Container>
+      </section>
+
+      {/* ---- How delivery works ---- */}
+      <section id="how" aria-labelledby="how-title" className="bg-ink text-[#f3eee4]">
+        <Container className="py-12">
+          <h2 id="how-title" className="text-2xl font-black">
+            {h.howTitle}
+          </h2>
+          <p className="mt-1.5 text-sm text-[#c3cad6]">{h.howSubtitle}</p>
+          <ol className="mt-7 grid gap-5 md:grid-cols-3">
+            {[
+              [h.step1Title, h.step1Text],
+              [h.step2Title, h.step2Text],
+              [h.step3Title, h.step3Text],
+            ].map(([title, text], i) => (
+              <li
+                key={title}
+                className="flex items-start gap-4 rounded-[14px] border border-[rgba(243,238,228,0.16)] p-5"
+              >
+                <span
+                  aria-hidden
+                  className="grid size-13 shrink-0 -rotate-[10deg] place-items-center rounded-full border-2 border-[#e98a73] text-xl font-black text-[#f2a08c]"
+                >
+                  {new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US").format(i + 1)}
+                </span>
+                <span>
+                  <strong className="mb-1 block text-base">{title}</strong>
+                  <span className="text-[13px] leading-7 text-[#c3cad6]">{text}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-8 flex items-center gap-3 text-[#e98a73]">
+            <StampArt kind="knot" className="size-6" />
+            <span className="text-sm text-[#c3cad6]">{dict.footer.tagline}</span>
+          </div>
+        </Container>
+      </section>
     </>
   );
 }

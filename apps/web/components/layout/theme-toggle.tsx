@@ -28,7 +28,7 @@ export function ThemeToggle({ label }: { label: string }) {
       aria-label={label}
       aria-pressed={dark}
       title={label}
-      className="inline-flex size-10 items-center justify-center border border-border text-muted transition-colors hover:border-primary hover:text-primary"
+      className="inline-flex size-10 items-center justify-center rounded-[10px] border border-border text-muted transition-colors hover:border-primary hover:text-primary"
     >
       {dark ? (
         // moon

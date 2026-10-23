@@ -16,6 +16,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QuantityStepper } from "@/components/ui/quantity-stepper";
 import { Markdown } from "@/components/markdown";
+import { Postmark, ProductStamp } from "@/components/stamp";
+import { categoryName } from "@/lib/category-name";
 import { ProductCard } from "@/components/product-card";
 import { cn } from "@/lib/cn";
 import { formatPrice, formatDate } from "@/lib/format";
@@ -187,7 +189,7 @@ export function ProductDetailView({
           href={`/${locale}/products?category=${product.category.slug}`}
           className="hover:text-foreground"
         >
-          {product.category.name}
+          {categoryName(product.category, locale)}
         </Link>
         <span>/</span>
         <span className="text-foreground">{product.name}</span>
@@ -196,7 +198,7 @@ export function ProductDetailView({
       <div className="grid gap-8 lg:grid-cols-2">
         {/* Gallery */}
         <div>
-          <div className="aspect-[4/3] overflow-hidden rounded-xl border border-border bg-surface">
+          <div className="relative aspect-[4/3] overflow-hidden rounded-[14px] border border-border bg-surface">
             {images.length > 0 ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -205,8 +207,29 @@ export function ProductDetailView({
                 className="h-full w-full object-cover"
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-6xl font-bold text-muted/30">
-                {product.name.charAt(0)}
+              <div className="grid h-full w-full place-items-center">
+                <ProductStamp
+                  slug={product.slug}
+                  type={product.type}
+                  name={product.name}
+                  size="lg"
+                  tilt={-2}
+                  denomination={
+                    plan
+                      ? new Intl.NumberFormat("fa-IR").format(
+                          plan.currency === "IRR" ? plan.effectivePrice / 10 : plan.effectivePrice,
+                        )
+                      : undefined
+                  }
+                  series={categoryName(product.category, locale)}
+                />
+                {product.inStock && (
+                  <Postmark
+                    label={t.postmark}
+                    id="product-postmark"
+                    className="absolute end-[3%] top-[5%] w-[130px] sm:w-[170px] -rotate-[14deg] text-[rgba(160,40,22,0.85)] dark:text-[rgba(232,115,93,0.85)]"
+                  />
+                )}
               </div>
             )}
           </div>
@@ -232,7 +255,7 @@ export function ProductDetailView({
         {/* Info */}
         <div>
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <Badge tone="muted">{product.category.name}</Badge>
+            <Badge tone="muted">{categoryName(product.category, locale)}</Badge>
             {product.isFeatured && <Badge tone="primary">{t.featured}</Badge>}
             {plan?.onSale && (
               <Badge tone="sale">
@@ -353,7 +376,7 @@ export function ProductDetailView({
                 />
                 <Button
                   variant="outline"
-                  className="flex-1 rounded-none"
+                  className="flex-1 rounded-[10px]"
                   disabled={buying !== null}
                   onClick={addToCart}
                 >
@@ -409,16 +432,24 @@ export function ProductDetailView({
               </Button>
             )}
 
+            <p className="mt-4 flex items-center justify-between rounded-[10px] bg-surface px-3 py-2.5 text-sm">
+              <span className="text-muted">{t.whereDelivered}</span>
+              <strong>{t.whereDeliveredValue}</strong>
+            </p>
+
             {/* Trust signals, right where the buying decision happens */}
             <ul className="mt-4 grid gap-2 border-t border-border pt-4 text-xs text-muted sm:grid-cols-3">
               <li className="flex items-center gap-1.5">
-                <span aria-hidden>⚡</span> {t.trustInstant}
+                <span aria-hidden className="size-1.5 shrink-0 rotate-45 bg-primary" />{" "}
+                {t.trustInstant}
               </li>
               <li className="flex items-center gap-1.5">
-                <span aria-hidden>🔒</span> {t.trustSecure}
+                <span aria-hidden className="size-1.5 shrink-0 rotate-45 bg-primary" />{" "}
+                {t.trustSecure}
               </li>
               <li className="flex items-center gap-1.5">
-                <span aria-hidden>💬</span> {t.trustSupport}
+                <span aria-hidden className="size-1.5 shrink-0 rotate-45 bg-primary" />{" "}
+                {t.trustSupport}
               </li>
             </ul>
           </Card>
@@ -556,7 +587,7 @@ export function ProductDetailView({
       {product.related.length > 0 && (
         <div className="mt-10">
           <h2 className="mb-4 text-xl font-bold">{t.related}</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             {product.related.map((rp) => (
               <ProductCard key={rp.id} product={rp} locale={locale} labels={cardLabels} />
             ))}

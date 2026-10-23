@@ -11,6 +11,7 @@ import { Container } from "@/components/ui/container";
 import { cn } from "@/lib/cn";
 import { LocaleSwitcher } from "./locale-switcher";
 import { ThemeToggle } from "./theme-toggle";
+import { BrandStamp } from "@/components/stamp";
 import type { Locale } from "@/lib/i18n";
 
 type NavDict = {
@@ -27,6 +28,8 @@ type NavDict = {
   cart: string;
   menu: string;
   closeMenu: string;
+  brandTagline: string;
+  searchPlaceholder: string;
 };
 
 export function Header({
@@ -96,25 +99,50 @@ export function Header({
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-xl">
       <Container className="flex h-[70px] items-center justify-between gap-4">
         <div className="flex items-center gap-8">
-          <Link
-            href={base}
-            className="flex items-center gap-2 text-2xl font-black tracking-[-0.06em]"
-          >
-            <span>
-              oosta<span className="text-primary">AI</span>
+          <Link href={base} className="flex items-center gap-3">
+            <BrandStamp />
+            <span className="flex flex-col leading-tight">
+              <span className="text-xl font-black">{locale === "fa" ? "اوستا" : "oostaAI"}</span>
+              <span className="text-[11px] text-muted">{dict.brandTagline}</span>
             </span>
-            <span className="size-2 rounded-full bg-primary" />
           </Link>
           <nav className="hidden items-center gap-7 md:flex">
             {navItems.map(([href, label]) => link(href, label))}
           </nav>
         </div>
 
+        <form
+          action={`${base}/products`}
+          role="search"
+          className="hidden h-11 max-w-sm flex-1 items-center gap-2.5 rounded-[10px] border border-border bg-card px-3.5 xl:flex"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+            className="shrink-0 text-muted"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.5-3.5" />
+          </svg>
+          <input
+            type="search"
+            name="q"
+            aria-label={dict.searchPlaceholder}
+            placeholder={dict.searchPlaceholder}
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
+          />
+        </form>
+
         <div className="flex items-center gap-2">
           <Link
             href={`${base}/cart`}
             aria-label={count > 0 ? `${dict.cart} (${count})` : dict.cart}
-            className="relative inline-flex size-10 items-center justify-center border border-border text-foreground transition-colors hover:border-primary hover:text-primary"
+            className="relative inline-flex size-10 items-center justify-center rounded-[10px] border border-border text-foreground transition-colors hover:border-primary hover:text-primary"
           >
             <svg
               width="20"
@@ -125,9 +153,8 @@ export function Header({
               strokeWidth="1.8"
               aria-hidden
             >
-              <path d="M3 3h2l2.4 11.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.6L21 7H6" />
-              <circle cx="10" cy="20" r="1" />
-              <circle cx="18" cy="20" r="1" />
+              <rect x="3" y="6" width="18" height="13" rx="1.5" />
+              <path d="M3.5 7l8.5 6.5L20.5 7" />
             </svg>
             {count > 0 && (
               <span className="absolute -end-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold leading-5 text-primary-foreground">
@@ -143,7 +170,7 @@ export function Header({
                 <span className="hidden text-sm text-muted lg:inline">{user.name}</span>
                 {/* Wrapper carries the breakpoint: Button's own inline-flex would win over "hidden". */}
                 <span className="hidden sm:inline-flex">
-                  <Button variant="outline" size="sm" className="rounded-none" onClick={logout}>
+                  <Button variant="outline" size="sm" className="rounded-[10px]" onClick={logout}>
                     {dict.logout}
                   </Button>
                 </span>
@@ -152,13 +179,13 @@ export function Header({
               <>
                 <Link
                   href={`${base}/login`}
-                  className="hidden h-10 items-center border border-border px-4 text-sm text-foreground transition-colors hover:border-primary hover:text-primary sm:inline-flex"
+                  className="hidden h-10 items-center rounded-[10px] border border-border px-4 text-sm text-foreground transition-colors hover:border-primary hover:text-primary sm:inline-flex"
                 >
                   {dict.login}
                 </Link>
                 <Link
                   href={`${base}/signup`}
-                  className="hidden h-10 items-center bg-primary px-4 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary-hover active:scale-[0.98] sm:inline-flex"
+                  className="hidden h-10 items-center rounded-[10px] bg-primary px-4 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary-hover active:scale-[0.98] sm:inline-flex"
                 >
                   {dict.signup}
                 </Link>
@@ -170,7 +197,7 @@ export function Header({
             aria-expanded={menuOpen}
             aria-controls="mobile-menu"
             aria-label={menuOpen ? dict.closeMenu : dict.menu}
-            className="inline-flex size-10 items-center justify-center border border-border text-foreground transition-colors hover:border-primary hover:text-primary md:hidden"
+            className="inline-flex size-10 items-center justify-center rounded-[10px] border border-border text-foreground transition-colors hover:border-primary hover:text-primary md:hidden"
           >
             <svg
               width="20"
@@ -227,20 +254,24 @@ export function Header({
               {!loading && (
                 <div className="mt-6 grid grid-cols-2 gap-3">
                   {user ? (
-                    <Button variant="outline" className="col-span-2 rounded-none" onClick={logout}>
+                    <Button
+                      variant="outline"
+                      className="col-span-2 rounded-[10px]"
+                      onClick={logout}
+                    >
                       {dict.logout} ({user.name})
                     </Button>
                   ) : (
                     <>
                       <Link
                         href={`${base}/login`}
-                        className="inline-flex h-12 items-center justify-center border border-border text-sm"
+                        className="inline-flex h-12 items-center justify-center rounded-[10px] border border-border text-sm"
                       >
                         {dict.login}
                       </Link>
                       <Link
                         href={`${base}/signup`}
-                        className="inline-flex h-12 items-center justify-center bg-primary text-sm font-bold text-primary-foreground"
+                        className="inline-flex h-12 items-center justify-center rounded-[10px] bg-primary text-sm font-bold text-primary-foreground"
                       >
                         {dict.signup}
                       </Link>

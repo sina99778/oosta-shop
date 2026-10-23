@@ -5,7 +5,7 @@ type Variant = "primary" | "outline" | "ghost" | "danger" | "soft";
 type Size = "sm" | "md" | "lg";
 
 const variants: Record<Variant, string> = {
-  primary: "bg-brand-gradient text-primary-foreground shadow-glow hover:brightness-110",
+  primary: "bg-primary text-primary-foreground hover:bg-primary-hover",
   outline: "border border-border bg-card hover:border-primary hover:text-primary",
   ghost: "text-muted hover:bg-surface hover:text-foreground",
   danger: "bg-danger text-danger-foreground hover:brightness-110",
@@ -27,7 +27,7 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200 active:scale-[0.98]",
+        "inline-flex items-center justify-center gap-2 rounded-[10px] font-semibold transition-all duration-200 active:scale-[0.98]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         "disabled:pointer-events-none disabled:opacity-50",
         variants[variant],

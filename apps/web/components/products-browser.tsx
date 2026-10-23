@@ -16,14 +16,17 @@ import type { Dictionary } from "@/app/[locale]/dictionaries";
 export function ProductsBrowser({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const searchParams = useSearchParams();
   const category = searchParams.get("category");
+  // Free-text search from the header search box (?q=…).
+  const q = searchParams.get("q")?.trim() || null;
   const [page, setPage] = useState(1);
 
   useEffect(() => {
     queueMicrotask(() => setPage(1));
-  }, [category]);
+  }, [category, q]);
 
   const query = new URLSearchParams({ page: String(page), pageSize: "12" });
   if (category) query.set("category", category);
+  if (q) query.set("q", q);
 
   const products = useApi<Paginated<ProductSummary>>(`/products?${query.toString()}`);
   const categories = useApi<{ categories: Category[] }>("/categories");
@@ -44,7 +47,9 @@ export function ProductsBrowser({ locale, dict }: { locale: Locale; dict: Dictio
 
   return (
     <Container className="py-10 animate-fade-in">
-      <h1 className="mb-6 text-2xl font-bold">{dict.products.title}</h1>
+      <h1 className="mb-6 text-2xl font-bold">
+        {q ? `${dict.products.title}: «${q}»` : dict.products.title}
+      </h1>
 
       <div className="mb-8 flex flex-wrap gap-2">
         <Link href={`/${locale}/products`} className={chip(!category)}>
@@ -69,7 +74,7 @@ export function ProductsBrowser({ locale, dict }: { locale: Locale; dict: Dictio
         <p className="text-danger">{dict.common.somethingWrong}</p>
       ) : products.data && products.data.items.length > 0 ? (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
             {products.data.items.map((product) => (
               <ProductCard key={product.id} product={product} locale={locale} labels={labels} />
             ))}

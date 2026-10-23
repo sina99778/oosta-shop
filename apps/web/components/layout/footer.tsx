@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Container } from "@/components/ui/container";
+import { BrandStamp } from "@/components/stamp";
 import { assetUrl } from "@/lib/api";
 import { localizedSetting, type SiteConfig } from "@/lib/settings";
 import type { Locale } from "@/lib/i18n";
@@ -13,6 +14,7 @@ type FooterDict = {
   supportTitle: string;
   contactTitle: string;
   trustTitle: string;
+  brandLine: string;
 };
 type NavDict = {
   home: string;
@@ -82,27 +84,21 @@ export function Footer({
   ) : null;
 
   return (
-    // Always-dark footer: scope the dark palette so brand colors keep AA contrast.
-    <footer className="dark mt-20 border-t-2 border-primary bg-[#0d0d0d] text-[#f7f3ea]">
+    <footer className="mt-20 border-t border-border bg-surface">
       <Container className="grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-4">
-          <Link
-            href={base}
-            className="flex items-center gap-2 text-2xl font-black tracking-[-0.06em]"
-          >
-            <span>
-              oosta<span className="text-primary">AI</span>
+          <Link href={base} className="flex items-center gap-3">
+            <BrandStamp hole="var(--c-surface)" />
+            <span className="flex flex-col leading-tight">
+              <strong className="text-base">{dict.brandLine}</strong>
+              <span className="text-sm text-muted">{dict.tagline}</span>
             </span>
-            <span className="size-2 rounded-full bg-primary" />
           </Link>
-          <p className="text-sm font-medium text-muted">{dict.tagline}</p>
           <p className="text-sm leading-relaxed text-muted">{about}</p>
         </div>
 
         <div className="space-y-3">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">
-            {dict.shopTitle}
-          </h3>
+          <h3 className="text-sm font-extrabold">{dict.shopTitle}</h3>
           <div className="flex flex-col gap-2.5">
             <FooterLink href={base} label={nav.home} />
             <FooterLink href={`${base}/products`} label={nav.products} />
@@ -111,18 +107,14 @@ export function Footer({
         </div>
 
         <div className="space-y-3">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">
-            {dict.supportTitle}
-          </h3>
+          <h3 className="text-sm font-extrabold">{dict.supportTitle}</h3>
           <div className="flex flex-col gap-2.5">
             <FooterLink href={`${base}/support`} label={nav.support} />
             <FooterLink href={`${base}/dashboard`} label={nav.dashboard} />
           </div>
           {contact.length > 0 && (
             <>
-              <h3 className="pt-3 text-sm font-bold uppercase tracking-wider text-foreground/80">
-                {dict.contactTitle}
-              </h3>
+              <h3 className="pt-3 text-sm font-extrabold">{dict.contactTitle}</h3>
               <div className="flex flex-col gap-2.5">
                 {contact.map((c) => (
                   <a
@@ -142,9 +134,7 @@ export function Footer({
         </div>
 
         <div className="space-y-3">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">
-            {dict.trustTitle}
-          </h3>
+          <h3 className="text-sm font-extrabold">{dict.trustTitle}</h3>
           {badge &&
             (settings.enamadLink ? (
               <a
@@ -162,9 +152,11 @@ export function Footer({
         </div>
       </Container>
 
-      <div className="border-t border-[#393939]">
+      <div className="border-t border-border">
         <Container className="flex flex-col items-center justify-between gap-2 py-5 text-sm text-muted sm:flex-row">
-          <p>© {year} oostaAI</p>
+          <p>
+            © {year} {locale === "fa" ? "اوستا" : "oostaAI"}
+          </p>
           <p>{dict.rights}</p>
         </Container>
       </div>

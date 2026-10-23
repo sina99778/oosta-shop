@@ -76,20 +76,19 @@ export default async function LocaleLayout({
     >
       <body className={`flex min-h-full flex-col bg-background text-foreground ${fontClass}`}>
         {/* Set the theme class before paint to avoid a flash: the visitor's saved
-            choice, else their OS preference (prefers-color-scheme), else dark. */}
+            choice, else their OS preference (prefers-color-scheme), else the light "paper" theme. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var d=true;try{var t=localStorage.getItem('theme');if(t==='light'||t==='dark'){d=t==='dark'}else if(window.matchMedia){d=!window.matchMedia('(prefers-color-scheme: light)').matches}}catch(e){}document.documentElement.classList.toggle('dark',d);document.documentElement.style.colorScheme=d?'dark':'light'})()`,
+            __html: `(function(){var d=false;try{var t=localStorage.getItem('theme');if(t==='light'||t==='dark'){d=t==='dark'}else if(window.matchMedia){d=window.matchMedia('(prefers-color-scheme: dark)').matches}}catch(e){}document.documentElement.classList.toggle('dark',d);document.documentElement.style.colorScheme=d?'dark':'light'})()`,
           }}
         />
         {themeOverrides ? <style dangerouslySetInnerHTML={{ __html: themeOverrides }} /> : null}
         <Providers>
           <Track />
-          {announcement ? (
-            <div className="bg-brand-gradient px-4 py-2 text-center text-sm font-medium text-primary-foreground">
-              {announcement}
-            </div>
-          ) : null}
+          {/* Top bar: the admin's announcement when set, else the brand line. */}
+          <div className="bg-ink px-4 py-2 text-center text-[12.5px] text-[#e6e9ef]">
+            {announcement ?? dict.nav.topBar}
+          </div>
           <Header locale={locale} dict={dict.nav} themeLabel={dict.common.toggleTheme} />
           <main className="flex-1">{children}</main>
           <Footer locale={locale} dict={dict.footer} nav={dict.nav} config={config} />

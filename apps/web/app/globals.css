@@ -20,38 +20,41 @@
   --color-success: var(--c-success);
   --color-danger: var(--c-danger);
   --color-danger-foreground: var(--c-on-danger);
+  --color-ink: var(--c-ink);
+  --color-paper: var(--c-paper);
 
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-fa: var(--font-vazirmatn), Tahoma, sans-serif;
 }
 
-/* ---- Light theme (default) ---- */
+/* ---- Light theme (default): "Digital Post" — paper, navy ink, postal red ---- */
 :root {
-  --c-bg: #f4f0e7;
-  --c-surface: #fffaf0;
+  --c-bg: #faf7f1;
+  --c-surface: #f3eee4;
   --c-card: #ffffff;
-  --c-fg: #151515;
-  --c-muted: #6d685f;
-  --c-border: #d8d1c4;
-  /* Deeper orange in light mode: white text on it is 5.5:1, and as text on the
-     cream background it is 4.8:1 (the old #ff4d00 was 3.3:1 — fails AA). */
-  --c-primary: #c23700;
-  --c-primary-hover: #a32e00;
-  --c-primary-2: #a32e00;
+  --c-fg: #1b2433;
+  --c-muted: #5b6475;
+  --c-border: #e7e0d3;
+  /* Postal red: white text on it is 5.9:1; as text on paper 5.6:1 (WCAG AA). */
+  --c-primary: #b4321f;
+  --c-primary-hover: #962818;
+  --c-primary-2: #962818;
   --c-on-primary: #ffffff;
-  --c-accent: #ffd500;
-  --c-success: #15803d;
-  --c-danger: #dc2626;
+  --c-accent: #d9a24a;
+  --c-success: #2f6b4f;
+  --c-danger: #b42318;
   --c-on-danger: #ffffff;
-  --shadow-card: 0 16px 45px -30px rgba(28, 20, 10, 0.35);
-  --shadow-glow: 0 12px 34px -18px rgba(255, 77, 0, 0.58);
+  --c-ink: #1b2433; /* the navy used for dark bands (top bar, "how it works") */
+  --c-paper: #fffdf8; /* stamp paper */
+  --shadow-card: 0 1px 2px rgba(27, 36, 51, 0.05), 0 12px 28px -20px rgba(27, 36, 51, 0.25);
+  --shadow-glow: 0 10px 24px -14px rgba(180, 50, 31, 0.45);
 }
 
-/* ---- Dark theme ---- */
-/* `.dark` may also sit on a nested, always-dark section (home hero, footer).
-   Custom properties are resolved where they are declared, so the @theme tokens
-   (resolved once on :root) must be re-pointed here for that subtree to flip. */
+/* ---- Dark theme: night post office — navy ground, warm paper text ---- */
+/* `.dark` may also sit on a nested, always-dark section. Custom properties are
+   resolved where they are declared, so the @theme tokens (resolved once on
+   :root) must be re-pointed here for that subtree to flip. */
 .dark {
   --color-background: var(--c-bg);
   --color-surface: var(--c-surface);
@@ -66,25 +69,29 @@
   --color-success: var(--c-success);
   --color-danger: var(--c-danger);
   --color-danger-foreground: var(--c-on-danger);
+  --color-ink: var(--c-ink);
+  --color-paper: var(--c-paper);
 }
 .dark {
-  --c-bg: #0c0c0c;
-  --c-surface: #111111;
-  --c-card: #151515;
-  --c-fg: #f7f3ea;
-  --c-muted: #aaa49a;
-  --c-border: #393939;
-  /* Bright orange stays the dark-mode brand; text on it is near-black (6.3:1). */
-  --c-primary: #ff4d00;
-  --c-primary-hover: #ff6a2b;
-  --c-primary-2: #ff7a00;
-  --c-on-primary: #140800;
-  --c-accent: #ffd500;
-  --c-success: #22c55e;
-  --c-danger: #f87171;
-  --c-on-danger: #1a0000;
-  --shadow-card: 0 22px 60px -35px rgba(0, 0, 0, 0.9);
-  --shadow-glow: 0 12px 36px -18px rgba(255, 77, 0, 0.8);
+  --c-bg: #111723;
+  --c-surface: #172030;
+  --c-card: #1b2433;
+  --c-fg: #f3eee4;
+  --c-muted: #a9b1c0;
+  --c-border: #2c3648;
+  /* Lighter red for dark ground; text on it is near-black (6.4:1). */
+  --c-primary: #e8735d;
+  --c-primary-hover: #f08a76;
+  --c-primary-2: #f08a76;
+  --c-on-primary: #1a0905;
+  --c-accent: #e6b866;
+  --c-success: #5fbf8f;
+  --c-danger: #f28b7d;
+  --c-on-danger: #1a0505;
+  --c-ink: #0b0f17;
+  --c-paper: #fffdf8;
+  --shadow-card: 0 18px 40px -30px rgba(0, 0, 0, 0.9);
+  --shadow-glow: 0 10px 28px -16px rgba(232, 115, 93, 0.6);
 }
 
 html,
@@ -100,6 +107,55 @@ body {
 }
 ::selection {
   background: color-mix(in oklab, var(--c-primary) 30%, transparent);
+}
+
+/* ---- Digital Post visual language ---- */
+
+/* A perforated postage stamp. Set --perf (hole spacing/2) and --perf-hole (the
+   colour behind the stamp, i.e. its parent's background) on the element. */
+.stamp {
+  --perf: 6px;
+  --perf-hole: var(--c-surface);
+  display: inline-block;
+  padding: var(--perf);
+  box-sizing: border-box;
+  background: radial-gradient(
+      circle at var(--perf) var(--perf),
+      var(--perf-hole) calc(var(--perf) * 0.58),
+      var(--c-paper) calc(var(--perf) * 0.62)
+    )
+    calc(var(--perf) * -1) calc(var(--perf) * -1) / calc(var(--perf) * 2) calc(var(--perf) * 2);
+  filter: drop-shadow(0 4px 6px rgba(27, 36, 51, 0.16));
+}
+/* The printed face: tile colour + fine guilloche lines + engraved double frame. */
+.stamp-face {
+  --tile: #3f6b57;
+  display: flex;
+  height: 100%;
+  width: 100%;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+  background-color: var(--tile);
+  background-image: repeating-radial-gradient(
+    circle at 50% 115%,
+    rgba(255, 255, 255, 0.09) 0 1px,
+    transparent 1px 6px
+  );
+  box-shadow:
+    inset 0 0 0 1.5px var(--c-paper),
+    inset 0 0 0 4px var(--tile),
+    inset 0 0 0 5px rgba(255, 255, 255, 0.45);
+}
+/* Airmail envelope border (red / navy diagonal stripes). */
+.airmail {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--c-primary) 0 16px,
+    var(--c-bg) 16px 24px,
+    #1f4e8c 24px 40px,
+    var(--c-bg) 40px 48px
+  );
 }
 
 /* ---- Reusable design helpers ---- */

@@ -23,14 +23,14 @@ export function LocaleSwitcher({ current }: { current: Locale }) {
   }
 
   return (
-    <div className="inline-flex h-10 items-center border border-border p-0.5">
+    <div className="inline-flex h-10 items-center overflow-hidden rounded-[10px] border border-border p-0.5">
       {locales.map((locale) => (
         <button
           key={locale}
           type="button"
           onClick={() => switchTo(locale)}
           className={cn(
-            "h-full px-2.5 text-xs font-medium transition-colors",
+            "h-full rounded-[7px] px-2.5 text-xs font-medium transition-colors",
             locale === current
               ? "bg-primary text-primary-foreground"
               : "text-muted hover:text-foreground",
