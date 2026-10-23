@@ -29,3 +29,7 @@ export async function me(req: Request, res: Response): Promise<void> {
   const user = await getUserById(req.user!.id);
   res.json({ user });
 }
+
+export async function session(req: Request, res: Response): Promise<void> {
+  res.json({ user: await getUserById(req.user!.id) });
+}

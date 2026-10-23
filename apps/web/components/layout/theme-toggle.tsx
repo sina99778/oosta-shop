@@ -12,6 +12,7 @@ export function ThemeToggle({ label }: { label: string }) {
   function toggle() {
     const next = !document.documentElement.classList.contains("dark");
     document.documentElement.classList.toggle("dark", next);
+    document.documentElement.style.colorScheme = next ? "dark" : "light";
     try {
       localStorage.setItem("theme", next ? "dark" : "light");
     } catch {
@@ -25,6 +26,7 @@ export function ThemeToggle({ label }: { label: string }) {
       type="button"
       onClick={toggle}
       aria-label={label}
+      aria-pressed={dark}
       title={label}
       className="inline-flex size-10 items-center justify-center border border-border text-muted transition-colors hover:border-primary hover:text-primary"
     >

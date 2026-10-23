@@ -75,17 +75,18 @@ export default async function LocaleLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${vazirmatn.variable} h-full antialiased`}
     >
       <body className={`flex min-h-full flex-col bg-background text-foreground ${fontClass}`}>
-        {/* Set the theme class before paint to avoid a flash. Defaults to dark. */}
+        {/* Set the theme class before paint to avoid a flash: the visitor's saved
+            choice, else their OS preference (prefers-color-scheme), else dark. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('theme');if(t==='light'){document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark')}}catch(e){document.documentElement.classList.add('dark')}`,
+            __html: `(function(){var d=true;try{var t=localStorage.getItem('theme');if(t==='light'||t==='dark'){d=t==='dark'}else if(window.matchMedia){d=!window.matchMedia('(prefers-color-scheme: light)').matches}}catch(e){}document.documentElement.classList.toggle('dark',d);document.documentElement.style.colorScheme=d?'dark':'light'})()`,
           }}
         />
         {themeOverrides ? <style dangerouslySetInnerHTML={{ __html: themeOverrides }} /> : null}
         <Providers>
           <Track />
           {announcement ? (
-            <div className="bg-brand-gradient px-4 py-2 text-center text-sm font-medium text-white">
+            <div className="bg-brand-gradient px-4 py-2 text-center text-sm font-medium text-primary-foreground">
               {announcement}
             </div>
           ) : null}

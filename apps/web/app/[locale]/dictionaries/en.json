@@ -13,7 +13,10 @@
     "logout": "Log out",
     "account": "Account",
     "support": "Support",
-    "blog": "Blog"
+    "blog": "Blog",
+    "cart": "Cart",
+    "menu": "Menu",
+    "closeMenu": "Close menu"
   },
   "common": {
     "loading": "Loading…",
@@ -30,7 +33,10 @@
     "next": "Next",
     "page": "Page",
     "toggleTheme": "Toggle theme",
-    "somethingWrong": "Something went wrong."
+    "somethingWrong": "Something went wrong.",
+    "quantity": "Quantity",
+    "increase": "Increase",
+    "decrease": "Decrease"
   },
   "home": {
     "heroTitle": "Everything digital,",
@@ -81,7 +87,16 @@
     "reviewThanks": "Thanks! Your review is pending approval.",
     "loginToReview": "Log in to leave a review",
     "related": "Related products",
-    "instantDelivery": "Instant automatic delivery"
+    "instantDelivery": "Instant automatic delivery",
+    "addToCart": "Add to cart",
+    "addedToCart": "Added to cart ✓",
+    "viewCart": "View cart",
+    "verifiedBuyer": "Verified buyer",
+    "sold": "sold",
+    "trustInstant": "Instant delivery after payment",
+    "trustSecure": "Secure bank-gateway payment",
+    "trustSupport": "Support until fully delivered",
+    "maxQuantity": "Maximum quantity"
   },
   "auth": {
     "loginTitle": "Welcome back",
@@ -133,7 +148,11 @@
       "viewOrder": "View order",
       "selectFile": "Please choose a receipt file.",
       "notAvailable": "This order can no longer accept a receipt."
-    }
+    },
+    "unfulfilledTitle": "Payment received — delivery pending",
+    "unfulfilledBody": "Your payment went through, but this product sold out at the same moment. Your order is saved and will be delivered as soon as we restock — otherwise you'll be refunded. Please don't pay again.",
+    "contactSupport": "Open a support ticket",
+    "orderRef": "Order number"
   },
   "dashboard": {
     "orders": "Your orders",
@@ -163,8 +182,13 @@
       "FAILED": "Failed",
       "REJECTED": "Rejected",
       "REFUNDED": "Refunded",
-      "EXPIRED": "Expired"
-    }
+      "EXPIRED": "Expired",
+      "PAID_UNFULFILLED": "Paid — awaiting delivery"
+    },
+    "reservedUntil": "Stock for this order is reserved for you until:",
+    "autoRefresh": "This page refreshes automatically.",
+    "reviewEta": "Receipts are usually reviewed within 30 minutes during business hours.",
+    "unfulfilledBody": "We received your payment; the order will be delivered as soon as we restock. Contact support with any questions."
   },
   "blog": {
     "title": "Blog",
@@ -185,7 +209,11 @@
     "staff": "Support",
     "writeReply": "Write a reply…",
     "created": "Ticket created.",
-    "status": { "OPEN": "Open", "ANSWERED": "Answered", "CLOSED": "Closed" }
+    "status": {
+      "OPEN": "Open",
+      "ANSWERED": "Answered",
+      "CLOSED": "Closed"
+    }
   },
   "admin": {
     "title": "Admin",
@@ -204,7 +232,11 @@
       "writeReply": "Write a reply…",
       "staff": "Staff",
       "you": "Customer",
-      "status": { "OPEN": "Open", "ANSWERED": "Answered", "CLOSED": "Closed" }
+      "status": {
+        "OPEN": "Open",
+        "ANSWERED": "Answered",
+        "CLOSED": "Closed"
+      }
     },
     "blogTab": "Blog",
     "blog": {
@@ -435,7 +467,10 @@
       "order": "Order",
       "awaiting": "awaiting review",
       "working": "Working…"
-    }
+    },
+    "fulfill": "Deliver order",
+    "fulfilled": "Order delivered",
+    "unfulfilledAlert": "Paid orders awaiting delivery (stock ran out) — restock, then deliver them."
   },
   "footer": {
     "tagline": "Instant digital goods delivery",
@@ -446,5 +481,18 @@
     "supportTitle": "Customer care",
     "contactTitle": "Contact",
     "trustTitle": "Trust seal"
+  },
+  "cart": {
+    "title": "Cart",
+    "empty": "Your cart is empty.",
+    "browse": "Browse products",
+    "remove": "Remove",
+    "total": "Total",
+    "checkout": "Place order & pay",
+    "loginToCheckout": "Log in to place your order",
+    "priceNote": "The final price is calculated by the server when you place the order.",
+    "reserveNote": "After you place the order, stock is reserved for you for a limited time.",
+    "clear": "Clear cart",
+    "items": "items"
   }
 }

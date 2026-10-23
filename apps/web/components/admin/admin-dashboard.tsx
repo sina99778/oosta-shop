@@ -5,17 +5,13 @@ import { useApi } from "@/lib/use-api";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
+import Link from "next/link";
+import { Skeleton } from "@/components/ui/skeleton";
+import { orderStatusTone } from "@/lib/order-status";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import type { AdminStats } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
-
-function statusTone(s: string): "success" | "muted" | "danger" {
-  if (s === "PAID") return "success";
-  if (s === "PENDING" || s === "PENDING_REVIEW") return "muted";
-  return "danger";
-}
 
 export function AdminDashboard({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const { token } = useAuth();
@@ -25,8 +21,14 @@ export function AdminDashboard({ locale, dict }: { locale: Locale; dict: Diction
 
   if (loading || !data) {
     return (
-      <Container className="py-20 text-center">
-        <Spinner className="size-6" />
+      <Container className="space-y-6 py-8">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {Array.from({ length: 4 }, (_, i) => (
+            <Skeleton key={i} className="h-24 rounded-2xl" />
+          ))}
+        </div>
+        <Skeleton className="h-56 rounded-2xl" />
       </Container>
     );
   }
@@ -42,6 +44,15 @@ export function AdminDashboard({ locale, dict }: { locale: Locale; dict: Diction
   return (
     <Container className="space-y-6 py-8">
       <h1 className="text-2xl font-bold">{t.title}</h1>
+
+      {(data.unfulfilled ?? 0) > 0 && (
+        <Link href={`/${locale}/admin/orders`} className="block">
+          <Card role="alert" className="border-primary/50 bg-primary/10 text-sm">
+            <strong className="me-2 text-primary">{data.unfulfilled}</strong>
+            {dict.admin.unfulfilledAlert}
+          </Card>
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map((s) => (
@@ -158,7 +169,7 @@ export function AdminDashboard({ locale, dict }: { locale: Locale; dict: Diction
                   <span className="font-semibold">
                     {formatPrice(o.totalAmount, o.currency, locale)}
                   </span>
-                  <Badge tone={statusTone(o.paymentStatus)}>
+                  <Badge tone={orderStatusTone(o.paymentStatus)}>
                     {statusMap[o.paymentStatus] ?? o.paymentStatus}
                   </Badge>
                 </div>

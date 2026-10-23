@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { Container } from "@/components/ui/container";
 import { Spinner } from "@/components/ui/spinner";
@@ -12,6 +13,9 @@ export function CheckoutCallback({ locale, dict }: { locale: Locale; dict: Dicti
   const searchParams = useSearchParams();
   const router = useRouter();
   const [message, setMessage] = useState(dict.checkout.verifying);
+  // Paid, but stock ran out at the same moment — shown here instead of the
+  // generic "failed" page, because the money WAS taken and the buyer must not pay again.
+  const [unfulfilledOrder, setUnfulfilledOrder] = useState<string | null>(null);
   const handled = useRef(false);
 
   useEffect(() => {
@@ -26,14 +30,61 @@ export function CheckoutCallback({ locale, dict }: { locale: Locale; dict: Dicti
     }
 
     api
-      .post<{ status: string }>("/payments/verify", { authority, status })
+      .post<{ status: string; orderId?: string }>("/payments/verify", { authority, status })
       .then((res) => {
-        router.replace(`/${locale}/checkout/${res.status === "paid" ? "success" : "cancel"}`);
+        if (res.status === "unfulfilled" && res.orderId) {
+          setUnfulfilledOrder(res.orderId);
+          return;
+        }
+        const order = res.orderId ? `?order=${encodeURIComponent(res.orderId)}` : "";
+        router.replace(
+          res.status === "paid"
+            ? `/${locale}/checkout/success${order}`
+            : `/${locale}/checkout/cancel`,
+        );
       })
       .catch(() => {
         router.replace(`/${locale}/checkout/cancel`);
       });
   }, [searchParams, router, locale, dict]);
+
+  if (unfulfilledOrder) {
+    const c = dict.checkout;
+    return (
+      <Container className="flex justify-center py-20">
+        <div
+          role="status"
+          className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-card"
+        >
+          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-primary/15 text-2xl">
+            ⏳
+          </div>
+          <h1 className="text-xl font-bold">{c.unfulfilledTitle}</h1>
+          <p className="mt-2 text-sm text-muted">{c.unfulfilledBody}</p>
+          <p className="mt-3 text-sm">
+            {c.orderRef}:{" "}
+            <span dir="ltr" className="font-mono">
+              #{unfulfilledOrder.slice(-8)}
+            </span>
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Link
+              href={`/${locale}/dashboard/orders/${unfulfilledOrder}`}
+              className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover"
+            >
+              {c.viewOrders}
+            </Link>
+            <Link
+              href={`/${locale}/support`}
+              className="inline-flex h-10 items-center rounded-lg border border-border px-4 text-sm hover:bg-surface"
+            >
+              {c.contactSupport}
+            </Link>
+          </div>
+        </div>
+      </Container>
+    );
+  }
 
   return (
     <Container className="py-24 text-center">

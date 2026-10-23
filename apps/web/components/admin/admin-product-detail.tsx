@@ -324,7 +324,7 @@ export function AdminProductDetail({
             type="file"
             accept="image/*"
             onChange={(e) => setImgFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
+            className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:opacity-90"
           />
           {imgMsg && <p className="text-sm text-danger">{imgMsg}</p>}
           <div className="flex gap-2">
@@ -355,7 +355,7 @@ export function AdminProductDetail({
                     />
                     <button
                       onClick={() => removeGalleryImage(gid)}
-                      className="absolute end-1 top-1 rounded bg-danger px-1.5 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
+                      className="absolute end-1 top-1 rounded bg-danger px-1.5 text-xs text-danger-foreground opacity-0 transition-opacity group-hover:opacity-100"
                     >
                       ✕
                     </button>

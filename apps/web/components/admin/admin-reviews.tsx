@@ -73,7 +73,7 @@ export function AdminReviews({ locale, dict }: { locale: Locale; dict: Dictionar
           >
             {tab.label}
             {tab.key === "PENDING" && data && data.pendingCount > 0 && (
-              <span className="ms-2 rounded-full bg-primary px-1.5 text-xs text-white">
+              <span className="ms-2 rounded-full bg-primary px-1.5 text-xs text-primary-foreground">
                 {data.pendingCount}
               </span>
             )}

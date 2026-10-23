@@ -257,7 +257,7 @@ export function AdminBlogEditor({
                 const f = e.target.files?.[0];
                 if (f) void uploadMedia(f);
               }}
-              className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:text-white"
+              className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:text-primary-foreground"
             />
             {mediaUrl && (
               <>

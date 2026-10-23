@@ -82,7 +82,8 @@ export function Footer({
   ) : null;
 
   return (
-    <footer className="mt-20 border-t-2 border-primary bg-[#0d0d0d] text-[#f7f3ea]">
+    // Always-dark footer: scope the dark palette so brand colors keep AA contrast.
+    <footer className="dark mt-20 border-t-2 border-primary bg-[#0d0d0d] text-[#f7f3ea]">
       <Container className="grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-4">
           <Link

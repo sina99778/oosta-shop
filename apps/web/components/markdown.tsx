@@ -8,7 +8,9 @@
 
 import type { ReactNode } from "react";
 
-const safe = (url: string) => /^https?:\/\//i.test(url) || url.startsWith("/");
+// http(s) or a root-relative path — but not "//host" (protocol-relative = another site).
+const safe = (url: string) =>
+  /^https?:\/\//i.test(url) || (url.startsWith("/") && !url.startsWith("//"));
 
 const INLINE_SPLIT =
   /(!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|\*[^*\n]+\*|`[^`\n]+`)/g;

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
@@ -7,18 +8,13 @@ import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CredentialField } from "@/components/credential-field";
+import { orderStatusTone } from "@/lib/order-status";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import type { Credential, OrderDetail as OrderDetailDto } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
-
-function statusTone(status: string): "success" | "muted" | "danger" {
-  if (status === "PAID") return "success";
-  if (status === "PENDING" || status === "PENDING_REVIEW") return "muted";
-  return "danger";
-}
 
 export function OrderDetail({
   locale,
@@ -30,17 +26,30 @@ export function OrderDetail({
   dict: Dictionary;
 }) {
   const { token } = useAuth();
+  const [waiting, setWaiting] = useState(false);
+  // While the order is still moving (awaiting payment/review/restock), poll so
+  // the vault opens by itself the moment it is delivered.
   const { data, loading, error } = useApi<{ order: OrderDetailDto }>(
     token ? `/orders/${orderId}` : null,
     token ?? undefined,
+    { refreshMs: waiting ? 15_000 : undefined },
   );
   const d = dict.dashboard;
   const statusMap = d.status as Record<string, string>;
+  const status = data?.order.paymentStatus;
+
+  useEffect(() => {
+    const live =
+      status === "PENDING_REVIEW" || status === "PAID_UNFULFILLED" || status === "PENDING";
+    queueMicrotask(() => setWaiting(live));
+  }, [status]);
 
   if (loading) {
     return (
-      <Container className="py-20 text-center">
-        <Spinner className="size-6" />
+      <Container className="py-10">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="mt-4 h-8 w-56" />
+        <Skeleton className="mt-6 h-40 w-full rounded-2xl" />
       </Container>
     );
   }
@@ -62,7 +71,7 @@ export function OrderDetail({
         <h1 className="text-2xl font-bold">
           {d.orderNo} #{order.id.slice(-8)}
         </h1>
-        <Badge tone={statusTone(order.paymentStatus)}>
+        <Badge tone={orderStatusTone(order.paymentStatus)}>
           {statusMap[order.paymentStatus] ?? order.paymentStatus}
         </Badge>
       </div>
@@ -71,14 +80,40 @@ export function OrderDetail({
         {formatPrice(order.totalAmount, order.currency, locale)}
       </p>
 
-      {order.paymentProvider === "CARD_TO_CARD" && order.paymentStatus !== "PAID" && (
-        <Card className="mt-4">
+      {order.paymentStatus === "PAID_UNFULFILLED" && (
+        <Card className="mt-4 border-primary/40" role="status">
+          <p className="text-sm">{d.unfulfilledBody}</p>
+          <Link
+            href={`/${locale}/support`}
+            className="mt-2 inline-block text-sm font-medium text-primary hover:underline"
+          >
+            {dict.checkout.contactSupport}
+          </Link>
+          <p className="mt-2 text-xs text-muted">{d.autoRefresh}</p>
+        </Card>
+      )}
+
+      {order.paymentProvider === "CARD_TO_CARD" && order.cardToCard && (
+        <Card className="mt-4" role="status">
           {order.paymentStatus === "PENDING_REVIEW" ? (
-            <p className="text-sm text-muted">{d.awaitingReview}</p>
+            <>
+              <p className="text-sm">{d.awaitingReview}</p>
+              <p className="mt-1 text-xs text-muted">
+                {d.reviewEta} {d.autoRefresh}
+              </p>
+            </>
           ) : (
-            <Link href={`/${locale}/checkout/card/${order.id}`}>
-              <Button>{d.completePayment}</Button>
-            </Link>
+            <>
+              {order.expiresAt && (
+                <p className="mb-3 text-sm text-muted">
+                  {d.reservedUntil}{" "}
+                  <strong className="text-foreground">{formatDate(order.expiresAt, locale)}</strong>
+                </p>
+              )}
+              <Link href={`/${locale}/checkout/card/${order.id}`}>
+                <Button>{d.completePayment}</Button>
+              </Link>
+            </>
           )}
         </Card>
       )}

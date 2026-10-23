@@ -67,7 +67,10 @@ export function ProductMark({
 
   const fallback = type === "ACCOUNT" ? "AI" : type === "LICENSE" ? "KEY" : "GIFT";
   return (
-    <span className={cn(base, "bg-primary text-xs font-black text-white", className)} aria-hidden>
+    <span
+      className={cn(base, "bg-primary text-xs font-black text-primary-foreground", className)}
+      aria-hidden
+    >
       {fallback || name.charAt(0)}
     </span>
   );

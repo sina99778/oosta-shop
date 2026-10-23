@@ -57,7 +57,7 @@ export function AdminTickets({ locale, dict }: { locale: Locale; dict: Dictionar
           >
             {tab.label}
             {tab.key === "OPEN" && data && data.openCount > 0 && (
-              <span className="ms-2 rounded-full bg-primary px-1.5 text-xs text-white">
+              <span className="ms-2 rounded-full bg-primary px-1.5 text-xs text-primary-foreground">
                 {data.openCount}
               </span>
             )}

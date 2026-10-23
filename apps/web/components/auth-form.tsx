@@ -14,6 +14,22 @@ import { Spinner } from "@/components/ui/spinner";
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 
+// Only same-site paths: "//evil.com" and "/\\evil.com" also start with "/" but
+// browsers treat them as another host, which made ?next= an open redirect.
+function safeNext(next: string | null): string | null {
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) {
+    return null;
+  }
+  return next;
+}
+
+// Persian/Arabic-Indic digits -> ASCII (phones typed on a Persian keyboard).
+function latinDigits(value: string): string {
+  return value
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
+}
+
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
@@ -46,7 +62,7 @@ export function AuthForm({
   const [error, setError] = useState<string | null>(null);
 
   const next = searchParams.get("next");
-  const destination = next && next.startsWith("/") ? next : `/${locale}/dashboard`;
+  const destination = safeNext(next) ?? `/${locale}/dashboard`;
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -80,18 +96,35 @@ export function AuthForm({
             <Field label={a.emailOrPhone}>
               <Input
                 value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
+                onChange={(e) => setIdentifier(latinDigits(e.target.value))}
                 required
                 autoComplete="username"
+                dir="ltr"
+                autoCapitalize="none"
+                spellCheck={false}
               />
             </Field>
           ) : (
             <>
               <Field label={a.email}>
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  dir="ltr"
+                />
               </Field>
               <Field label={a.phone}>
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+                <Input
+                  type="tel"
+                  inputMode="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(latinDigits(e.target.value))}
+                  autoComplete="tel"
+                  placeholder="09123456789"
+                  dir="ltr"
+                />
               </Field>
               <p className="text-xs text-muted">{a.contactHint}</p>
             </>
@@ -107,7 +140,11 @@ export function AuthForm({
             />
           </Field>
 
-          {error && <p className="text-sm text-danger">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-danger">
+              {error}
+            </p>
+          )}
 
           <Button type="submit" className="w-full" disabled={submitting}>
             {submitting ? (

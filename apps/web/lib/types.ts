@@ -53,6 +53,7 @@ export type ProductReview = {
   rating: number;
   comment: string | null;
   userName: string;
+  verifiedBuyer?: boolean;
   createdAt: string;
 };
 
@@ -66,6 +67,7 @@ export type ProductDetail = ProductSummary & {
   plans: PlanDetail[];
   rating: { average: number; count: number };
   reviews: ProductReview[];
+  soldCount?: number;
   related: ProductSummary[];
 };
 
@@ -159,6 +161,7 @@ export type AdminStats = {
   paidOrders: number;
   totalOrders: number;
   pendingReview: number;
+  unfulfilled?: number;
   customers: number;
   salesByDay: { day: string; count: number; revenue: number }[];
   topProducts: { id: string; name: string; unitsSold: number }[];
@@ -185,6 +188,7 @@ export type OrderSummary = {
   itemCount: number;
   createdAt: string;
   paidAt: string | null;
+  expiresAt?: string | null;
 };
 
 export type Credential = {
@@ -226,6 +230,8 @@ export type OrderDetail = {
   paymentRefId: string | null;
   createdAt: string;
   paidAt: string | null;
+  // Stock is reserved for the buyer until this time (unpaid orders only).
+  expiresAt?: string | null;
   items: OrderItemDetail[];
   receipts: ReceiptInfo[];
   cardToCard: CardInfo | null;
@@ -240,7 +246,13 @@ export type PaymentConfig = {
 };
 
 export type CreateOrderResponse = {
-  order: { id: string; totalAmount: number; currency: string; paymentStatus: string };
+  order: {
+    id: string;
+    totalAmount: number;
+    currency: string;
+    paymentStatus: string;
+    expiresAt?: string;
+  };
   payment?: { authority: string; redirectUrl: string };
   cardToCard?: CardInfo & { amount: number; currency: string };
 };

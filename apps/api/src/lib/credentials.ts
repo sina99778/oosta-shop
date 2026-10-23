@@ -85,7 +85,25 @@ export function maskSecret(value: string | null): string | null {
 // Seals any plaintext credential rows (written before the key was configured).
 // Idempotent; runs at boot in small batches.
 export async function encryptLegacyCredentials(): Promise<number> {
-  if (!KEY) return 0;
+  if (!KEY) {
+    // Stock sealed under a key that is now missing can't be delivered — say so at
+    // boot instead of letting every order page fail later.
+    const sealed = await prisma.inventoryItem.count({
+      where: {
+        OR: [
+          { accountPassword: { startsWith: PREFIX } },
+          { licenseKey: { startsWith: PREFIX } },
+          { giftCardCode: { startsWith: PREFIX } },
+        ],
+      },
+    });
+    if (sealed > 0) {
+      console.error(
+        `[oosta-api] ERROR: ${sealed} inventory item(s) are encrypted but CREDENTIALS_ENCRYPTION_KEY is not set — orders containing them cannot be shown. Restore the key.`,
+      );
+    }
+    return 0;
+  }
   let sealed = 0;
   for (;;) {
     const rows = await prisma.inventoryItem.findMany({

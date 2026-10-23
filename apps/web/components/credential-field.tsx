@@ -44,7 +44,7 @@ export function CredentialField({
           {revealed ? hide : reveal}
         </Button>
         <Button type="button" variant="outline" size="sm" onClick={copyValue}>
-          {justCopied ? copied : copy}
+          <span aria-live="polite">{justCopied ? copied : copy}</span>
         </Button>
       </div>
     </div>

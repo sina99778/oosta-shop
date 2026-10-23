@@ -6,17 +6,12 @@ import { useApi } from "@/lib/use-api";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
+import { orderStatusTone } from "@/lib/order-status";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import type { OrderSummary } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
-
-function statusTone(status: string): "success" | "muted" | "danger" {
-  if (status === "PAID") return "success";
-  if (status === "PENDING") return "muted";
-  return "danger";
-}
 
 export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const { token } = useAuth();
@@ -31,7 +26,11 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
     <Container className="py-10 animate-fade-in">
       <h1 className="mb-6 text-2xl font-bold">{d.orders}</h1>
       {loading ? (
-        <Spinner className="size-6" />
+        <div className="space-y-3">
+          {Array.from({ length: 3 }, (_, i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-2xl" />
+          ))}
+        </div>
       ) : !data || data.orders.length === 0 ? (
         <p className="text-muted">{d.noOrders}</p>
       ) : (
@@ -51,7 +50,7 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
                   <span className="font-semibold">
                     {formatPrice(order.totalAmount, order.currency, locale)}
                   </span>
-                  <Badge tone={statusTone(order.paymentStatus)}>
+                  <Badge tone={orderStatusTone(order.paymentStatus)}>
                     {statusMap[order.paymentStatus] ?? order.paymentStatus}
                   </Badge>
                 </div>

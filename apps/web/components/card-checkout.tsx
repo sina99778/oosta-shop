@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import type { OrderDetail } from "@/lib/types";
@@ -34,10 +35,17 @@ export function CardCheckout({
 }) {
   const { token } = useAuth();
   const [reload, setReload] = useState(0);
+  const [inReview, setInReview] = useState(false);
+  // Poll while the receipt is in review, so approval shows up without a refresh.
   const { data, loading, error } = useApi<{ order: OrderDetail }>(
     token ? `/orders/${orderId}?_r=${reload}` : null,
     token ?? undefined,
+    { refreshMs: inReview ? 15_000 : undefined },
   );
+  const status = data?.order.paymentStatus;
+  useEffect(() => {
+    queueMicrotask(() => setInReview(status === "PENDING_REVIEW"));
+  }, [status]);
 
   const t = dict.checkout.cardToCard;
   const statusMap = dict.dashboard.status as Record<string, string>;
@@ -51,8 +59,9 @@ export function CardCheckout({
 
   if (loading) {
     return (
-      <Container className="py-20 text-center">
-        <Spinner className="size-6" />
+      <Container className="max-w-2xl py-10">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="mt-6 h-64 w-full rounded-2xl" />
       </Container>
     );
   }
@@ -64,7 +73,11 @@ export function CardCheckout({
 
   const order = data.order;
   const card = order.cardToCard;
-  const canUpload = ["PENDING", "PENDING_REVIEW", "REJECTED"].includes(order.paymentStatus);
+  // Mirrors the API: an expired/rejected order can still take a receipt (the buyer
+  // may genuinely have paid); paid/refunded ones can't.
+  const canUpload = ["PENDING", "PENDING_REVIEW", "REJECTED", "EXPIRED", "FAILED"].includes(
+    order.paymentStatus,
+  );
   const latestRejected = order.receipts.length > 0 && order.receipts[0].status === "REJECTED";
 
   function onFileChange(e: ChangeEvent<HTMLInputElement>) {
@@ -137,6 +150,13 @@ export function CardCheckout({
                 </p>
               </div>
 
+              {order.expiresAt && (
+                <p className="text-sm text-muted">
+                  {dict.dashboard.reservedUntil}{" "}
+                  <strong className="text-foreground">{formatDate(order.expiresAt, locale)}</strong>
+                </p>
+              )}
+
               <CardField
                 label={t.cardNumber}
                 value={card.number}
@@ -174,6 +194,9 @@ export function CardCheckout({
             <Card className="mt-4">
               <p className="font-medium">{t.submitted}</p>
               <p className="mt-1 text-sm text-muted">{t.pendingBody}</p>
+              <p className="mt-1 text-xs text-muted">
+                {dict.dashboard.reviewEta} {dict.dashboard.autoRefresh}
+              </p>
             </Card>
           )}
           {latestRejected && (
@@ -195,9 +218,9 @@ export function CardCheckout({
                   <input
                     ref={fileRef}
                     type="file"
-                    accept="image/*,application/pdf"
+                    accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
                     onChange={onFileChange}
-                    className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
+                    className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:opacity-90"
                   />
                 </div>
                 <Input
@@ -205,7 +228,11 @@ export function CardCheckout({
                   value={reference}
                   onChange={(e) => setReference(e.target.value)}
                 />
-                {formError && <p className="text-sm text-danger">{formError}</p>}
+                {formError && (
+                  <p role="alert" className="text-sm text-danger">
+                    {formError}
+                  </p>
+                )}
                 <Button type="submit" className="w-full" disabled={busy}>
                   {busy ? (
                     <>
@@ -271,10 +298,15 @@ function CardField({
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
         <p className="text-xs text-muted">{label}</p>
-        <p className={mono ? "truncate font-mono text-lg tracking-wide" : "truncate"}>{value}</p>
+        <p
+          dir={mono ? "ltr" : undefined}
+          className={mono ? "truncate font-mono text-lg tracking-wide" : "truncate"}
+        >
+          {mono ? value.replace(/(\d{4})(?=\d)/g, "$1 ") : value}
+        </p>
       </div>
       <Button size="sm" variant="outline" onClick={() => onCopy(value)} type="button">
-        {copied === value ? copiedLabel : copyLabel}
+        <span aria-live="polite">{copied === value ? copiedLabel : copyLabel}</span>
       </Button>
     </div>
   );

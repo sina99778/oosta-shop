@@ -6,12 +6,19 @@ import { api, ApiError } from "./api";
 type State<T> = { data: T | null; error: ApiError | null; loading: boolean };
 
 // Fetch a GET endpoint on mount. Pass `path = null` to skip (e.g. while inputs aren't ready).
-export function useApi<T>(path: string | null, token?: string): State<T> {
+// `refreshMs` re-fetches silently on an interval (keeps showing the current data,
+// pauses while the tab is hidden) — e.g. to follow an order awaiting review.
+export function useApi<T>(
+  path: string | null,
+  token?: string,
+  options: { refreshMs?: number } = {},
+): State<T> {
   const [state, setState] = useState<State<T>>({
     data: null,
     error: null,
     loading: path !== null,
   });
+  const { refreshMs } = options;
 
   useEffect(() => {
     if (path === null) {
@@ -33,10 +40,26 @@ export function useApi<T>(path: string | null, token?: string): State<T> {
           setState({ data: null, error: apiError, loading: false });
         }
       });
+
+    const timer = refreshMs
+      ? setInterval(() => {
+          if (document.visibilityState !== "visible") return;
+          api
+            .get<T>(path, token)
+            .then((data) => {
+              if (active) setState({ data, error: null, loading: false });
+            })
+            .catch(() => {
+              // keep showing the last good data; the next tick retries
+            });
+        }, refreshMs)
+      : undefined;
+
     return () => {
       active = false;
+      if (timer) clearInterval(timer);
     };
-  }, [path, token]);
+  }, [path, token, refreshMs]);
 
   return state;
 }

@@ -140,7 +140,8 @@ export async function HomeSections({
 
   return (
     <>
-      <section className="relative overflow-hidden border-b border-border bg-[#0d0d0d] text-[#f7f3ea]">
+      {/* Always-dark hero: scope the dark palette here so brand colors keep AA contrast in light mode too. */}
+      <section className="dark relative overflow-hidden border-b border-border bg-[#0d0d0d] text-[#f7f3ea]">
         <div className="signal-grid pointer-events-none absolute inset-0 opacity-30" />
         <div className="signal-halftone pointer-events-none absolute -end-24 top-10 h-[420px] w-[440px] opacity-70" />
         <Container className="relative grid gap-10 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:py-16">
@@ -159,7 +160,7 @@ export async function HomeSections({
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href={`/${locale}/products`}
-                className="inline-flex h-14 min-w-44 items-center justify-center gap-3 bg-primary px-7 text-base font-black text-white transition-colors hover:bg-primary-hover"
+                className="inline-flex h-14 min-w-44 items-center justify-center gap-3 bg-primary px-7 text-base font-black text-primary-foreground transition-colors hover:bg-primary-hover"
               >
                 <FeatureIcon kind="bolt" />
                 {copy.primaryCta}
@@ -349,7 +350,7 @@ export async function HomeSections({
                 <Link
                   key={category.id}
                   href={`/${locale}/products?category=${category.slug}`}
-                  className="flex min-h-16 items-center justify-center gap-3 border-t border-border px-4 font-black transition-colors hover:bg-primary hover:text-white sm:border-s sm:border-t-0"
+                  className="flex min-h-16 items-center justify-center gap-3 border-t border-border px-4 font-black transition-colors hover:bg-primary hover:text-primary-foreground sm:border-s sm:border-t-0"
                 >
                   <span className="text-xl text-primary">
                     {CATEGORY_ICONS[category.slug] ?? "•"}

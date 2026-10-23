@@ -5,18 +5,22 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/lib/use-api";
 import { useAuth } from "@/lib/auth";
+import { MAX_LINE_QUANTITY, useCart } from "@/lib/cart";
+import { placeOrder } from "@/lib/checkout";
 import { api, ApiError, assetUrl } from "@/lib/api";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
+import { QuantityStepper } from "@/components/ui/quantity-stepper";
 import { Markdown } from "@/components/markdown";
 import { ProductCard } from "@/components/product-card";
 import { cn } from "@/lib/cn";
 import { formatPrice, formatDate } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
-import type { CreateOrderResponse, PaymentConfig, PaymentMethod, ProductDetail } from "@/lib/types";
+import type { PaymentConfig, PaymentMethod, ProductDetail } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 
 function stars(n: number): string {
@@ -36,6 +40,7 @@ export function ProductDetailView({
   const { data, loading, error } = useApi<{ product: ProductDetail }>(`/products/${slug}`);
   const paymentConfig = useApi<PaymentConfig>("/payments/config");
   const { user, token } = useAuth();
+  const cart = useCart();
   const router = useRouter();
   const t = dict.product;
 
@@ -44,6 +49,8 @@ export function ProductDetailView({
   const [tab, setTab] = useState<"description" | "specs" | "reviews">("description");
   const [buying, setBuying] = useState<PaymentMethod | null>(null);
   const [buyError, setBuyError] = useState<string | null>(null);
+  const [quantity, setQuantity] = useState(1);
+  const [addedToCart, setAddedToCart] = useState(false);
 
   // Review form
   const [rating, setRating] = useState(5);
@@ -64,8 +71,17 @@ export function ProductDetailView({
 
   if (loading) {
     return (
-      <Container className="py-20 text-center">
-        <Spinner className="size-6" />
+      <Container className="py-8">
+        <Skeleton className="mb-4 h-4 w-48" />
+        <div className="grid gap-8 lg:grid-cols-2">
+          <Skeleton className="aspect-[4/3] w-full rounded-xl" />
+          <div className="space-y-4">
+            <Skeleton className="h-9 w-3/4" />
+            <Skeleton className="h-5 w-1/2" />
+            <Skeleton className="h-10 w-40" />
+            <Skeleton className="h-56 w-full rounded-2xl" />
+          </div>
+        </div>
       </Container>
     );
   }
@@ -81,6 +97,8 @@ export function ProductDetailView({
   const activePlanId =
     selectedPlan ?? product.plans.find((p) => p.inStock)?.id ?? product.plans[0]?.id ?? null;
   const plan = product.plans.find((p) => p.id === activePlanId) ?? null;
+  const maxQuantity = plan ? Math.max(1, Math.min(plan.availableStock, MAX_LINE_QUANTITY)) : 1;
+  const qty = Math.min(quantity, maxQuantity);
 
   const cardLabels = {
     from: dict.common.from,
@@ -100,25 +118,32 @@ export function ProductDetailView({
     setBuying(method);
     setBuyError(null);
     try {
-      const res = await api.post<CreateOrderResponse>(
-        "/orders",
-        { items: [{ planId: plan.id, quantity: 1 }], method },
-        token,
-      );
-      if (method === "card_to_card") {
-        router.push(`/${locale}/checkout/card/${res.order.id}`);
-        return;
-      }
-      if (res.payment?.redirectUrl) {
-        window.location.assign(res.payment.redirectUrl);
-        return;
-      }
-      setBuyError(dict.common.somethingWrong);
-      setBuying(null);
+      const next = await placeOrder([{ planId: plan.id, quantity: qty }], method, locale, token);
+      if (next.external) window.location.assign(next.href);
+      else router.push(next.href);
     } catch (e) {
       setBuyError(e instanceof ApiError ? e.message : dict.common.somethingWrong);
       setBuying(null);
     }
+  }
+
+  function addToCart() {
+    if (!plan) return;
+    cart.add(
+      {
+        planId: plan.id,
+        productId: product.id,
+        productSlug: product.slug,
+        productName: product.name,
+        planLabel: plan.label,
+        unitPrice: plan.effectivePrice,
+        currency: plan.currency,
+        imageUrl: images[0] ?? null,
+        maxQuantity,
+      },
+      qty,
+    );
+    setAddedToCart(true);
   }
 
   async function submitReview() {
@@ -217,12 +242,24 @@ export function ProductDetailView({
           </div>
           <h1 className="text-3xl font-bold tracking-tight">{product.name}</h1>
 
-          {product.rating.count > 0 && (
-            <p className="mt-2 text-sm text-amber-400">
-              {stars(product.rating.average)}{" "}
-              <span className="text-muted">
-                {product.rating.average} · {product.rating.count} {t.reviewsCount}
-              </span>
+          {(product.rating.count > 0 || (product.soldCount ?? 0) > 0) && (
+            <p className="mt-2 flex flex-wrap items-center gap-x-3 text-sm">
+              {product.rating.count > 0 && (
+                <span className="text-amber-500">
+                  <span aria-hidden>{stars(product.rating.average)}</span>{" "}
+                  <span className="text-muted">
+                    {product.rating.average} · {product.rating.count} {t.reviewsCount}
+                  </span>
+                </span>
+              )}
+              {(product.soldCount ?? 0) > 0 && (
+                <span className="text-muted">
+                  {new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US").format(
+                    product.soldCount ?? 0,
+                  )}{" "}
+                  {t.sold}
+                </span>
+              )}
             </p>
           )}
 
@@ -264,7 +301,10 @@ export function ProductDetailView({
                       className="accent-primary"
                       checked={activePlanId === pl.id}
                       disabled={!pl.inStock}
-                      onChange={() => setSelectedPlan(pl.id)}
+                      onChange={() => {
+                        setSelectedPlan(pl.id);
+                        setAddedToCart(false);
+                      }}
                     />
                     <span className="font-medium">{pl.label}</span>
                   </span>
@@ -290,10 +330,50 @@ export function ProductDetailView({
                 {product.availableStock} {t.left}
               </p>
             )}
-            {buyError && <p className="mt-3 text-sm text-danger">{buyError}</p>}
+            {buyError && (
+              <p role="alert" className="mt-3 text-sm text-danger">
+                {buyError}
+              </p>
+            )}
+
+            {plan?.inStock && (
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <QuantityStepper
+                  value={qty}
+                  max={maxQuantity}
+                  onChange={(q) => {
+                    setQuantity(q);
+                    setAddedToCart(false);
+                  }}
+                  labels={{
+                    quantity: dict.common.quantity,
+                    increase: dict.common.increase,
+                    decrease: dict.common.decrease,
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  className="flex-1 rounded-none"
+                  disabled={buying !== null}
+                  onClick={addToCart}
+                >
+                  {t.addToCart}
+                </Button>
+              </div>
+            )}
+            <p aria-live="polite" className="mt-2 min-h-5 text-sm text-success">
+              {addedToCart && (
+                <>
+                  {t.addedToCart}{" "}
+                  <Link href={`/${locale}/cart`} className="font-medium underline">
+                    {t.viewCart}
+                  </Link>
+                </>
+              )}
+            </p>
 
             <Button
-              className="mt-4 w-full"
+              className="mt-2 w-full"
               size="lg"
               disabled={!plan || !plan.inStock || buying !== null}
               onClick={() => buy("online")}
@@ -329,7 +409,18 @@ export function ProductDetailView({
               </Button>
             )}
 
-            <p className="mt-3 text-center text-xs text-muted">⚡ {t.instantDelivery}</p>
+            {/* Trust signals, right where the buying decision happens */}
+            <ul className="mt-4 grid gap-2 border-t border-border pt-4 text-xs text-muted sm:grid-cols-3">
+              <li className="flex items-center gap-1.5">
+                <span aria-hidden>⚡</span> {t.trustInstant}
+              </li>
+              <li className="flex items-center gap-1.5">
+                <span aria-hidden>🔒</span> {t.trustSecure}
+              </li>
+              <li className="flex items-center gap-1.5">
+                <span aria-hidden>💬</span> {t.trustSupport}
+              </li>
+            </ul>
           </Card>
         </div>
       </div>
@@ -393,6 +484,11 @@ export function ProductDetailView({
                       <div className="flex items-center justify-between">
                         <span className="font-medium flex items-center gap-2">
                           {r.userName}
+                          {r.verifiedBuyer && (
+                            <Badge tone="success" className="font-normal">
+                              ✓ {t.verifiedBuyer}
+                            </Badge>
+                          )}
                           {r.isPendingLocal && (
                             <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-normal text-amber-500">
                               {dict.admin.reviews.pending}

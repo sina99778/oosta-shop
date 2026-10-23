@@ -3,12 +3,15 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
+import { api, ApiError } from "@/lib/api";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/cn";
+import { orderStatusTone } from "@/lib/order-status";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
@@ -24,21 +27,28 @@ type AdminOrder = {
 };
 type Pagination = { page: number; pageSize: number; total: number; totalPages: number };
 
-const STATUSES = ["", "PAID", "PENDING_REVIEW", "PENDING", "FAILED", "REJECTED"] as const;
-
-function statusTone(status: string): "success" | "muted" | "danger" {
-  if (status === "PAID") return "success";
-  if (status === "PENDING" || status === "PENDING_REVIEW") return "muted";
-  return "danger";
-}
+const STATUSES = [
+  "",
+  "PAID",
+  "PAID_UNFULFILLED",
+  "PENDING_REVIEW",
+  "PENDING",
+  "EXPIRED",
+  "FAILED",
+  "REJECTED",
+  "REFUNDED",
+] as const;
 
 export function AdminOrders({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const { token } = useAuth();
   const t = dict.admin;
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
+  const [reload, setReload] = useState(0);
+  const [fulfilling, setFulfilling] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const query = new URLSearchParams({ page: String(page), pageSize: "50" });
+  const query = new URLSearchParams({ page: String(page), pageSize: "50", _r: String(reload) });
   if (status) query.set("status", status);
   const { data, loading } = useApi<{ items: AdminOrder[]; pagination: Pagination }>(
     token ? `/admin/orders?${query.toString()}` : null,
@@ -46,6 +56,21 @@ export function AdminOrders({ locale, dict }: { locale: Locale; dict: Dictionary
   );
   const statusMap = dict.dashboard.status as Record<string, string>;
   const totalPages = data?.pagination.totalPages ?? 1;
+
+  // Deliver a paid order whose stock ran out (after restocking its plan).
+  async function fulfill(orderId: string) {
+    setFulfilling(orderId);
+    setNotice(null);
+    try {
+      await api.post(`/admin/orders/${orderId}/fulfill`, {}, token ?? undefined);
+      setNotice(t.fulfilled);
+      setReload((r) => r + 1);
+    } catch (e) {
+      setNotice(e instanceof ApiError ? e.message : dict.common.somethingWrong);
+    } finally {
+      setFulfilling(null);
+    }
+  }
 
   return (
     <Container className="py-8">
@@ -70,29 +95,51 @@ export function AdminOrders({ locale, dict }: { locale: Locale; dict: Dictionary
         ))}
       </div>
 
+      {notice && (
+        <p role="status" className="mb-4 text-sm text-muted">
+          {notice}
+        </p>
+      )}
+
       {loading ? (
-        <Spinner className="size-6" />
+        <div className="space-y-2">
+          {Array.from({ length: 5 }, (_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-2xl" />
+          ))}
+        </div>
       ) : !data || data.items.length === 0 ? (
         <p className="text-muted">{t.noOrders}</p>
       ) : (
         <>
           <div className="space-y-2">
             {data.items.map((order) => (
-              <Card key={order.id} className="flex items-center justify-between gap-4 text-sm">
+              <Card
+                key={order.id}
+                className="flex flex-wrap items-center justify-between gap-4 text-sm"
+              >
                 <div>
                   <p className="font-medium">#{order.id.slice(-8)}</p>
                   <p className="text-muted">
                     {order.user.name} · {order.user.email ?? order.user.phone ?? "—"}
                   </p>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4">
                   <span className="text-muted">{formatDate(order.createdAt, locale)}</span>
                   <span className="font-semibold">
                     {formatPrice(order.totalAmount, order.currency, locale)}
                   </span>
-                  <Badge tone={statusTone(order.paymentStatus)}>
+                  <Badge tone={orderStatusTone(order.paymentStatus)}>
                     {statusMap[order.paymentStatus] ?? order.paymentStatus}
                   </Badge>
+                  {order.paymentStatus === "PAID_UNFULFILLED" && (
+                    <Button
+                      size="sm"
+                      disabled={fulfilling !== null}
+                      onClick={() => fulfill(order.id)}
+                    >
+                      {fulfilling === order.id ? <Spinner /> : t.fulfill}
+                    </Button>
+                  )}
                 </div>
               </Card>
             ))}

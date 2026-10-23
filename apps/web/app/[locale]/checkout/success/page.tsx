@@ -7,12 +7,20 @@ import { Card } from "@/components/ui/card";
 
 export default async function CheckoutSuccessPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ order?: string }>;
 }) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const dict = await getDictionary(locale);
+  // Deep-link straight to the delivered credentials when the order id is known.
+  const { order } = await searchParams;
+  const orderHref =
+    order && /^[a-z0-9]+$/i.test(order)
+      ? `/${locale}/dashboard/orders/${order}`
+      : `/${locale}/dashboard`;
 
   return (
     <Container className="flex justify-center py-20">
@@ -24,7 +32,7 @@ export default async function CheckoutSuccessPage({
         <p className="mt-2 text-muted">{dict.checkout.successBody}</p>
         <div className="mt-6 flex justify-center gap-3">
           <Link
-            href={`/${locale}/dashboard`}
+            href={orderHref}
             className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover"
           >
             {dict.checkout.viewOrders}

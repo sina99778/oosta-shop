@@ -9,7 +9,7 @@ const tones: Record<Tone, string> = {
   danger: "bg-danger/15 text-danger",
   muted: "bg-surface text-muted",
   primary: "bg-primary/15 text-primary",
-  sale: "bg-danger text-white",
+  sale: "bg-danger text-danger-foreground",
 };
 
 export function Badge({

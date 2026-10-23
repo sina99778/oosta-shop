@@ -53,12 +53,14 @@ export function themeCss(s: SiteSettings): string {
     light.push(
       `--c-primary:${primary}`,
       `--c-primary-hover:color-mix(in oklab, ${primary} 82%, black)`,
+      `--c-primary-2:color-mix(in oklab, ${primary} 82%, black)`,
     );
   }
   if (primaryDark) {
     dark.push(
       `--c-primary:${primaryDark}`,
       `--c-primary-hover:color-mix(in oklab, ${primaryDark} 72%, white)`,
+      `--c-primary-2:color-mix(in oklab, ${primaryDark} 85%, white)`,
     );
   }
   if (accent) light.push(`--c-accent:${accent}`);

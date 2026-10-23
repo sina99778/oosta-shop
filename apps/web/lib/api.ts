@@ -19,6 +19,17 @@ export function productImageUrl(p: {
   return null;
 }
 
+// The browser session lives in an httpOnly cookie the API sets on login, so page
+// scripts never see the JWT. Components still pass the auth context's `token`
+// through to api.* calls; for a browser session that value is this marker, which
+// means "send the cookie" (credentials: "include" — always on) rather than a
+// bearer header. A real token (scripts/tests) is still sent as Authorization.
+export const COOKIE_SESSION = "cookie-session";
+
+function authHeaders(token?: string): Record<string, string> {
+  return token && token !== COOKIE_SESSION ? { authorization: `Bearer ${token}` } : {};
+}
+
 export class ApiError extends Error {
   status: number;
   code?: string;
@@ -38,15 +49,15 @@ async function request<T>(
   body?: unknown,
   token?: string,
 ): Promise<T> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = authHeaders(token);
   if (body !== undefined) headers["content-type"] = "application/json";
-  if (token) headers.authorization = `Bearer ${token}`;
 
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
+    credentials: "include",
   });
 
   const data = await res.json().catch(() => ({}));
@@ -60,14 +71,12 @@ async function request<T>(
 // Multipart upload (e.g. card-to-card receipts). The browser sets the multipart
 // boundary header automatically, so we must NOT set content-type ourselves.
 async function upload<T>(path: string, form: FormData, token?: string): Promise<T> {
-  const headers: Record<string, string> = {};
-  if (token) headers.authorization = `Bearer ${token}`;
-
   const res = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
-    headers,
+    headers: authHeaders(token),
     body: form,
     cache: "no-store",
+    credentials: "include",
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -79,9 +88,11 @@ async function upload<T>(path: string, form: FormData, token?: string): Promise<
 
 // Fetch a protected binary resource (e.g. a receipt image) as a Blob.
 async function blob(path: string, token?: string): Promise<Blob> {
-  const headers: Record<string, string> = {};
-  if (token) headers.authorization = `Bearer ${token}`;
-  const res = await fetch(`${BASE_URL}${path}`, { headers, cache: "no-store" });
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+    credentials: "include",
+  });
   if (!res.ok) throw new ApiError("Request failed", res.status);
   return res.blob();
 }
