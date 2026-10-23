@@ -99,6 +99,16 @@ doctor() {
       if [ "$fix" = "fix" ]; then set_env JWT_SECRET "$(gen_secret 36)" && ok "generated a strong JWT_SECRET"; else issues=$((issues + 1)); fi
     else ok "JWT_SECRET is set"; fi
 
+    local ckey
+    ckey=$(get_env CREDENTIALS_ENCRYPTION_KEY)
+    if [ -z "$ckey" ]; then
+      err "CREDENTIALS_ENCRYPTION_KEY is unset — delivered credentials are stored in plaintext"
+      if [ "$fix" = "fix" ]; then
+        set_env CREDENTIALS_ENCRYPTION_KEY "$(openssl rand -hex 32)" &&
+          ok "generated CREDENTIALS_ENCRYPTION_KEY — BACK IT UP outside this server (see $ENV_FILE)"
+      else issues=$((issues + 1)); fi
+    else ok "CREDENTIALS_ENCRYPTION_KEY is set (keep an off-server copy)"; fi
+
     pg=$(get_env POSTGRES_PASSWORD)
     if [ -z "$pg" ] || [ "$pg" = "change-me-to-a-strong-password" ]; then
       err "POSTGRES_PASSWORD is unset/placeholder"
@@ -160,6 +170,7 @@ cmd_config() {
   # Auto-generate any placeholder secrets.
   [ "$(get_env JWT_SECRET)" = "replace-with-a-long-random-secret" ] && { set_env JWT_SECRET "$(gen_secret 36)"; ok "generated JWT_SECRET"; }
   [ "$(get_env POSTGRES_PASSWORD)" = "change-me-to-a-strong-password" ] && { set_env POSTGRES_PASSWORD "$(gen_secret 24)"; ok "generated POSTGRES_PASSWORD"; }
+  [ -z "$(get_env CREDENTIALS_ENCRYPTION_KEY)" ] && { set_env CREDENTIALS_ENCRYPTION_KEY "$(openssl rand -hex 32)"; ok "generated CREDENTIALS_ENCRYPTION_KEY — back it up off-server!"; }
 
   read_tty v "Zarinpal merchant id (blank to skip / keep mock): " || true
   if [ -n "${v:-}" ]; then set_env ZARINPAL_MERCHANT_ID "$v"; set_env PAYMENT_PROVIDER "zarinpal"; set_env ZARINPAL_SANDBOX "false"; ok "Zarinpal enabled"; fi

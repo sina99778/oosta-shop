@@ -20,8 +20,16 @@ Internet → nginx (80/443) ─┬─ /        → web  (Next.js, :3000)
 git clone <repo> && cd oostaAI
 cp .env.production.example .env.production
 # Edit .env.production: PUBLIC_ORIGIN, POSTGRES_PASSWORD, JWT_SECRET,
+# CREDENTIALS_ENCRYPTION_KEY (openssl rand -hex 32 — back it up off-server!),
 # and the Zarinpal settings (or PAYMENT_PROVIDER=mock to start without a gateway).
+# ./oosta.sh doctor --fix generates any missing secrets for you.
 ```
+
+> **Upgrading an existing install:** after pulling, set `CREDENTIALS_ENCRYPTION_KEY`
+> and redeploy — on boot the API encrypts the existing plaintext stock once. Users
+> are logged out once (sessions moved from localStorage to an httpOnly cookie).
+> The site must be served over **HTTPS** (e.g. TLS at the ArvanCloud edge) because
+> the session cookie is `Secure`; on a plain-HTTP test box set `COOKIE_SECURE=false`.
 
 ## 2. Build & run
 
@@ -50,6 +58,22 @@ This creates the demo catalog and an admin (`admin@oosta.local` / `Admin@12345`)
    docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build web
    docker compose -f docker-compose.prod.yml restart nginx
    ```
+
+## 5. Lock the origin to the CDN (ArvanCloud)
+
+The API trusts `TRUST_PROXY_HOPS=2` proxies (Arvan edge → nginx) to find each
+visitor's real IP for rate limiting. If the server IP is also reachable directly, a
+client can forge `X-Forwarded-For` and dodge the login brute-force limits. Once the
+domain is proxied through Arvan:
+
+```bash
+curl -s https://www.arvancloud.ir/fa/ips.txt | sed 's/.*/allow &;/' > deploy/nginx/snippets/cdn-allow.list
+# then uncomment `include /etc/nginx/snippets/cdn-only.conf;` in deploy/nginx/default.conf
+docker compose -f docker-compose.prod.yml restart nginx
+```
+
+Re-run the `curl` line occasionally (Arvan's ranges change). Without a CDN, set
+`TRUST_PROXY_HOPS=1` instead.
 
 ## Operations
 

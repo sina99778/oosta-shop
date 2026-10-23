@@ -52,7 +52,7 @@ npm run db:up                 # via Docker
 npm run prisma:migrate -w @oosta/api
 npm run db:seed -w @oosta/api
 
-# 5. Run the apps (added in later phases)
+# 5. Run the apps
 npm run dev:api
 npm run dev:web
 ```
@@ -94,15 +94,28 @@ npm run db:local:stop     # stop it
 | `npm run typecheck`       | Type-check all workspaces            |
 | `npm run build`           | Build all workspaces                 |
 
-## Implementation status
+| `npm test -w @oosta/api` | API integration tests (needs a migrated `DATABASE_URL`) |
 
-This project is being built in phases.
+## How orders, stock and delivery work
 
-- **Phase 0 — Scaffolding & tooling** ✅ — monorepo workspaces, shared
-  TypeScript/ESLint/Prettier config, the environment contract, the local Postgres
-  compose file, and skeleton `api` / `web` workspaces.
-- **Phase 1 — Database modeling** ✅ — Prisma schema (User, Category, Product,
-  ProductPlan, InventoryItem, Order, OrderItem) with gateway-agnostic payment fields,
-  the initial migration, and an idempotent seed script.
+- **Checkout reserves stock.** Creating an order marks its units `RESERVED`
+  (`SELECT … FOR UPDATE SKIP LOCKED`), so two buyers can never pay for the same
+  last unit. Unpaid orders expire after `ORDER_EXPIRY_MINUTES_ONLINE` /
+  `ORDER_EXPIRY_MINUTES_CARD` and a background sweeper returns their stock.
+- **Delivery happens once.** Payment callbacks and receipt approvals lock the
+  order row; duplicates (refreshes, double taps, web + bot) are no-ops.
+- **Paid but out of stock** (a late payment after expiry) becomes
+  `PAID_UNFULFILLED` — never silently `FAILED`. The admin restocks and taps
+  "Deliver order" (panel or Telegram), or refunds.
+- **Undoing a delivered card-to-card sale** marks its units `REVOKED`: the buyer
+  already saw them, so they are never resold.
+- **Credentials are encrypted at rest** (AES-256-GCM, `CREDENTIALS_ENCRYPTION_KEY`),
+  including inside DB backups. Keep an off-server copy of the key.
+- **Sessions** are an httpOnly cookie (no token in `localStorage`); state-changing
+  cookie requests must come from an allowed origin.
+- **The Telegram AI agent** can't change payment/contact settings or delete data
+  on its own — those are queued and need the admin's ✅ tap, and customer-written
+  text (tickets, reviews) is treated as untrusted data.
 
-Subsequent phases add the API, payments + instant-delivery engine, and the frontend.
+CI (`.github/workflows/ci.yml`) runs format, lint, typecheck, build and the
+Postgres-backed API tests on every push/PR.

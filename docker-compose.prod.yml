@@ -32,6 +32,12 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.production}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       BCRYPT_SALT_ROUNDS: ${BCRYPT_SALT_ROUNDS:-12}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-2}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-}
+      ORDER_EXPIRY_MINUTES_ONLINE: ${ORDER_EXPIRY_MINUTES_ONLINE:-20}
+      ORDER_EXPIRY_MINUTES_CARD: ${ORDER_EXPIRY_MINUTES_CARD:-60}
+      MAX_OPEN_ORDERS_PER_USER: ${MAX_OPEN_ORDERS_PER_USER:-3}
       CORS_ORIGIN: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN in .env.production}
       WEB_BASE_URL: ${PUBLIC_ORIGIN}
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
@@ -80,6 +86,7 @@ services:
       - "443:443"
     volumes:
       - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/snippets:/etc/nginx/snippets:ro
       - ./deploy/nginx/certs:/etc/nginx/certs:ro
     depends_on:
       - web

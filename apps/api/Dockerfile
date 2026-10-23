@@ -24,6 +24,8 @@ COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/apps/api/dist ./dist
 COPY --from=build /app/apps/api/package.json ./package.json
 COPY --from=build /app/apps/api/prisma ./prisma
+# Run as the image's unprivileged "node" user, not root.
+USER node
 EXPOSE 4000
 # Apply pending migrations, then start the server. `exec` makes node PID 1 so it
 # receives SIGTERM directly (graceful shutdown) instead of being SIGKILLed.

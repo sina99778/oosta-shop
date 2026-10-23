@@ -68,9 +68,23 @@ async function testFoundation(): Promise<void> {
     health.headers["x-content-type-options"] === "nosniff",
     String(health.headers["x-content-type-options"]),
   );
+  // Public traffic arrives via nginx with X-Forwarded-For; a bare private-network
+  // request (the SSR container) is exempt from the global limiter by design.
+  const publicHit = await inject(app, {
+    method: "GET",
+    url: "/health",
+    remoteAddress: ip,
+    headers: { "x-forwarded-for": "203.0.113.7" },
+  });
   record(
-    "rate-limit headers present",
-    health.headers["ratelimit"] !== undefined || health.headers["ratelimit-policy"] !== undefined,
+    "rate-limit headers present (public traffic)",
+    publicHit.headers["ratelimit"] !== undefined ||
+      publicHit.headers["ratelimit-policy"] !== undefined,
+    String(publicHit.headers["ratelimit"]),
+  );
+  record(
+    "internal SSR request exempt from global limiter",
+    health.headers["ratelimit"] === undefined && health.headers["ratelimit-policy"] === undefined,
     String(health.headers["ratelimit"]),
   );
 
@@ -453,27 +467,24 @@ async function testOrders(): Promise<void> {
     `sold=${await soldCount(planC.id)}`,
   );
 
-  // Oversell: two concurrent paid orders for the single planB unit
+  // Oversell: the single planB unit is RESERVED by the first order, so a second
+  // order for it is refused at creation; duplicate concurrent callbacks for the
+  // first order deliver exactly once.
   const createB1 = await post("/orders", { items: [{ planId: planB.id, quantity: 1 }] }, token);
   const createB2 = await post("/orders", { items: [{ planId: planB.id, quantity: 1 }] }, token);
+  record(
+    "oversell: second order for the reserved last unit -> 409",
+    createB1.statusCode === 201 && createB2.statusCode === 409,
+    `codes=${createB1.statusCode},${createB2.statusCode}`,
+  );
   const authB1 = String(obj(body(createB1).payment).authority);
-  const authB2 = String(obj(body(createB2).payment).authority);
   const [vB1, vB2] = await Promise.all([
     post("/payments/verify", { authority: authB1, status: "OK" }),
-    post("/payments/verify", { authority: authB2, status: "OK" }),
+    post("/payments/verify", { authority: authB1, status: "OK" }),
   ]);
-  const paidCount = [vB1, vB2].filter(
-    (v) => v.statusCode === 200 && body(v).status === "paid",
-  ).length;
-  const oosCount = [vB1, vB2].filter((v) => v.statusCode === 409).length;
   record(
-    "oversell: exactly one paid",
-    paidCount === 1,
-    `codes=${vB1.statusCode},${vB2.statusCode}`,
-  );
-  record(
-    "oversell: exactly one 409 out-of-stock",
-    oosCount === 1,
+    "oversell: concurrent callbacks both report paid",
+    [vB1, vB2].every((v) => v.statusCode === 200 && body(v).status === "paid"),
     `codes=${vB1.statusCode},${vB2.statusCode}`,
   );
   record(
@@ -495,7 +506,7 @@ async function testOrders(): Promise<void> {
   const myOrders = body(list).orders as unknown[] | undefined;
   record(
     "GET /orders lists my orders",
-    list.statusCode === 200 && Array.isArray(myOrders) && myOrders.length >= 4,
+    list.statusCode === 200 && Array.isArray(myOrders) && myOrders.length >= 3,
     `count=${myOrders?.length}`,
   );
 
@@ -755,6 +766,11 @@ async function testCardToCard(): Promise<void> {
     noFile.statusCode === 400,
     `status=${noFile.statusCode}`,
   );
+  // Cancel it on the "gateway" so its reserved unit returns to stock.
+  await post("/payments/verify", {
+    authority: String(obj(body(online).payment).authority),
+    status: "NOK",
+  });
 
   // Admin receipts queue + history
   const adminLogin = await post("/auth/login", {
@@ -817,7 +833,8 @@ async function testCardToCard(): Promise<void> {
         `--${b}\r\nContent-Disposition: form-data; name="receipt"; filename="r.png"\r\nContent-Type: image/png\r\n\r\n`,
         "utf8",
       ),
-      Buffer.from("FAKE-RECEIPT"),
+      // A real PNG signature: receipt types are sniffed from the bytes.
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]),
       Buffer.from(`\r\n--${b}--\r\n`, "utf8"),
     ]);
     return inject(app, {

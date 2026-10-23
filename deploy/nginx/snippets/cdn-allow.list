@@ -1,0 +1,2 @@
+# Generated from https://www.arvancloud.ir/fa/ips.txt — see cdn-only.conf.
+# Empty by default: populate before including cdn-only.conf, or every request is denied.
