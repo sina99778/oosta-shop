@@ -11,7 +11,8 @@ import path from "node:path";
 import { env } from "./config/env";
 import { prisma } from "./lib/prisma";
 import { createBackup, restoreFromFile } from "./lib/backup";
-import { isAgentEnabled, runAgent } from "./lib/agent";
+import { isAgentEnabled, resolvePendingAction, runAgent } from "./lib/agent";
+import { fulfillPaidOrder } from "./modules/orders/orders.service";
 import { isOpenRouterEnabled } from "./lib/openrouter";
 import { getVisitStats } from "./modules/analytics/analytics.service";
 import {
@@ -274,6 +275,7 @@ async function ordersMessage(): Promise<string> {
   if (orders.length === 0) return "هنوز سفارشی ثبت نشده.";
   const icon: Record<string, string> = {
     PAID: "✅",
+    PAID_UNFULFILLED: "⚠️",
     PENDING: "🕒",
     PENDING_REVIEW: "🧾",
     FAILED: "❌",
@@ -321,12 +323,22 @@ async function sendBackup(chatId: number): Promise<void> {
   }
 }
 
-// Fire-and-forget notification to the admin (used by e.g. the tickets module).
-export async function notifyAdmin(text: string): Promise<void> {
+// Fire-and-forget notification to the admin (used by e.g. the tickets module),
+// optionally with one-tap action buttons ({ text, data } -> callback data).
+export async function notifyAdmin(
+  text: string,
+  buttons: Array<{ text: string; data: string }> = [],
+): Promise<void> {
   const adminId = env.TELEGRAM_ADMIN_ID;
   if (!bot || !adminId) return;
   try {
-    await bot.telegram.sendMessage(adminId, text);
+    await bot.telegram.sendMessage(
+      adminId,
+      text,
+      buttons.length
+        ? Markup.inlineKeyboard(buttons.map((b) => [Markup.button.callback(b.text, b.data)]))
+        : undefined,
+    );
   } catch (error) {
     console.error("[telegram] notifyAdmin failed", error);
   }
@@ -551,6 +563,46 @@ export function startBot(): void {
     }
   });
 
+  // Deliver a PAID_UNFULFILLED order (button on the "paid but out of stock" alert).
+  bot.action(/^ful_(.+)$/, async (ctx) => {
+    try {
+      const result = await fulfillPaidOrder(ctx.match[1]);
+      await ctx.answerCbQuery("✅ Delivered");
+      await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+      await ctx.reply(`✅ سفارش #${result.orderId.slice(-8)} تحویل شد.`, mainMenu());
+    } catch (error) {
+      await ctx.answerCbQuery("Failed");
+      await ctx.reply(
+        `❌ تحویل ناموفق: ${error instanceof Error ? error.message : String(error)}\n(اگر موجودی کافی نیست، اول انبار را شارژ کن.)`,
+        mainMenu(),
+      );
+    }
+  });
+
+  // Approve / cancel an action the AI agent queued (payment settings, deletions…).
+  bot.action(/^agc_(ok|no)_([0-9a-f]+)$/, async (ctx) => {
+    const approve = ctx.match[1] === "ok";
+    try {
+      const outcome = await resolvePendingAction(ctx.match[2], approve);
+      await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+      if (!outcome) {
+        await ctx.answerCbQuery("Expired");
+        await ctx.reply("⌛ این درخواست منقضی شده؛ دوباره از دستیار بخواه.", mainMenu());
+        return;
+      }
+      await ctx.answerCbQuery(approve ? "✅ Applied" : "Cancelled");
+      await ctx.reply(
+        approve
+          ? `✅ اجرا شد: ${outcome.action.tool}\n${JSON.stringify(outcome.result ?? { ok: true }).slice(0, 1500)}`
+          : `🚫 لغو شد: ${outcome.action.tool}`,
+        mainMenu(),
+      );
+    } catch (error) {
+      await ctx.answerCbQuery("Failed");
+      await ctx.reply(`❌ ${error instanceof Error ? error.message : String(error)}`, mainMenu());
+    }
+  });
+
   // Restore: admin sends a .sql/.sql.gz dump with the caption "restore".
   bot.on(message("document"), async (ctx) => {
     const caption = ctx.message.caption ?? "";
@@ -563,8 +615,9 @@ export function startBot(): void {
       const link = await ctx.telegram.getFileLink(ctx.message.document.file_id);
       const response = await fetch(link.href);
       const buffer = Buffer.from(await response.arrayBuffer());
-      const name = ctx.message.document.file_name ?? "restore.sql.gz";
-      const tmp = path.join(os.tmpdir(), `oosta-restore-${name}`);
+      // Only the extension matters (gz or not); never use the sender's file name as a path.
+      const gz = (ctx.message.document.file_name ?? "").toLowerCase().endsWith(".gz");
+      const tmp = path.join(os.tmpdir(), `oosta-restore-${Date.now()}.sql${gz ? ".gz" : ""}`);
       await writeFile(tmp, buffer);
       await restoreFromFile(tmp);
       await unlink(tmp).catch(() => {});
@@ -602,7 +655,19 @@ export function startBot(): void {
         },
       });
       if (thinking) await bot.telegram.deleteMessage(chatId, thinking.message_id).catch(() => {});
-      await bot.telegram.sendMessage(chatId, result.slice(0, 3800), mainMenu());
+      await bot.telegram.sendMessage(chatId, result.text.slice(0, 3800), mainMenu());
+      for (const action of result.pending) {
+        await bot.telegram.sendMessage(
+          chatId,
+          `🛡 این تغییر حساس است و فقط با تأیید تو اجرا می‌شود (۱۵ دقیقه اعتبار):\n\n${action.summary}`,
+          Markup.inlineKeyboard([
+            [
+              Markup.button.callback("✅ تأیید و اجرا", `agc_ok_${action.id}`),
+              Markup.button.callback("🚫 لغو", `agc_no_${action.id}`),
+            ],
+          ]),
+        );
+      }
     } catch (error) {
       await bot.telegram.sendMessage(
         chatId,

@@ -108,6 +108,12 @@ adminRouter.get(
 // Orders overview
 adminRouter.get("/orders", validate({ query: schemas.ordersQuerySchema }), ctrl.listOrders);
 adminRouter.get("/orders/:id", validate({ params: schemas.idParamSchema }), ctrl.getOrder);
+// Deliver a PAID_UNFULFILLED order (payment captured while out of stock) after restocking.
+adminRouter.post(
+  "/orders/:id/fulfill",
+  validate({ params: schemas.idParamSchema }),
+  ctrl.fulfillOrder,
+);
 
 // Card-to-card receipts (review queue + permanent history)
 adminRouter.get("/receipts", validate({ query: schemas.receiptsQuerySchema }), ctrl.listReceipts);

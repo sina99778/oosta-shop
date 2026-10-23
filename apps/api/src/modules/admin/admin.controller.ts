@@ -2,6 +2,7 @@
 
 import type { Request, Response } from "express";
 import * as admin from "./admin.service";
+import { fulfillPaidOrder } from "../orders/orders.service";
 import type {
   BulkInventoryInput,
   CreateApiKeyInput,
@@ -160,6 +161,9 @@ export async function listOrders(_req: Request, res: Response): Promise<void> {
 }
 export async function getOrder(req: Request, res: Response): Promise<void> {
   res.json({ order: await admin.getOrder(String(req.params.id)) });
+}
+export async function fulfillOrder(req: Request, res: Response): Promise<void> {
+  res.json(await fulfillPaidOrder(String(req.params.id)));
 }
 
 // Card-to-card receipts

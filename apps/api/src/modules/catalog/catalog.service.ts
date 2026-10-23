@@ -143,76 +143,125 @@ export async function listCategories() {
   }));
 }
 
+// Builds summaries for a page of products (stock + rating only for that page).
+async function summarize(products: ProductWithRelations[]): Promise<ProductSummary[]> {
+  const ids = products.map((p) => p.id);
+  const [availMap, ratingMap] = await Promise.all([
+    availableCountByProduct(ids),
+    ratingByProduct(ids),
+  ]);
+  return products.map((product) =>
+    toSummary(product, availMap.get(product.id) ?? 0, ratingMap.get(product.id)),
+  );
+}
+
 export async function listProducts(query: ListProductsQuery) {
   const where: Prisma.ProductWhereInput = { isActive: true };
   if (query.category) where.category = { slug: query.category };
   if (query.q) where.name = { contains: query.q, mode: "insensitive" };
   if (query.featured) where.isFeatured = true;
 
-  const products = await prisma.product.findMany({
-    where,
-    include: { category: true, plans: { where: { isActive: true } } },
-    omit: omitImageData,
-    // Manual ordering wins (higher sortOrder pins earlier), newest breaks ties.
-    orderBy: [{ sortOrder: "desc" }, { createdAt: "desc" }],
-  });
+  const skip = (query.page - 1) * query.pageSize;
+  let total: number;
+  let products: ProductWithRelations[];
 
-  const ids = products.map((p) => p.id);
-  const [availMap, ratingMap] = await Promise.all([
-    availableCountByProduct(ids),
-    ratingByProduct(ids),
-  ]);
-  const summaries = products.map((product) =>
-    toSummary(product, availMap.get(product.id) ?? 0, ratingMap.get(product.id)),
-  );
-
-  if (query.sort === "price_asc") {
-    summaries.sort((a, b) => (a.priceFrom ?? Infinity) - (b.priceFrom ?? Infinity));
-  } else if (query.sort === "price_desc") {
-    summaries.sort((a, b) => (b.priceFrom ?? -Infinity) - (a.priceFrom ?? -Infinity));
+  if (query.sort === "newest") {
+    // Manual ordering wins (higher sortOrder pins earlier), newest breaks ties —
+    // paginated in the database.
+    [total, products] = await Promise.all([
+      prisma.product.count({ where }),
+      prisma.product.findMany({
+        where,
+        include: { category: true, plans: { where: { isActive: true } } },
+        omit: omitImageData,
+        orderBy: [{ sortOrder: "desc" }, { createdAt: "desc" }],
+        skip,
+        take: query.pageSize,
+      }),
+    ]);
+  } else {
+    // Price order depends on each product's cheapest *effective* plan price (sale
+    // vs regular), so rank on a lightweight projection (ids + plan prices only),
+    // then load full rows for just the requested page.
+    const light = await prisma.product.findMany({
+      where,
+      select: {
+        id: true,
+        createdAt: true,
+        plans: { where: { isActive: true }, select: { price: true, salePrice: true } },
+      },
+    });
+    const fromPrice = (plans: { price: Prisma.Decimal; salePrice: Prisma.Decimal | null }[]) =>
+      plans.length === 0
+        ? null
+        : Math.min(
+            ...plans.map((pl) =>
+              pl.salePrice != null && pl.salePrice.lt(pl.price)
+                ? Number(pl.salePrice)
+                : Number(pl.price),
+            ),
+          );
+    const asc = query.sort === "price_asc";
+    const ranked = light
+      .map((p) => ({ id: p.id, price: fromPrice(p.plans), createdAt: p.createdAt }))
+      .sort((a, b) => {
+        // Products without an active plan always sink to the end.
+        if (a.price === null || b.price === null) return a.price === null ? 1 : -1;
+        return (asc ? a.price - b.price : b.price - a.price) || +b.createdAt - +a.createdAt;
+      });
+    total = ranked.length;
+    const pageIds = ranked.slice(skip, skip + query.pageSize).map((r) => r.id);
+    const rows = await prisma.product.findMany({
+      where: { id: { in: pageIds } },
+      include: { category: true, plans: { where: { isActive: true } } },
+      omit: omitImageData,
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    products = pageIds.map((id) => byId.get(id)).filter((p) => p !== undefined);
   }
-  // "newest" is already ordered by the database query.
-
-  const total = summaries.length;
-  const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
-  const start = (query.page - 1) * query.pageSize;
-  const items = summaries.slice(start, start + query.pageSize);
 
   return {
-    items,
-    pagination: { page: query.page, pageSize: query.pageSize, total, totalPages },
+    items: await summarize(products),
+    pagination: {
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
+    },
   };
 }
 
 export async function getBestselling(limit: number) {
-  const products = await prisma.product.findMany({
-    where: { isActive: true },
+  // Rank by units sold in SQL; top up with the newest products when fewer than
+  // `limit` products have sales yet.
+  const soldRows = await prisma.inventoryItem.groupBy({
+    by: ["productId"],
+    where: { status: "SOLD", product: { isActive: true } },
+    _count: { productId: true },
+    orderBy: { _count: { productId: "desc" } },
+    take: limit,
+  });
+  const soldMap = new Map(soldRows.map((row) => [row.productId, row._count.productId]));
+  const filler =
+    soldRows.length < limit
+      ? await prisma.product.findMany({
+          where: { isActive: true, id: { notIn: [...soldMap.keys()] } },
+          select: { id: true },
+          orderBy: { createdAt: "desc" },
+          take: limit - soldRows.length,
+        })
+      : [];
+  const ids = [...soldMap.keys(), ...filler.map((p) => p.id)];
+
+  const rows = await prisma.product.findMany({
+    where: { id: { in: ids } },
     include: { category: true, plans: { where: { isActive: true } } },
     omit: omitImageData,
   });
-  const ids = products.map((p) => p.id);
-
-  const [availMap, ratingMap, soldRows] = await Promise.all([
-    availableCountByProduct(ids),
-    ratingByProduct(ids),
-    prisma.inventoryItem.groupBy({
-      by: ["productId"],
-      where: { status: "SOLD", productId: { in: ids } },
-      _count: { _all: true },
-    }),
-  ]);
-  const soldMap = new Map(soldRows.map((row) => [row.productId, row._count._all]));
-
-  return products
-    .map((product) => ({
-      summary: toSummary(product, availMap.get(product.id) ?? 0, ratingMap.get(product.id)),
-      sold: soldMap.get(product.id) ?? 0,
-    }))
-    .sort(
-      (a, b) => b.sold - a.sold || b.summary.createdAt.getTime() - a.summary.createdAt.getTime(),
-    )
-    .slice(0, limit)
-    .map((ranked) => ({ ...ranked.summary, soldCount: ranked.sold }));
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const ordered = ids.map((id) => byId.get(id)).filter((p) => p !== undefined);
+  const summaries = await summarize(ordered);
+  return summaries.map((summary) => ({ ...summary, soldCount: soldMap.get(summary.id) ?? 0 }));
 }
 
 export async function getProductBySlug(slug: string) {
@@ -273,6 +322,23 @@ export async function getProductBySlug(slug: string) {
     getRelated(product.id, product.categoryId, 4),
   ]);
 
+  // "Verified buyer" badge: the reviewer has a PAID order containing this product.
+  const buyerRows = reviews.length
+    ? await prisma.orderItem.findMany({
+        where: {
+          productId: product.id,
+          order: { paymentStatus: "PAID", userId: { in: reviews.map((r) => r.userId) } },
+        },
+        select: { order: { select: { userId: true } } },
+      })
+    : [];
+  const buyers = new Set(buyerRows.map((row) => row.order.userId));
+
+  // Units sold so far — social proof next to the buy button.
+  const soldCount = await prisma.inventoryItem.count({
+    where: { productId: product.id, status: "SOLD" },
+  });
+
   return {
     id: product.id,
     name: product.name,
@@ -307,8 +373,10 @@ export async function getProductBySlug(slug: string) {
       rating: r.rating,
       comment: r.comment,
       userName: r.user.name,
+      verifiedBuyer: buyers.has(r.userId),
       createdAt: r.createdAt,
     })),
+    soldCount,
     related,
     createdAt: product.createdAt,
   };
@@ -322,12 +390,7 @@ async function getRelated(productId: string, categoryId: string, limit: number) 
     orderBy: [{ sortOrder: "desc" }, { createdAt: "desc" }],
     take: limit,
   });
-  const ids = products.map((p) => p.id);
-  const [availMap, ratingMap] = await Promise.all([
-    availableCountByProduct(ids),
-    ratingByProduct(ids),
-  ]);
-  return products.map((p) => toSummary(p, availMap.get(p.id) ?? 0, ratingMap.get(p.id)));
+  return summarize(products);
 }
 
 // Public: raw bytes of a product's primary image (the only query that selects imageData).

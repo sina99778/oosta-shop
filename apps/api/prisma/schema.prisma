@@ -26,14 +26,16 @@ enum ProductType {
 
 enum InventoryStatus {
   AVAILABLE
-  RESERVED
+  RESERVED // held for a pending order (released when the order expires/fails)
   SOLD
+  REVOKED // was revealed to a buyer, then the sale was undone — never resell
 }
 
 enum PaymentStatus {
   PENDING
   PENDING_REVIEW
   PAID
+  PAID_UNFULFILLED // money captured but stock ran out — admin must restock + fulfill, or refund
   FAILED
   REJECTED
   REFUNDED
@@ -368,12 +370,16 @@ model Order {
 
   receipts  Receipt[]
 
+  // While PENDING, the order's inventory is RESERVED until this moment; the
+  // expiry sweeper then marks the order EXPIRED and releases the stock.
+  expiresAt DateTime?
   paidAt    DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
   @@index([userId])
   @@index([paymentStatus])
+  @@index([paymentStatus, expiresAt])
   @@map("orders")
 }
 

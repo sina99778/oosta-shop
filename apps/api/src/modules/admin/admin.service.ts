@@ -5,7 +5,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/httpError";
 import { isSafeRasterMime } from "../../middleware/upload";
-import { deliverOrder, lowStockWarning } from "../orders/orders.service";
+import { deliverOrder, lockOrder, lowStockWarning } from "../orders/orders.service";
+import { maskSecret, openCredentials, sealCredential } from "../../lib/credentials";
 import { notifyAdmin } from "../../bot";
 import { generateSeo, isAiEnabled } from "../../lib/gemini";
 import { generateApiKey } from "../../lib/apiKey";
@@ -311,7 +312,11 @@ export async function bulkImportInventory(input: BulkInventoryInput) {
           `Item ${idx + 1}: accountEmail and accountPassword are required for ACCOUNT products`,
         );
       }
-      return { ...base, accountEmail: item.accountEmail, accountPassword: item.accountPassword };
+      return {
+        ...base,
+        accountEmail: sealCredential(item.accountEmail),
+        accountPassword: sealCredential(item.accountPassword),
+      };
     }
     if (type === "LICENSE") {
       if (!item.licenseKey) {
@@ -321,7 +326,7 @@ export async function bulkImportInventory(input: BulkInventoryInput) {
           `Item ${idx + 1}: licenseKey is required for LICENSE products`,
         );
       }
-      return { ...base, licenseKey: item.licenseKey };
+      return { ...base, licenseKey: sealCredential(item.licenseKey) };
     }
     if (!item.giftCardCode) {
       throw new AppError(
@@ -330,14 +335,16 @@ export async function bulkImportInventory(input: BulkInventoryInput) {
         `Item ${idx + 1}: giftCardCode is required for GIFTCARD products`,
       );
     }
-    return { ...base, giftCardCode: item.giftCardCode };
+    return { ...base, giftCardCode: sealCredential(item.giftCardCode) };
   });
 
   const result = await prisma.inventoryItem.createMany({ data });
   return { created: result.count };
 }
 
-export async function listInventory(query: InventoryQuery) {
+// `mask` hides the secrets (used by the AI agent, whose tool output leaves the
+// server for a third-party LLM provider).
+export async function listInventory(query: InventoryQuery, options: { mask?: boolean } = {}) {
   const where: Prisma.InventoryItemWhereInput = {};
   if (query.productId) where.productId = query.productId;
   if (query.planId) where.planId = query.planId;
@@ -358,19 +365,23 @@ export async function listInventory(query: InventoryQuery) {
   ]);
 
   return {
-    items: items.map((it) => ({
-      id: it.id,
-      type: it.type,
-      status: it.status,
-      product: it.product,
-      plan: it.plan,
-      accountEmail: it.accountEmail,
-      accountPassword: it.accountPassword,
-      licenseKey: it.licenseKey,
-      giftCardCode: it.giftCardCode,
-      soldAt: it.soldAt,
-      createdAt: it.createdAt,
-    })),
+    items: items.map((raw) => {
+      const it = openCredentials(raw);
+      const show = options.mask ? maskSecret : (v: string | null) => v;
+      return {
+        id: it.id,
+        type: it.type,
+        status: it.status,
+        product: it.product,
+        plan: it.plan,
+        accountEmail: show(it.accountEmail),
+        accountPassword: show(it.accountPassword),
+        licenseKey: show(it.licenseKey),
+        giftCardCode: show(it.giftCardCode),
+        soldAt: it.soldAt,
+        createdAt: it.createdAt,
+      };
+    }),
     pagination: {
       page: query.page,
       pageSize: query.pageSize,
@@ -447,7 +458,7 @@ export async function getOrder(id: string) {
       quantity: it.quantity,
       unitPrice: Number(it.unitPrice),
       lineTotal: Number(it.lineTotal),
-      fulfilledCount: it.fulfilledItems.length,
+      fulfilledCount: it.fulfilledItems.filter((f) => f.status === "SOLD").length,
     })),
   };
 }
@@ -545,19 +556,23 @@ export async function approveReceipt(id: string, input: ReviewReceiptInput) {
   if (receipt.order.paymentProvider !== "CARD_TO_CARD") {
     throw new AppError(400, "NOT_CARD_TO_CARD", "This receipt is not for a card-to-card order");
   }
-  // Idempotency: an order can carry several PENDING receipts (re-uploads). Once
-  // one is approved and the order is PAID, approving another must not re-deliver.
   if (receipt.status !== "PENDING") {
     throw new AppError(409, "ALREADY_REVIEWED", "This receipt was already reviewed");
   }
-  if (receipt.order.paymentStatus === "PAID") {
+  // Delivery + receipt approval commit together under the order row lock, so a
+  // double tap (web + bot, or two receipts) can only ever deliver once.
+  const delivered = await deliverOrder(receipt.orderId, `card:${receipt.id}`, async (tx) => {
+    const updated = await tx.receipt.updateMany({
+      where: { id, status: "PENDING" },
+      data: { status: "APPROVED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
+    });
+    if (updated.count === 0) {
+      throw new AppError(409, "ALREADY_REVIEWED", "This receipt was already reviewed");
+    }
+  });
+  if (!delivered) {
     throw new AppError(409, "ALREADY_PAID", "This order is already paid and delivered");
   }
-  await deliverOrder(receipt.orderId, `card:${receipt.id}`);
-  await prisma.receipt.update({
-    where: { id },
-    data: { status: "APPROVED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
-  });
   // Card-to-card sales consume inventory too — warn the admin when a plan runs low.
   void lowStockWarning(receipt.orderId)
     .then((warning) => (warning ? notifyAdmin(warning) : undefined))
@@ -566,41 +581,52 @@ export async function approveReceipt(id: string, input: ReviewReceiptInput) {
 }
 
 // Reject a receipt. Three cases:
-//  - this receipt delivered the order (APPROVED + order PAID): undo it — REFUND
-//    the order and release its inventory back to AVAILABLE.
+//  - this receipt delivered the order (APPROVED + order PAID): undo the sale —
+//    the order is REFUNDED and its units become REVOKED. They are NOT returned to
+//    stock: the buyer has already seen those credentials, so reselling them
+//    would hand a used account to the next customer.
 //  - a stale duplicate on an order another receipt already PAID: just mark the
 //    receipt REJECTED; leave the order PAID and its inventory untouched.
-//  - the order is not yet paid: normal reject — move the order to REJECTED.
+//  - the order is not yet paid: normal reject — order REJECTED, reserved stock released.
 export async function rejectReceipt(id: string, input: ReviewReceiptInput) {
   const receipt = await loadReceiptForReview(id);
-  const undo = receipt.status === "APPROVED" && receipt.order.paymentStatus === "PAID";
-  const orderAlreadyPaidElsewhere =
-    receipt.status !== "APPROVED" && receipt.order.paymentStatus === "PAID";
 
   await prisma.$transaction(async (tx) => {
+    const orderStatus = await lockOrder(tx, receipt.orderId);
+    const current = await tx.receipt.findUniqueOrThrow({ where: { id } });
+    const undo = current.status === "APPROVED" && orderStatus === "PAID";
+    const orderAlreadyPaidElsewhere = current.status !== "APPROVED" && orderStatus === "PAID";
+
     await tx.receipt.update({
       where: { id },
       data: { status: "REJECTED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
     });
-
-    // Don't touch a sale that a different receipt completed.
-    if (!orderAlreadyPaidElsewhere) {
-      await tx.order.update({
-        where: { id: receipt.orderId },
-        data: { paymentStatus: undo ? "REFUNDED" : "REJECTED" },
-      });
-    }
+    if (orderAlreadyPaidElsewhere) return; // don't touch a sale another receipt completed
 
     if (undo) {
-      const orderItems = await tx.orderItem.findMany({
-        where: { orderId: receipt.orderId },
-        select: { id: true },
+      await tx.order.update({
+        where: { id: receipt.orderId },
+        data: { paymentStatus: "REFUNDED" },
       });
-      const orderItemIds = orderItems.map((oi) => oi.id);
-
       await tx.inventoryItem.updateMany({
-        where: { orderItemId: { in: orderItemIds } },
-        data: { status: "AVAILABLE", orderItemId: null, soldAt: null },
+        where: { status: "SOLD", orderItem: { orderId: receipt.orderId } },
+        data: { status: "REVOKED" },
+      });
+      return;
+    }
+
+    // Other receipts for this order may still be waiting — keep it in review then.
+    const stillPending = await tx.receipt.count({
+      where: { orderId: receipt.orderId, status: "PENDING", id: { not: id } },
+    });
+    if (stillPending === 0 && ["PENDING", "PENDING_REVIEW"].includes(orderStatus)) {
+      await tx.order.update({
+        where: { id: receipt.orderId },
+        data: { paymentStatus: "REJECTED" },
+      });
+      await tx.inventoryItem.updateMany({
+        where: { status: "RESERVED", orderItem: { orderId: receipt.orderId } },
+        data: { status: "AVAILABLE", orderItemId: null },
       });
     }
   });
@@ -800,17 +826,19 @@ export function generateProductSeo(input: SeoGenerateInput) {
 
 // ---------------- Sales dashboard / analytics ----------------
 export async function getStats() {
-  const [paidAgg, totalOrders, pendingReview, customers, currencyRow] = await Promise.all([
-    prisma.order.aggregate({
-      where: { paymentStatus: "PAID" },
-      _sum: { totalAmount: true },
-      _count: { _all: true },
-    }),
-    prisma.order.count(),
-    prisma.order.count({ where: { paymentStatus: "PENDING_REVIEW" } }),
-    prisma.user.count({ where: { role: "USER" } }),
-    prisma.order.findFirst({ where: { paymentStatus: "PAID" }, select: { currency: true } }),
-  ]);
+  const [paidAgg, totalOrders, pendingReview, customers, currencyRow, unfulfilled] =
+    await Promise.all([
+      prisma.order.aggregate({
+        where: { paymentStatus: "PAID" },
+        _sum: { totalAmount: true },
+        _count: { _all: true },
+      }),
+      prisma.order.count(),
+      prisma.order.count({ where: { paymentStatus: "PENDING_REVIEW" } }),
+      prisma.user.count({ where: { role: "USER" } }),
+      prisma.order.findFirst({ where: { paymentStatus: "PAID" }, select: { currency: true } }),
+      prisma.order.count({ where: { paymentStatus: "PAID_UNFULFILLED" } }),
+    ]);
 
   const [revenue30Rows, salesByDay] = await Promise.all([
     prisma.$queryRaw<{ revenue: number }[]>`
@@ -876,6 +904,8 @@ export async function getStats() {
     paidOrders: paidAgg._count._all,
     totalOrders,
     pendingReview,
+    // Paid but not delivered (stock ran out) — needs restock + fulfill, or a refund.
+    unfulfilled,
     customers,
     salesByDay: salesByDay.map((d) => ({ day: d.day, count: d.count, revenue: d.revenue })),
     topProducts,

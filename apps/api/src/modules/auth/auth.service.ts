@@ -17,7 +17,8 @@ function toPublicUser(user: User): PublicUser {
 
 export async function registerUser(input: SignupInput): Promise<AuthResult> {
   const orConditions: Prisma.UserWhereInput[] = [];
-  if (input.email) orConditions.push({ email: input.email });
+  // Case-insensitive: accounts created before emails were lowercased still collide.
+  if (input.email) orConditions.push({ email: { equals: input.email, mode: "insensitive" } });
   if (input.phone) orConditions.push({ phone: input.phone });
 
   const existing = await prisma.user.findFirst({ where: { OR: orConditions } });
@@ -47,14 +48,22 @@ export async function registerUser(input: SignupInput): Promise<AuthResult> {
   return { user: toPublicUser(user), token: signAccessToken({ sub: user.id, role: user.role }) };
 }
 
+// A real bcrypt hash of a random string: comparing against it when the user does
+// not exist keeps the response time the same, so timing can't reveal which
+// emails/phones are registered.
+const DUMMY_HASH = "$2a$12$12K73ODN6potKRkEJmcqkuR5zTh7RS904kbNnb6c79txdnYK5RUP2";
+
 export async function loginUser(input: LoginInput): Promise<AuthResult> {
   const identifier = input.identifier.trim();
+  const phone = identifier.replace(/[\s-]/g, "");
   const user = await prisma.user.findFirst({
-    where: { OR: [{ email: identifier }, { phone: identifier }] },
+    where: {
+      OR: [{ email: { equals: identifier, mode: "insensitive" } }, { phone }],
+    },
   });
 
-  // Verify password even when the user is absent? Keep it simple: uniform error message.
-  if (!user || !(await verifyPassword(input.password, user.passwordHash))) {
+  const valid = await verifyPassword(input.password, user?.passwordHash ?? DUMMY_HASH);
+  if (!user || !valid) {
     throw new AppError(401, "UNAUTHORIZED", "Invalid credentials");
   }
 

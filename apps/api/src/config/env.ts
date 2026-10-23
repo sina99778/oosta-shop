@@ -15,6 +15,40 @@ const EnvSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("7d"),
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(4).max(15).default(12),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
+  // Number of reverse proxies in front of Express (prod: ArvanCloud edge -> nginx = 2).
+  // Must match reality: a higher number than the real hop count lets clients spoof
+  // X-Forwarded-For and dodge the rate limiters.
+  TRUST_PROXY_HOPS: z.preprocess(
+    (value) => (value === "" || value === undefined ? undefined : value),
+    z.coerce.number().int().min(0).max(5).optional(),
+  ),
+  // Session cookie "Secure" flag. Defaults to true in production (the site must be
+  // served over HTTPS — e.g. TLS at the CDN edge); set "false" only for an HTTP-only test box.
+  COOKIE_SECURE: z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined || v === "" ? undefined : v.toLowerCase() === "true")),
+
+  // AES-256-GCM key for deliverable credentials at rest (32 bytes: 64 hex chars or
+  // base64). Generate: openssl rand -hex 32. KEEP A COPY OUTSIDE THE SERVER — without
+  // it, encrypted stock (and DB backups) cannot be read.
+  CREDENTIALS_ENCRYPTION_KEY: z.string().optional(),
+
+  // Pending orders hold (RESERVE) their stock for this long, then expire.
+  ORDER_EXPIRY_MINUTES_ONLINE: z.coerce
+    .number()
+    .int()
+    .min(5)
+    .max(24 * 60)
+    .default(20),
+  ORDER_EXPIRY_MINUTES_CARD: z.coerce
+    .number()
+    .int()
+    .min(10)
+    .max(7 * 24 * 60)
+    .default(60),
+  // Cap on a user's simultaneously unpaid orders (each one holds stock).
+  MAX_OPEN_ORDERS_PER_USER: z.coerce.number().int().min(1).max(50).default(3),
 
   PAYMENT_PROVIDER: z.enum(["mock", "zarinpal"]).default("mock"),
   ALLOW_MOCK_PAYMENTS_IN_PRODUCTION: z
@@ -108,6 +142,11 @@ function loadEnv() {
         "ZARINPAL_MERCHANT_ID must be set when PAYMENT_PROVIDER=zarinpal in production",
       );
     }
+    if (!data.CREDENTIALS_ENCRYPTION_KEY) {
+      console.warn(
+        "[oosta-api] WARNING: CREDENTIALS_ENCRYPTION_KEY is not set — delivered credentials are stored in plaintext (and in backups). Generate one with: openssl rand -hex 32",
+      );
+    }
     if (problems.length > 0) {
       throw new Error(
         `Unsafe production configuration:\n${problems.map((p) => `  - ${p}`).join("\n")}`,
@@ -122,6 +161,8 @@ function loadEnv() {
     corsOrigins: data.CORS_ORIGIN.split(",")
       .map((origin) => origin.trim())
       .filter(Boolean),
+    trustProxyHops: data.TRUST_PROXY_HOPS ?? (data.NODE_ENV === "production" ? 2 : 1),
+    cookieSecure: data.COOKIE_SECURE ?? data.NODE_ENV === "production",
   };
 }
 

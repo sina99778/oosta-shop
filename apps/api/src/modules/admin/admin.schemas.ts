@@ -75,14 +75,23 @@ export const bulkInventorySchema = z.object({
 export const inventoryQuerySchema = z.object({
   productId: z.string().optional(),
   planId: z.string().optional(),
-  status: z.enum(["AVAILABLE", "RESERVED", "SOLD"]).optional(),
+  status: z.enum(["AVAILABLE", "RESERVED", "SOLD", "REVOKED"]).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(50),
 });
 
 export const ordersQuerySchema = z.object({
   status: z
-    .enum(["PENDING", "PENDING_REVIEW", "PAID", "FAILED", "REJECTED", "REFUNDED", "EXPIRED"])
+    .enum([
+      "PENDING",
+      "PENDING_REVIEW",
+      "PAID",
+      "PAID_UNFULFILLED",
+      "FAILED",
+      "REJECTED",
+      "REFUNDED",
+      "EXPIRED",
+    ])
     .optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(50),

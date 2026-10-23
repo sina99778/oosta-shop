@@ -8,23 +8,28 @@ import { verifyAccessToken } from "../lib/jwt";
 import { looksLikeApiKey, resolveApiKey } from "../lib/apiKey";
 import { prisma } from "../lib/prisma";
 import { AppError } from "../utils/httpError";
+import { readSessionCookie } from "../lib/session";
 
-// Accepts either a user JWT (Authorization: Bearer <jwt>) OR an API key
-// (X-API-Key: oosta_sk_… , or Authorization: Bearer oosta_sk_…). API keys
-// authenticate as their owning user (used for programmatic admin access).
+// Accepts a user JWT (Authorization: Bearer <jwt>, or the httpOnly session cookie
+// the web app uses) OR an API key (X-API-Key: oosta_sk_… , or Authorization:
+// Bearer oosta_sk_…). API keys authenticate as their owning user (programmatic
+// admin access). An explicit Authorization header wins over the cookie.
 export async function authenticate(
   req: Request,
   _res: Response,
   next: NextFunction,
 ): Promise<void> {
   const header = req.headers.authorization;
-  const bearer = header?.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : undefined;
+  const headerBearer = header?.startsWith("Bearer ")
+    ? header.slice("Bearer ".length).trim()
+    : undefined;
+  const bearer = headerBearer ?? readSessionCookie(req);
   const apiKeyHeader = (req.headers["x-api-key"] as string | undefined)?.trim();
   const rawKey =
     apiKeyHeader && looksLikeApiKey(apiKeyHeader)
       ? apiKeyHeader
-      : bearer && looksLikeApiKey(bearer)
-        ? bearer
+      : headerBearer && looksLikeApiKey(headerBearer)
+        ? headerBearer
         : undefined;
 
   if (rawKey) {

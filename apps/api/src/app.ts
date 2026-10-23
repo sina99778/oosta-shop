@@ -7,6 +7,7 @@ import cors from "cors";
 import morgan from "morgan";
 import { env } from "./config/env";
 import { globalRateLimiter } from "./middleware/rateLimit";
+import { requireTrustedOrigin } from "./lib/session";
 import { errorHandler, notFoundHandler } from "./middleware/error";
 import { healthRouter } from "./routes/health";
 import { authRouter } from "./modules/auth/auth.routes";
@@ -27,7 +28,9 @@ export function createApp() {
   // Production chain is client -> ArvanCloud edge -> nginx -> Express (2 trusted
   // hops), so req.ip resolves to the real visitor. With only 1, every visitor
   // behind the same CDN edge shared one rate-limit bucket (site-wide 429s).
-  app.set("trust proxy", env.isProduction ? 2 : 1);
+  // TRUST_PROXY_HOPS overrides it; nginx must only accept CDN traffic (see
+  // DEPLOYMENT.md) or a direct client could spoof X-Forwarded-For.
+  app.set("trust proxy", env.trustProxyHops);
 
   // Security + parsing
   app.use(helmet());
@@ -40,6 +43,9 @@ export function createApp() {
 
   // Global rate limiting
   app.use(globalRateLimiter);
+
+  // CSRF guard for cookie-authenticated, state-changing requests
+  app.use(requireTrustedOrigin);
 
   // Routes
   app.use("/health", healthRouter);
