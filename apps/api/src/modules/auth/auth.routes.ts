@@ -7,16 +7,33 @@ import { authenticate } from "../../middleware/auth";
 import {
   changePasswordSchema,
   loginSchema,
+  resetPasswordSchema,
   signupSchema,
   updateProfileSchema,
 } from "./auth.schemas";
-import { changeMyPassword, login, logout, me, session, signup, updateMe } from "./auth.controller";
+import {
+  changeMyPassword,
+  login,
+  logout,
+  me,
+  resetMyPassword,
+  session,
+  signup,
+  updateMe,
+} from "./auth.controller";
 
 export const authRouter = Router();
 
 authRouter.post("/signup", authRateLimiter, validate({ body: signupSchema }), signup);
 authRouter.post("/login", authRateLimiter, validate({ body: loginSchema }), login);
 authRouter.post("/logout", logout);
+// One-time link made by an admin (see admin "customers").
+authRouter.post(
+  "/reset-password",
+  authRateLimiter,
+  validate({ body: resetPasswordSchema }),
+  resetMyPassword,
+);
 authRouter.get("/me", authenticate, me);
 authRouter.patch("/me", authenticate, validate({ body: updateProfileSchema }), updateMe);
 // Rate-limited like login: it checks a password.

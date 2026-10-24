@@ -20,6 +20,7 @@ import { pagesRouter, pagesAdminRouter } from "./modules/pages/pages.routes";
 import { analyticsRouter } from "./modules/analytics/analytics.routes";
 import { settingsRouter, settingsAdminRouter } from "./modules/settings/settings.routes";
 import { adminRouter } from "./modules/admin/admin.routes";
+import { notificationsRouter } from "./modules/notifications/notifications.routes";
 
 export function createApp() {
   const app = express();
@@ -54,6 +55,7 @@ export function createApp() {
   app.use("/orders", ordersRouter);
   app.use("/payments", paymentsRouter);
   app.use("/tickets", ticketsRouter);
+  app.use("/notifications", notificationsRouter);
   app.use(blogRouter); // public blog
   app.use(pagesRouter); // public CMS pages
   app.use(settingsRouter); // public site settings (theme/hero overrides)

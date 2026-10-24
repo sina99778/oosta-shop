@@ -1,13 +1,15 @@
 // Authentication business logic: registration, login, and user lookup.
 
+import { createHash, randomBytes } from "node:crypto";
 import type { Prisma, User } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { hashPassword, verifyPassword } from "../../lib/password";
-import { signAccessToken } from "../../lib/jwt";
+import { sessionCutoff, signAccessToken } from "../../lib/jwt";
 import { AppError } from "../../utils/httpError";
 import type {
   ChangePasswordInput,
   LoginInput,
+  ResetPasswordInput,
   SignupInput,
   UpdateProfileInput,
 } from "./auth.schemas";
@@ -87,7 +89,9 @@ export async function updateProfile(id: string, input: UpdateProfileInput): Prom
   return toPublicUser(await prisma.user.update({ where: { id }, data: { name: input.name } }));
 }
 
-export async function changePassword(id: string, input: ChangePasswordInput): Promise<void> {
+// Changes the password and ends every other session; returns a fresh token so
+// the caller stays signed in on this device.
+export async function changePassword(id: string, input: ChangePasswordInput): Promise<string> {
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) throw new AppError(404, "NOT_FOUND", "User not found");
   if (!(await verifyPassword(input.currentPassword, user.passwordHash))) {
@@ -95,6 +99,53 @@ export async function changePassword(id: string, input: ChangePasswordInput): Pr
   }
   await prisma.user.update({
     where: { id },
-    data: { passwordHash: await hashPassword(input.newPassword) },
+    data: {
+      passwordHash: await hashPassword(input.newPassword),
+      sessionsValidAfter: sessionCutoff(),
+    },
+  });
+  return signAccessToken({ sub: user.id, role: user.role });
+}
+
+// ── One-time reset links (made by an admin; there is no SMS/email channel) ──
+
+const RESET_TTL_MS = 24 * 60 * 60 * 1000;
+const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
+
+// Creates a reset link for a user, replacing any unused earlier one.
+export async function createPasswordReset(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!user) throw new AppError(404, "NOT_FOUND", "User not found");
+  const token = randomBytes(32).toString("base64url");
+  const expiresAt = new Date(Date.now() + RESET_TTL_MS);
+  await prisma.$transaction([
+    prisma.passwordReset.deleteMany({ where: { userId, usedAt: null } }),
+    prisma.passwordReset.create({ data: { userId, tokenHash: hashToken(token), expiresAt } }),
+  ]);
+  return { token, expiresAt };
+}
+
+// Spends a reset token: sets the new password and signs out every session.
+export async function resetPassword(input: ResetPasswordInput): Promise<void> {
+  const invalid = new AppError(400, "RESET_INVALID", "This reset link is invalid or has expired");
+  await prisma.$transaction(async (tx) => {
+    // The conditional update is the claim: of two concurrent uses, one wins.
+    const claimed = await tx.passwordReset.updateMany({
+      where: { tokenHash: hashToken(input.token), usedAt: null, expiresAt: { gt: new Date() } },
+      data: { usedAt: new Date() },
+    });
+    if (claimed.count === 0) throw invalid;
+    const reset = await tx.passwordReset.findUnique({
+      where: { tokenHash: hashToken(input.token) },
+      select: { userId: true },
+    });
+    if (!reset) throw invalid;
+    await tx.user.update({
+      where: { id: reset.userId },
+      data: {
+        passwordHash: await hashPassword(input.newPassword),
+        sessionsValidAfter: sessionCutoff(),
+      },
+    });
   });
 }

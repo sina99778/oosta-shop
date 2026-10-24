@@ -66,13 +66,17 @@ export async function authenticate(
     // deleting or demoting an admin revokes access immediately instead of after 7d.
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, role: true },
+      select: { id: true, role: true, sessionsValidAfter: true },
     });
     if (!user) {
       next(new AppError(401, "UNAUTHORIZED", "User no longer exists"));
       return;
     }
-    req.user = user;
+    if (user.sessionsValidAfter && payload.iat * 1000 < user.sessionsValidAfter.getTime()) {
+      next(new AppError(401, "UNAUTHORIZED", "Session ended; please sign in again"));
+      return;
+    }
+    req.user = { id: user.id, role: user.role };
     next();
   } catch (error) {
     next(error);

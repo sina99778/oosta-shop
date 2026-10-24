@@ -139,6 +139,14 @@ export function AuthForm({
               autoComplete={mode === "login" ? "current-password" : "new-password"}
             />
           </Field>
+          {mode === "login" && (
+            <Link
+              href={`/${locale}/forgot-password`}
+              className="block text-end text-xs text-muted hover:text-primary hover:underline"
+            >
+              {a.forgot}
+            </Link>
+          )}
 
           {error && (
             <p role="alert" className="text-sm text-danger">

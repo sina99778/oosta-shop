@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Container } from "@/components/ui/container";
 import { BrandStamp } from "@/components/stamp";
 import { assetUrl } from "@/lib/api";
-import { localizedSetting, type SiteConfig } from "@/lib/settings";
+import { contactLinks, localizedSetting, type SiteConfig } from "@/lib/settings";
 import type { Locale } from "@/lib/i18n";
 
 type FooterDict = {
@@ -23,12 +23,6 @@ type NavDict = {
   support: string;
   dashboard: string;
 };
-
-// "@handle" -> platform URL; full URLs pass through.
-function socialHref(value: string, base: string): string {
-  if (/^https?:\/\//i.test(value)) return value;
-  return `${base}/${value.replace(/^@/, "")}`;
-}
 
 function FooterLink({ href, label }: { href: string; label: string }) {
   return (
@@ -54,25 +48,7 @@ export function Footer({
   const { settings, enamadBadge } = config;
   const about = localizedSetting(settings, "footerAbout", locale) ?? dict.aboutDefault;
 
-  const contact: Array<{ label: string; href: string }> = [];
-  if (settings.contactEmail) {
-    contact.push({ label: settings.contactEmail, href: `mailto:${settings.contactEmail}` });
-  }
-  if (settings.contactPhone) {
-    contact.push({ label: settings.contactPhone, href: `tel:${settings.contactPhone}` });
-  }
-  if (settings.contactTelegram) {
-    contact.push({
-      label: `Telegram — ${settings.contactTelegram.replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "@")}`,
-      href: socialHref(settings.contactTelegram, "https://t.me"),
-    });
-  }
-  if (settings.contactInstagram) {
-    contact.push({
-      label: `Instagram — ${settings.contactInstagram.replace(/^https?:\/\/(www\.)?instagram\.com\//i, "@")}`,
-      href: socialHref(settings.contactInstagram, "https://instagram.com"),
-    });
-  }
+  const contact = contactLinks(settings);
 
   const badge = enamadBadge ? (
     // eslint-disable-next-line @next/next/no-img-element

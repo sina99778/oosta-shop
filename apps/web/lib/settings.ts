@@ -35,6 +35,36 @@ export async function getSiteSettings(): Promise<SiteSettings> {
   return (await getSiteConfig()).settings;
 }
 
+// "@handle" -> platform URL; full URLs pass through.
+function socialHref(value: string, base: string): string {
+  if (/^https?:\/\//i.test(value)) return value;
+  return `${base}/${value.replace(/^@/, "")}`;
+}
+
+// The shop's contact channels as links (footer, password recovery page).
+export function contactLinks(settings: SiteSettings): Array<{ label: string; href: string }> {
+  const contact: Array<{ label: string; href: string }> = [];
+  if (settings.contactEmail) {
+    contact.push({ label: settings.contactEmail, href: `mailto:${settings.contactEmail}` });
+  }
+  if (settings.contactPhone) {
+    contact.push({ label: settings.contactPhone, href: `tel:${settings.contactPhone}` });
+  }
+  if (settings.contactTelegram) {
+    contact.push({
+      label: `Telegram — ${settings.contactTelegram.replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "@")}`,
+      href: socialHref(settings.contactTelegram, "https://t.me"),
+    });
+  }
+  if (settings.contactInstagram) {
+    contact.push({
+      label: `Instagram — ${settings.contactInstagram.replace(/^https?:\/\/(www\.)?instagram\.com\//i, "@")}`,
+      href: socialHref(settings.contactInstagram, "https://instagram.com"),
+    });
+  }
+  return contact;
+}
+
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const hex = (value: string | undefined): string | null => (value && HEX.test(value) ? value : null);
 

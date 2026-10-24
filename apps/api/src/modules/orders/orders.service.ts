@@ -15,6 +15,7 @@ import { getGatewayConfig } from "../../lib/gatewayConfig";
 import { openCredentials } from "../../lib/credentials";
 import { notifyAdmin } from "../../bot";
 import { applyCoupon } from "../coupons/coupons.service";
+import { notify } from "../notifications/notifications.service";
 import type { CreateOrderInput, QuoteInput } from "./orders.schemas";
 
 type OrderWithItems = Prisma.OrderGetPayload<{
@@ -324,6 +325,8 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
   };
 }
 
+const DELIVERED_LATER = new Set(["PENDING_REVIEW", "PAID_UNFULFILLED", "REJECTED"]);
+
 // Turns an order's units SOLD and marks it PAID. Uses the units RESERVED at
 // checkout first, then claims AVAILABLE ones for any shortfall (an order that
 // expired before the late payment arrived). Returns false when the order was
@@ -358,14 +361,20 @@ export async function deliverOrder(
       });
     }
 
-    await tx.order.update({
+    const paid = await tx.order.update({
       where: { id: orderId },
       data: {
         paymentStatus: "PAID",
         paidAt: new Date(),
         ...(refId !== null ? { paymentRefId: refId } : {}),
       },
+      select: { userId: true },
     });
+    // A gateway callback delivers while the buyer is on the page; a receipt
+    // approval or a restocked PAID_UNFULFILLED order happens while they're away.
+    if (DELIVERED_LATER.has(status)) {
+      await notify(tx, paid.userId, "ORDER_DELIVERED", { orderId });
+    }
     if (onDelivered) await onDelivered(tx);
     return true;
   });

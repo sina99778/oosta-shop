@@ -14,6 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { SeoAssistant } from "@/components/admin/seo-assistant";
 import { PlanRow } from "@/components/admin/plan-row";
+import { FilePicker } from "@/components/admin/file-picker";
+import { ProductStamp } from "@/components/stamp";
 import type { Locale } from "@/lib/i18n";
 import type { Category, ProductType, SpecRow } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
@@ -299,7 +301,19 @@ export function AdminProductDetail({
       </Link>
 
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">{product.name}</h1>
+        <div className="flex min-w-0 items-center gap-3">
+          <ProductStamp
+            slug={product.slug}
+            type={product.type}
+            image={imageUrl}
+            name={product.name}
+            size="xs"
+            hole="var(--c-bg)"
+          />
+          <h1 className="truncate text-2xl font-black">
+            <bdi>{product.name}</bdi>
+          </h1>
+        </div>
         <div className="flex items-center gap-2">
           {product.isFeatured && <Badge tone="primary">{t.featured}</Badge>}
           <Badge tone={product.isActive ? "success" : "muted"}>
@@ -311,20 +325,23 @@ export function AdminProductDetail({
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Images: primary + gallery */}
         <Card className="space-y-4">
-          <h2 className="font-semibold">{t.productImage}</h2>
-          <div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-border bg-surface">
-            {imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={imageUrl} alt={product.name} className="h-full w-full object-cover" />
-            ) : (
-              <span className="text-sm text-muted">{t.noImage}</span>
-            )}
+          <h2 className="font-extrabold">{t.productImage}</h2>
+          {/* Preview as the storefront draws it: the uploaded image, or the engraved stamp. */}
+          <div className="grid aspect-square place-items-center overflow-hidden rounded-[12px] border border-border bg-surface">
+            <ProductStamp
+              slug={product.slug}
+              type={product.type}
+              image={imageUrl}
+              name={product.name}
+              size="lg"
+              tilt={-3}
+            />
           </div>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setImgFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:opacity-90"
+          {!imageUrl && <p className="text-xs text-muted">{t.noImage}</p>}
+          <FilePicker
+            key={`primary-${reload}`}
+            labels={dict.admin.filePicker}
+            onFiles={([f]) => setImgFile(f ?? null)}
           />
           {imgMsg && <p className="text-sm text-danger">{imgMsg}</p>}
           <div className="flex gap-2">
@@ -354,8 +371,10 @@ export function AdminProductDetail({
                       className="h-full w-full object-cover"
                     />
                     <button
+                      type="button"
                       onClick={() => removeGalleryImage(gid)}
-                      className="absolute end-1 top-1 rounded bg-danger px-1.5 text-xs text-danger-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                      aria-label={t.removeImage}
+                      className="absolute end-1 top-1 grid size-6 place-items-center rounded-full bg-danger text-xs text-danger-foreground shadow transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                     >
                       ✕
                     </button>
@@ -363,11 +382,10 @@ export function AdminProductDetail({
                 ))}
               </div>
             )}
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setGalFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-surface file:px-3 file:py-2 file:text-sm hover:file:opacity-90"
+            <FilePicker
+              key={`gallery-${reload}`}
+              labels={dict.admin.filePicker}
+              onFiles={([f]) => setGalFile(f ?? null)}
             />
             <Button
               size="sm"
@@ -383,7 +401,7 @@ export function AdminProductDetail({
 
         {/* Editable details */}
         <Card className="space-y-3 lg:col-span-2">
-          <h2 className="font-semibold">{t.editDetails}</h2>
+          <h2 className="font-extrabold">{t.editDetails}</h2>
           <form onSubmit={saveDetails} className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
@@ -608,7 +626,7 @@ export function AdminProductDetail({
       </Card>
 
       <Card>
-        <h2 className="font-semibold">{t.bulkImport}</h2>
+        <h2 className="font-extrabold">{t.bulkImport}</h2>
         <p className="mb-3 mt-1 text-xs text-muted">{bulkHelp}</p>
         <form onSubmit={importBulk} className="space-y-2">
           <select

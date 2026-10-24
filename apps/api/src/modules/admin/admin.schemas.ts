@@ -179,3 +179,11 @@ export const updateCouponSchema = createCouponSchema.partial();
 
 export type CreateCouponInput = z.infer<typeof createCouponSchema>;
 export type UpdateCouponInput = z.infer<typeof updateCouponSchema>;
+
+// Customers
+export const customersQuerySchema = z.object({
+  q: z.string().trim().max(100).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(30),
+});
+export type CustomersQuery = z.infer<typeof customersQuerySchema>;

@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
 import { api, ApiError, assetUrl } from "@/lib/api";
 import { Container } from "@/components/ui/container";
+import { FilePicker } from "@/components/admin/file-picker";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -153,9 +154,12 @@ export function AdminBlogEditor({
 
   return (
     <Container className="max-w-3xl space-y-6 py-8">
-      <Link href={`/${locale}/admin/blog`} className="text-sm text-muted hover:text-foreground">
-        ← {t.title}
-      </Link>
+      <div>
+        <Link href={`/${locale}/admin/blog`} className="text-sm text-muted hover:text-foreground">
+          ← {t.title}
+        </Link>
+        <h1 className="mt-1 text-2xl font-black">{postId ? t.editPost : t.newPost}</h1>
+      </div>
 
       <form onSubmit={save} className="space-y-4">
         <Card className="space-y-3">
@@ -230,18 +234,17 @@ export function AdminBlogEditor({
       {postId ? (
         <div className="grid gap-4 sm:grid-cols-2">
           <Card className="space-y-2">
-            <h2 className="font-semibold">{t.cover}</h2>
+            <h2 className="font-extrabold">{t.cover}</h2>
             <div className="aspect-[16/9] overflow-hidden rounded-lg border border-border bg-surface">
               {coverUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={coverUrl} alt="" className="h-full w-full object-cover" />
               ) : null}
             </div>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-surface file:px-3 file:py-2 file:text-sm"
+            <FilePicker
+              key={`cover-${reload}`}
+              labels={dict.admin.filePicker}
+              onFiles={([f]) => setCoverFile(f ?? null)}
             />
             <Button size="sm" variant="outline" onClick={uploadCover} disabled={!coverFile || busy}>
               {data?.post.hasCover ? t.changeCover : t.uploadCover}
@@ -249,15 +252,12 @@ export function AdminBlogEditor({
           </Card>
 
           <Card className="space-y-2">
-            <h2 className="font-semibold">{t.uploadMedia}</h2>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
+            <h2 className="font-extrabold">{t.uploadMedia}</h2>
+            <FilePicker
+              labels={dict.admin.filePicker}
+              onFiles={([f]) => {
                 if (f) void uploadMedia(f);
               }}
-              className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:text-primary-foreground"
             />
             {mediaUrl && (
               <>

@@ -27,7 +27,9 @@ import type {
   UpdateCategoryInput,
   UpdatePlanInput,
   UpdateProductInput,
+  CustomersQuery,
 } from "./admin.schemas";
+import { notify, notifyBackInStock } from "../notifications/notifications.service";
 
 function specsOf(value: Prisma.JsonValue | null): Array<{ label: string; value: string }> {
   if (!Array.isArray(value)) return [];
@@ -339,7 +341,12 @@ export async function bulkImportInventory(input: BulkInventoryInput) {
   });
 
   const result = await prisma.inventoryItem.createMany({ data });
-  return { created: result.count };
+  // Restocked: tell the buyers who asked to be notified (never fails the import).
+  const notified = await notifyBackInStock(plan.productId).catch((error) => {
+    console.error("[inventory] back-in-stock notify failed", error);
+    return 0;
+  });
+  return { created: result.count, notified };
 }
 
 // `mask` hides the secrets (used by the AI agent, whose tool output leaves the
@@ -776,14 +783,20 @@ export async function getTicket(id: string) {
 }
 
 export async function replyTicket(id: string, adminId: string, input: TicketReplyInput) {
-  const ticket = await prisma.ticket.findUnique({ where: { id }, select: { id: true } });
-  if (!ticket) throw new AppError(404, "NOT_FOUND", "Ticket not found");
-  await prisma.ticketMessage.create({
-    data: { ticketId: id, authorId: adminId, body: input.body, isStaff: true },
-  });
-  await prisma.ticket.update({
+  const ticket = await prisma.ticket.findUnique({
     where: { id },
-    data: { status: "ANSWERED", updatedAt: new Date() },
+    select: { id: true, userId: true, subject: true },
+  });
+  if (!ticket) throw new AppError(404, "NOT_FOUND", "Ticket not found");
+  await prisma.$transaction(async (tx) => {
+    await tx.ticketMessage.create({
+      data: { ticketId: id, authorId: adminId, body: input.body, isStaff: true },
+    });
+    await tx.ticket.update({
+      where: { id },
+      data: { status: "ANSWERED", updatedAt: new Date() },
+    });
+    await notify(tx, ticket.userId, "TICKET_REPLY", { ticketId: id, subject: ticket.subject });
   });
   return getTicket(id);
 }
@@ -927,5 +940,55 @@ export async function getStats() {
       createdAt: o.createdAt,
       user: o.user,
     })),
+  };
+}
+
+// ---------------- Customers ----------------
+export async function listCustomers(query: CustomersQuery) {
+  const q = query.q?.trim();
+  const where: Prisma.UserWhereInput = q
+    ? {
+        OR: [
+          { name: { contains: q, mode: "insensitive" } },
+          { email: { contains: q, mode: "insensitive" } },
+          { phone: { contains: q.replace(/[\s-]/g, "") } },
+        ],
+      }
+    : {};
+  const [total, users] = await Promise.all([
+    prisma.user.count({ where }),
+    prisma.user.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+      select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true },
+    }),
+  ]);
+  const paid = await prisma.order.groupBy({
+    by: ["userId"],
+    where: { userId: { in: users.map((u) => u.id) }, paymentStatus: "PAID" },
+    _count: { _all: true },
+    _sum: { totalAmount: true },
+  });
+  const byUser = new Map(paid.map((p) => [p.userId, p]));
+  // Same convention as the dashboard stats: the shop's sales currency.
+  const currencyRow = await prisma.order.findFirst({
+    where: { paymentStatus: "PAID" },
+    select: { currency: true },
+  });
+  return {
+    currency: currencyRow?.currency ?? "IRR",
+    items: users.map((u) => ({
+      ...u,
+      paidOrders: byUser.get(u.id)?._count._all ?? 0,
+      spent: Number(byUser.get(u.id)?._sum.totalAmount ?? 0),
+    })),
+    pagination: {
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
+    },
   };
 }

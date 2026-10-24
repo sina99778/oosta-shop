@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import type { ChangeEvent, FormEvent } from "react";
+import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
 import { api, ApiError } from "@/lib/api";
 import { Container } from "@/components/ui/container";
+import { FilePicker } from "@/components/admin/file-picker";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,7 @@ function slugify(s: string): string {
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <Card className="space-y-3">
-      <h2 className="font-semibold">{title}</h2>
+      <h2 className="font-extrabold">{title}</h2>
       {children}
     </Card>
   );
@@ -70,10 +71,6 @@ export function AdminProductNew({ locale, dict }: { locale: Locale; dict: Dictio
   function onName(v: string) {
     setName(v);
     if (!slugTouched) setSlug(slugify(v));
-  }
-
-  function onGallery(e: ChangeEvent<HTMLInputElement>) {
-    setGalleryFiles(e.target.files ? Array.from(e.target.files) : []);
   }
 
   async function submit(e: FormEvent) {
@@ -160,6 +157,7 @@ export function AdminProductNew({ locale, dict }: { locale: Locale; dict: Dictio
                   type="button"
                   size="sm"
                   variant="outline"
+                  className="shrink-0 whitespace-nowrap"
                   onClick={() => setSlug(slugify(name))}
                 >
                   {t.slugFromName}
@@ -346,26 +344,19 @@ export function AdminProductNew({ locale, dict }: { locale: Locale; dict: Dictio
 
         <SectionCard title={t.media}>
           <div>
-            <label className="mb-1 block text-sm text-muted">{t.primaryImage}</label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setPrimaryFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:opacity-90"
+            <FilePicker
+              label={t.primaryImage}
+              labels={dict.admin.filePicker}
+              onFiles={([f]) => setPrimaryFile(f ?? null)}
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-muted">{t.galleryImages}</label>
-            <input
-              type="file"
-              accept="image/*"
+            <FilePicker
+              label={t.galleryImages}
+              labels={dict.admin.filePicker}
               multiple
-              onChange={onGallery}
-              className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-surface file:px-3 file:py-2 file:text-sm hover:file:opacity-90"
+              onFiles={setGalleryFiles}
             />
-            {galleryFiles.length > 0 && (
-              <p className="mt-1 text-xs text-muted">{galleryFiles.length} ✓</p>
-            )}
           </div>
           <p className="text-xs text-muted">{t.imageHint}</p>
         </SectionCard>

@@ -75,19 +75,25 @@ enum PostStatus {
 // ── Models ───────────────────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
-  name         String
-  email        String?  @unique
-  phone        String?  @unique
-  passwordHash String
-  role           Role            @default(USER)
-  orders         Order[]
-  reviews        Review[]
-  tickets        Ticket[]
-  ticketMessages TicketMessage[]
-  apiKeys        ApiKey[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id                 String          @id @default(cuid())
+  name               String
+  email              String?         @unique
+  phone              String?         @unique
+  passwordHash       String
+  // Sessions (JWTs) issued before this moment are rejected — set on password
+  // change/reset so a stolen or forgotten session stops working.
+  sessionsValidAfter DateTime?
+  role               Role            @default(USER)
+  orders             Order[]
+  reviews            Review[]
+  tickets            Ticket[]
+  ticketMessages     TicketMessage[]
+  apiKeys            ApiKey[]
+  notifications      Notification[]
+  stockWatches       StockWatch[]
+  passwordResets     PasswordReset[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   @@map("users")
 }
@@ -104,17 +110,17 @@ model Category {
 }
 
 model Product {
-  id               String  @id @default(cuid())
+  id               String          @id @default(cuid())
   name             String
-  slug             String  @unique
+  slug             String          @unique
   // Short tagline shown near the price; description is the long (Markdown) body.
   shortDescription String?
   description      String
   // Structured key/value spec rows, e.g. [{ "label": "Warranty", "value": "30 days" }]
   specs            Json?
-  isFeatured       Boolean @default(false)
+  isFeatured       Boolean         @default(false)
   // Manual ordering on listing pages (higher comes first; ties fall back to newest).
-  sortOrder        Int     @default(0)
+  sortOrder        Int             @default(0)
   // SEO overrides (fall back to name / shortDescription when empty)
   metaTitle        String?
   metaDescription  String?
@@ -122,19 +128,20 @@ model Product {
   // Primary image stored in the DB (so it is included in backups). imageMimeType
   // is kept light for listings; imageData is only selected by the image endpoint.
   // Additional gallery images live in ProductImage.
-  imageData     Bytes?
-  imageMimeType String?
-  type        ProductType
-  isActive    Boolean         @default(true)
-  categoryId  String
-  category    Category        @relation(fields: [categoryId], references: [id])
-  plans       ProductPlan[]
-  inventory   InventoryItem[]
-  orderItems  OrderItem[]
-  images      ProductImage[]
-  reviews     Review[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  imageData        Bytes?
+  imageMimeType    String?
+  type             ProductType
+  isActive         Boolean         @default(true)
+  categoryId       String
+  category         Category        @relation(fields: [categoryId], references: [id])
+  plans            ProductPlan[]
+  inventory        InventoryItem[]
+  orderItems       OrderItem[]
+  images           ProductImage[]
+  reviews          Review[]
+  watchers         StockWatch[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   @@index([categoryId])
   @@index([isFeatured])
@@ -368,13 +375,13 @@ model Order {
   // Runtime gateway settings may change while the buyer is on the gateway page.
   paymentMetadata  Json?
 
-  receipts  Receipt[]
+  receipts Receipt[]
 
   // Discount code applied at checkout. totalAmount is what the buyer pays;
   // discountAmount is what the coupon took off the item subtotal.
   couponId       String?
-  coupon         Coupon?  @relation(fields: [couponId], references: [id], onDelete: SetNull)
-  discountAmount Decimal  @default(0) @db.Decimal(12, 2)
+  coupon         Coupon? @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  discountAmount Decimal @default(0) @db.Decimal(12, 2)
 
   // While PENDING, the order's inventory is RESERVED until this moment; the
   // expiry sweeper then marks the order EXPIRED and releases the stock.
@@ -393,26 +400,26 @@ model Order {
 // Percentage discount code. A use is counted by the orders that hold it
 // (pending or paid), so an expired/failed order frees its use automatically.
 model Coupon {
-  id         String    @id @default(cuid())
-  code       String    @unique // stored upper-case
-  percent    Int // 1–90: never a free order (gateways can't charge 0)
-  maxUses    Int? // null = unlimited
-  minAmount  Decimal?  @db.Decimal(12, 2) // minimum item subtotal
-  expiresAt  DateTime?
-  isActive   Boolean   @default(true)
-  orders     Order[]
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id        String    @id @default(cuid())
+  code      String    @unique // stored upper-case
+  percent   Int // 1–90: never a free order (gateways can't charge 0)
+  maxUses   Int? // null = unlimited
+  minAmount Decimal?  @db.Decimal(12, 2) // minimum item subtotal
+  expiresAt DateTime?
+  isActive  Boolean   @default(true)
+  orders    Order[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@map("coupons")
 }
 
 model OrderItem {
-  id        String  @id @default(cuid())
+  id        String      @id @default(cuid())
   orderId   String
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId String
-  product   Product @relation(fields: [productId], references: [id])
+  product   Product     @relation(fields: [productId], references: [id])
   planId    String
   plan      ProductPlan @relation(fields: [planId], references: [id])
 
@@ -447,4 +454,56 @@ model Receipt {
   @@index([status])
   @@index([orderId])
   @@map("receipts")
+}
+
+enum NotificationKind {
+  ORDER_DELIVERED
+  TICKET_REPLY
+  BACK_IN_STOCK
+}
+
+// In-site notice shown under the header bell. The text is rendered by the web
+// app from `kind` + `data` (so it follows the reader's language).
+//   ORDER_DELIVERED: { orderId }   TICKET_REPLY: { ticketId, subject }
+//   BACK_IN_STOCK:   { productId, slug, name }
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      NotificationKind
+  data      Json
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+// "Notify me when it's back": removed once the buyer has been notified.
+model StockWatch {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([productId])
+  @@map("stock_watches")
+}
+
+// One-time password reset link made by an admin (there is no SMS/email
+// channel). Only the SHA-256 of the token is stored.
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("password_resets")
 }

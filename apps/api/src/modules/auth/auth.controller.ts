@@ -7,6 +7,7 @@ import {
   getUserById,
   loginUser,
   registerUser,
+  resetPassword,
   updateProfile,
 } from "./auth.service";
 import { clearSessionCookie, setSessionCookie } from "../../lib/session";
@@ -45,6 +46,13 @@ export async function updateMe(req: Request, res: Response): Promise<void> {
 }
 
 export async function changeMyPassword(req: Request, res: Response): Promise<void> {
-  await changePassword(req.user!.id, req.body);
+  // Other sessions are now invalid; this device gets a fresh one.
+  setSessionCookie(res, await changePassword(req.user!.id, req.body));
+  res.status(204).end();
+}
+
+export async function resetMyPassword(req: Request, res: Response): Promise<void> {
+  await resetPassword(req.body);
+  clearSessionCookie(res);
   res.status(204).end();
 }

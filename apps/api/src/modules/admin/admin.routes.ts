@@ -170,3 +170,15 @@ adminRouter.patch(
   ctrl.updateCoupon,
 );
 adminRouter.delete("/coupons/:id", validate({ params: schemas.idParamSchema }), ctrl.deleteCoupon);
+
+// Customers + one-time password reset links
+adminRouter.get(
+  "/customers",
+  validate({ query: schemas.customersQuerySchema }),
+  ctrl.listCustomers,
+);
+adminRouter.post(
+  "/customers/:id/reset-link",
+  validate({ params: schemas.idParamSchema }),
+  ctrl.createResetLink,
+);

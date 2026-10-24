@@ -19,7 +19,13 @@
     "closeMenu": "Close menu",
     "brandTagline": "Digital Post",
     "searchPlaceholder": "What are you looking for? e.g. “ChatGPT”",
-    "topBar": "oostaAI Digital Post — orders reach your dashboard the moment you pay, even at 3 a.m."
+    "topBar": "oostaAI Digital Post — orders reach your dashboard the moment you pay, even at 3 a.m.",
+    "notifications": "Notifications",
+    "notificationsEmpty": "Nothing yet. Order and support news will land here.",
+    "notificationsUnread": "{n} new",
+    "notifDelivered": "Order #{id} was delivered — open the envelope.",
+    "notifTicket": "Support replied to “{subject}”.",
+    "notifStock": "“{name}” is back in stock — grab it before it's gone."
   },
   "common": {
     "loading": "Loading…",
@@ -110,7 +116,11 @@
     "maxQuantity": "Maximum quantity",
     "whereDelivered": "Where is it delivered?",
     "whereDeliveredValue": "Your dashboard vault",
-    "postmark": "Instant"
+    "postmark": "Instant",
+    "watch": "Notify me when it's back",
+    "watching": "We'll let you know",
+    "watchHint": "This stamp is sold out for now. When it's back, we'll tell you in your site notifications.",
+    "watchLogin": "Sign in to get notified"
   },
   "auth": {
     "loginTitle": "Welcome back",
@@ -125,7 +135,23 @@
     "haveAccount": "Already have an account?",
     "noAccount": "Don't have an account?",
     "submitting": "Please wait…",
-    "contactHint": "Provide an email or a phone number."
+    "contactHint": "Provide an email or a phone number.",
+    "forgot": "Forgot your password?",
+    "forgotTitle": "Recover your password",
+    "forgotBody": "To keep your account safe, password recovery goes through support:",
+    "forgotStep1": "Message support through one of the channels below and tell them your account's email or phone.",
+    "forgotStep2": "Once support has confirmed the account is yours, they'll send you a one-time link.",
+    "forgotStep3": "Use that link (valid for 24 hours) to set a new password, then sign in again.",
+    "forgotNoContact": "No contact channel is set up yet; if you have another account, open a support ticket.",
+    "backToLogin": "Back to sign in",
+    "resetTitle": "Set a new password",
+    "resetBody": "This link works once. After the change you'll be signed out on every device.",
+    "newPassword": "New password",
+    "repeatPassword": "Repeat new password",
+    "resetCta": "Save new password",
+    "resetDone": "Your password was changed. Sign in with the new one.",
+    "resetInvalid": "This link is invalid or has expired. Ask support for a new one.",
+    "mismatch": "The new passwords don't match."
   },
   "checkout": {
     "verifying": "Confirming your payment…",
@@ -294,7 +320,9 @@
       "delete": "Delete",
       "none": "No posts yet.",
       "view": "View",
-      "saveFirst": "Save the post first, then upload images."
+      "saveFirst": "Save the post first, then upload images.",
+      "newPost": "New post",
+      "editPost": "Edit post"
     },
     "apiTab": "API",
     "settingsTab": "Settings",
@@ -547,6 +575,31 @@
       "delete": "Delete",
       "confirmDelete": "Delete code {code}? Past orders keep their discount.",
       "of": "of"
+    },
+    "customers": {
+      "tab": "Customers",
+      "title": "Customers",
+      "subtitle": "Find a customer, see their purchases, and issue a one-time password reset link.",
+      "searchPlaceholder": "Name, email or phone",
+      "search": "Search",
+      "empty": "No customers found.",
+      "admin": "Admin",
+      "orders": "Paid orders",
+      "spent": "Spent",
+      "joined": "Joined",
+      "resetLink": "Password reset link",
+      "confirmReset": "Create a password reset link for “{name}”? Make sure the request really comes from the account owner first. Any earlier link stops working.",
+      "linkReady": "Send this link only to the account owner. It works once and is valid until {time}.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "prev": "Previous",
+      "next": "Next"
+    },
+    "filePicker": {
+      "choose": "Choose file",
+      "none": "No file chosen",
+      "selected": "{n} files selected",
+      "drop": "or drop it here"
     }
   },
   "footer": {

@@ -19,6 +19,7 @@ type Labels = {
   coupons: string;
   reviews: string;
   tickets: string;
+  customers: string;
   blog: string;
   api: string;
   settings: string;
@@ -39,6 +40,7 @@ type IconName =
   | "coupons"
   | "reviews"
   | "tickets"
+  | "customers"
   | "blog"
   | "api"
   | "settings";
@@ -51,6 +53,8 @@ const ICONS: Record<IconName, string> = {
   coupons: "M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4zM14 7v10M8 10l-1 4",
   reviews: "M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.6 6.7 19.4l1.2-6L3.4 9.3l6-.7z",
   tickets: "M4 5h16v11H8l-4 4zM8 9h8M8 12h5",
+  customers:
+    "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21c0-4 3-6 7-6s7 2 7 6M16 3.5a4 4 0 0 1 0 7.5M18 15c2.5.6 4 2.6 4 6",
   blog: "M5 4h10l4 4v12H5zM14 4v5h5M8 13h8M8 16h6",
   api: "M8 9l-4 3 4 3M16 9l4 3-4 3M14 5l-4 14",
   settings:
@@ -119,7 +123,10 @@ export function AdminShell({
     },
     {
       title: labels.groupCustomers,
-      items: [{ href: `${base}/tickets`, label: labels.tickets, icon: "tickets" }],
+      items: [
+        { href: `${base}/customers`, label: labels.customers, icon: "customers" },
+        { href: `${base}/tickets`, label: labels.tickets, icon: "tickets" },
+      ],
     },
     {
       title: labels.groupSystem,

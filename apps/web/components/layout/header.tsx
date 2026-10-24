@@ -12,6 +12,8 @@ import { cn } from "@/lib/cn";
 import { LocaleSwitcher } from "./locale-switcher";
 import { ThemeToggle } from "./theme-toggle";
 import { BrandStamp } from "@/components/stamp";
+import { NotificationBell } from "./notification-bell";
+import type { BellLabels } from "./notification-bell";
 import type { Locale } from "@/lib/i18n";
 
 type NavDict = {
@@ -30,7 +32,7 @@ type NavDict = {
   closeMenu: string;
   brandTagline: string;
   searchPlaceholder: string;
-};
+} & BellLabels;
 
 export function Header({
   locale,
@@ -41,7 +43,7 @@ export function Header({
   dict: NavDict;
   themeLabel: string;
 }) {
-  const { user, logout, loading } = useAuth();
+  const { user, token, logout, loading } = useAuth();
   const { count } = useCart();
   const pathname = usePathname();
   const base = `/${locale}`;
@@ -103,7 +105,7 @@ export function Header({
             <BrandStamp />
             <span className="flex flex-col leading-tight">
               <span className="text-xl font-black">{locale === "fa" ? "اوستا" : "oostaAI"}</span>
-              <span className="text-[11px] text-muted">{dict.brandTagline}</span>
+              <span className="hidden text-[11px] text-muted sm:inline">{dict.brandTagline}</span>
             </span>
           </Link>
           <nav className="hidden items-center gap-7 md:flex">
@@ -162,6 +164,7 @@ export function Header({
               </span>
             )}
           </Link>
+          {user && token && <NotificationBell locale={locale} token={token} labels={dict} />}
           <ThemeToggle label={themeLabel} />
           <LocaleSwitcher current={locale} />
           {!loading &&

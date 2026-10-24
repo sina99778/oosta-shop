@@ -4,8 +4,11 @@ import type { Request, Response } from "express";
 import * as admin from "./admin.service";
 import { fulfillPaidOrder } from "../orders/orders.service";
 import * as coupons from "../coupons/coupons.service";
+import { createPasswordReset } from "../auth/auth.service";
+import { env } from "../../config/env";
 import type {
   CreateCouponInput,
+  CustomersQuery,
   UpdateCouponInput,
   BulkInventoryInput,
   CreateApiKeyInput,
@@ -208,4 +211,18 @@ export async function updateCoupon(req: Request, res: Response): Promise<void> {
 export async function deleteCoupon(req: Request, res: Response): Promise<void> {
   await coupons.deleteCoupon(String(req.params.id));
   res.status(204).end();
+}
+
+// ── Customers ────────────────────────────────────────────────────────
+
+export async function listCustomers(_req: Request, res: Response): Promise<void> {
+  res.json(await admin.listCustomers(res.locals.query as CustomersQuery));
+}
+
+// One-time password reset link for a customer; the admin hands it over through
+// whatever channel they use with that customer (there is no SMS/email).
+export async function createResetLink(req: Request, res: Response): Promise<void> {
+  const { token, expiresAt } = await createPasswordReset(String(req.params.id));
+  const locale = req.query.locale === "en" ? "en" : "fa";
+  res.status(201).json({ url: `${env.WEB_BASE_URL}/${locale}/reset-password/${token}`, expiresAt });
 }

@@ -9,6 +9,7 @@ import { MAX_LINE_QUANTITY, useCart } from "@/lib/cart";
 import { placeOrder } from "@/lib/checkout";
 import { api, ApiError, assetUrl } from "@/lib/api";
 import { Container } from "@/components/ui/container";
+import { StockWatchButton } from "@/components/stock-watch-button";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -348,6 +349,19 @@ export function ProductDetailView({
                 </label>
               ))}
             </div>
+
+            {!product.inStock && (
+              <StockWatchButton
+                productId={product.id}
+                locale={locale}
+                labels={{
+                  watch: t.watch,
+                  watching: t.watching,
+                  watchHint: t.watchHint,
+                  watchLogin: t.watchLogin,
+                }}
+              />
+            )}
 
             {product.lowStock && (
               <p className="mt-3 text-sm text-danger">

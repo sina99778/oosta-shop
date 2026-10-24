@@ -42,11 +42,12 @@ const CONTACT_FIELDS = [
   "contactTelegram",
   "contactInstagram",
 ] as const;
+// `fallback` mirrors the built-in theme in globals.css (shown while unset).
 const COLOR_FIELDS = [
-  { key: "themePrimary", label: "primary" },
-  { key: "themePrimaryDark", label: "primaryDark" },
-  { key: "themeAccent", label: "accent" },
-  { key: "themeAccentDark", label: "accentDark" },
+  { key: "themePrimary", label: "primary", fallback: "#b4321f" },
+  { key: "themePrimaryDark", label: "primaryDark", fallback: "#e8735d" },
+  { key: "themeAccent", label: "accent", fallback: "#d9a24a" },
+  { key: "themeAccentDark", label: "accentDark", fallback: "#e6b866" },
 ] as const;
 
 export function AdminSettings({ dict }: { dict: Dictionary }) {
@@ -187,7 +188,7 @@ export function AdminSettings({ dict }: { dict: Dictionary }) {
       </div>
 
       <Card className="space-y-4">
-        <h2 className="font-semibold">{t.theme}</h2>
+        <h2 className="font-extrabold">{t.theme}</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           {COLOR_FIELDS.map((c) => (
             <label key={c.key} className="block">
@@ -195,14 +196,15 @@ export function AdminSettings({ dict }: { dict: Dictionary }) {
               <div className="flex items-center gap-2">
                 <input
                   type="color"
-                  value={form[c.key] || "#0284c7"}
+                  value={form[c.key] || c.fallback}
+                  aria-label={t[c.label]}
                   onChange={(e) => set(c.key, e.target.value)}
                   className="h-9 w-12 cursor-pointer rounded-lg border border-border bg-transparent"
                 />
                 <Input
                   value={form[c.key] ?? ""}
                   onChange={(e) => set(c.key, e.target.value)}
-                  placeholder="#0284c7"
+                  placeholder={c.fallback}
                   dir="ltr"
                   className="font-mono"
                 />
@@ -213,18 +215,18 @@ export function AdminSettings({ dict }: { dict: Dictionary }) {
       </Card>
 
       <Card className="space-y-4">
-        <h2 className="font-semibold">{t.copy}</h2>
+        <h2 className="font-extrabold">{t.copy}</h2>
         <div className="grid gap-4 sm:grid-cols-2">{TEXT_FIELDS.map((k) => field(k, t[k]))}</div>
       </Card>
 
       <Card className="space-y-4">
-        <h2 className="font-semibold">{t.contact}</h2>
+        <h2 className="font-extrabold">{t.contact}</h2>
         <div className="grid gap-4 sm:grid-cols-2">{CONTACT_FIELDS.map((k) => field(k, t[k]))}</div>
       </Card>
 
       {pay && (
         <Card className="space-y-4">
-          <h2 className="font-semibold">{t.payments}</h2>
+          <h2 className="font-extrabold">{t.payments}</h2>
           <p className="text-sm text-muted">{t.paymentsHint}</p>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -307,7 +309,7 @@ export function AdminSettings({ dict }: { dict: Dictionary }) {
       )}
 
       <Card className="space-y-4">
-        <h2 className="font-semibold">{t.enamad}</h2>
+        <h2 className="font-extrabold">{t.enamad}</h2>
         <p className="text-sm text-muted">{t.enamadHint}</p>
         <div className="flex flex-wrap items-center gap-4">
           {hasBadge ? (
@@ -345,11 +347,19 @@ export function AdminSettings({ dict }: { dict: Dictionary }) {
         {field("enamadLink", t.enamadLink)}
       </Card>
 
-      {err && <p className="text-sm text-danger">{err}</p>}
-      {msg && <p className="text-sm text-success">{msg}</p>}
-      <Button onClick={save} disabled={busy || !loaded}>
-        {t.save}
-      </Button>
+      {/* Sticky save bar: the page is long and every card above saves here. */}
+      <div className="sticky bottom-4 z-10 flex flex-wrap items-center gap-3 rounded-[14px] border border-border bg-card/95 p-3 shadow-card backdrop-blur">
+        <Button onClick={save} disabled={busy || !loaded}>
+          {busy ? <Spinner /> : t.save}
+        </Button>
+        <p role="status" className="text-sm">
+          {err ? (
+            <span className="text-danger">{err}</span>
+          ) : msg ? (
+            <span className="text-success">{msg}</span>
+          ) : null}
+        </p>
+      </div>
     </Container>
   );
 }
