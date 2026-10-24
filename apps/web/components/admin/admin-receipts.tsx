@@ -8,7 +8,7 @@ import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { StatusPostmark } from "@/components/stamp";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
 import { formatDate, formatPrice } from "@/lib/format";
@@ -18,10 +18,10 @@ import type { Dictionary } from "@/app/[locale]/dictionaries";
 
 type Filter = "" | "PENDING" | "APPROVED" | "REJECTED";
 
-function tone(status: string): "success" | "muted" | "danger" {
-  if (status === "APPROVED") return "success";
-  if (status === "PENDING") return "muted";
-  return "danger";
+function tone(status: string): "delivered" | "progress" | "closed" {
+  if (status === "APPROVED") return "delivered";
+  if (status === "PENDING") return "progress";
+  return "closed";
 }
 
 export function AdminReceipts({ locale, dict }: { locale: Locale; dict: Dictionary }) {
@@ -45,6 +45,7 @@ export function AdminReceipts({ locale, dict }: { locale: Locale; dict: Dictiona
 
   return (
     <Container className="space-y-4 py-8">
+      <h1 className="text-2xl font-black">{dict.admin.receipts.tab}</h1>
       <div className="flex flex-wrap items-center gap-2">
         {tabs.map((tab) => (
           <button
@@ -146,7 +147,7 @@ function ReceiptRow({
   }
 
   return (
-    <Card className="space-y-3">
+    <Card className="space-y-3 rounded-[14px]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="text-sm">
           <p className="font-medium">
@@ -171,9 +172,11 @@ function ReceiptRow({
           <span className="font-semibold">
             {formatPrice(r.order.totalAmount, r.order.currency, locale)}
           </span>
-          <Badge tone={tone(r.status)}>
-            {t[r.status.toLowerCase() as "pending" | "approved" | "rejected"]}
-          </Badge>
+          <StatusPostmark
+            label={t[r.status.toLowerCase() as "pending" | "approved" | "rejected"]}
+            tone={tone(r.status)}
+            className="size-[64px] text-[10px]"
+          />
           <span className="text-xs text-muted">
             {statusMap[r.order.paymentStatus] ?? r.order.paymentStatus}
           </span>

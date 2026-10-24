@@ -96,6 +96,7 @@ export function StampArt({ kind, className }: { kind: ArtKind; className?: strin
 }
 
 const SIZES = {
+  xs: { box: "w-[34px] h-[42px]", perf: 3, art: "size-4", meta: "" },
   sm: { box: "w-[74px] h-[90px]", perf: 5, art: "size-8", meta: "text-[7px]" },
   md: { box: "w-[104px] h-[128px]", perf: 6, art: "size-10", meta: "text-[8.5px]" },
   lg: { box: "w-[150px] h-[184px]", perf: 8, art: "size-16", meta: "text-[10px]" },
@@ -155,14 +156,18 @@ export function ProductStamp({
           />
         ) : (
           <>
-            <span className={cn("flex justify-between px-1 pt-1 font-bold", sz.meta)}>
-              <span>اوستا</span>
-              {denomination && <span>{denomination}</span>}
-            </span>
+            {size !== "xs" && (
+              <span className={cn("flex justify-between px-1 pt-1 font-bold", sz.meta)}>
+                <span>اوستا</span>
+                {denomination && <span>{denomination}</span>}
+              </span>
+            )}
             <span className="grid flex-1 place-items-center">
               <StampArt kind={style.art} className={sz.art} />
             </span>
-            {series && <span className={cn("px-1 pb-1 text-center", sz.meta)}>{series}</span>}
+            {series && size !== "xs" && (
+              <span className={cn("px-1 pb-1 text-center", sz.meta)}>{series}</span>
+            )}
           </>
         )}
       </span>
@@ -263,7 +268,7 @@ export function StatusPostmark({
   tone,
   className,
 }: {
-  label: string;
+  label: ReactNode;
   tone: "delivered" | "progress" | "closed";
   className?: string;
 }) {

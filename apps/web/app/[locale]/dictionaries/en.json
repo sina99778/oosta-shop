@@ -357,9 +357,9 @@
       "revoke": "Revoke",
       "usage": "Send it as an X-API-Key header (or Authorization: Bearer). Base URL:"
     },
-    "dashboardTab": "Dashboard",
+    "dashboardTab": "Desk",
     "dash": {
-      "title": "Dashboard",
+      "title": "Today's desk",
       "revenue": "Total revenue",
       "revenue30": "Revenue (30 days)",
       "paidOrders": "Paid orders",
@@ -367,11 +367,19 @@
       "customers": "Customers",
       "pendingReview": "Awaiting review",
       "salesChart": "Sales — last 14 days",
-      "topProducts": "Top products",
+      "topProducts": "Best-selling stamps",
       "unitsSold": "sold",
-      "lowStock": "Low stock",
-      "recentOrders": "Recent orders",
-      "noData": "No data yet."
+      "lowStock": "Running low",
+      "recentOrders": "Latest envelopes",
+      "noData": "No data yet.",
+      "subtitle": "Sales, the work queue and stock at a glance.",
+      "urgentTitle": "Needs attention",
+      "urgentNone": "Queue is empty — every envelope reached its destination.",
+      "urgentReceipts": "card-to-card receipts awaiting review",
+      "urgentUnfulfilled": "paid orders waiting for restock",
+      "urgentLowStock": "products running low",
+      "review": "Review",
+      "allOrders": "All orders"
     },
     "products": "Products",
     "orders": "Orders",
@@ -503,7 +511,14 @@
     },
     "fulfill": "Deliver order",
     "fulfilled": "Order delivered",
-    "unfulfilledAlert": "Paid orders awaiting delivery (stock ran out) — restock, then deliver them."
+    "unfulfilledAlert": "Paid orders awaiting delivery (stock ran out) — restock, then deliver them.",
+    "sidebarTitle": "Sorting room",
+    "sidebarSubtitle": "oostaAI admin",
+    "groupSales": "Sales & delivery",
+    "groupCatalog": "Catalog",
+    "groupCustomers": "Customers",
+    "groupSystem": "System",
+    "backToStore": "Back to store"
   },
   "footer": {
     "tagline": "Digital goods, no waiting.",

@@ -862,19 +862,21 @@ export async function getStats() {
   const topSold = [...soldRows].sort((a, b) => b._count._all - a._count._all).slice(0, 5);
   const topNames = await prisma.product.findMany({
     where: { id: { in: topSold.map((r) => r.productId) } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, slug: true, type: true },
   });
-  const nameMap = new Map(topNames.map((p) => [p.id, p.name]));
+  const productMap = new Map(topNames.map((p) => [p.id, p]));
   const topProducts = topSold.map((r) => ({
     id: r.productId,
-    name: nameMap.get(r.productId) ?? "—",
+    name: productMap.get(r.productId)?.name ?? "—",
+    slug: productMap.get(r.productId)?.slug ?? "",
+    type: productMap.get(r.productId)?.type ?? "ACCOUNT",
     unitsSold: r._count._all,
   }));
 
   // Low-stock active products
   const activeProducts = await prisma.product.findMany({
     where: { isActive: true },
-    select: { id: true, name: true },
+    select: { id: true, name: true, slug: true, type: true },
   });
   const availRows = await prisma.inventoryItem.groupBy({
     by: ["productId"],
@@ -883,7 +885,13 @@ export async function getStats() {
   });
   const availMap = new Map(availRows.map((a) => [a.productId, a._count._all]));
   const lowStock = activeProducts
-    .map((p) => ({ id: p.id, name: p.name, stock: availMap.get(p.id) ?? 0 }))
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      type: p.type,
+      stock: availMap.get(p.id) ?? 0,
+    }))
     .filter((p) => p.stock <= 5)
     .sort((a, b) => a.stock - b.stock)
     .slice(0, 8);

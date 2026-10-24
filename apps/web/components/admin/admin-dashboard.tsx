@@ -1,183 +1,288 @@
 "use client";
 
+// Admin "desk": what needs doing now (receipts, unfulfilled paid orders, low
+// stock), the money, and the latest envelopes — in the Digital Post language.
+
+import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
 import { Container } from "@/components/ui/container";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
-import { orderStatusTone } from "@/lib/order-status";
+import { Envelope, ProductStamp, StampArt, StatusPostmark } from "@/components/stamp";
+import { postmarkTone } from "@/lib/order-status";
 import { formatDate, formatPrice } from "@/lib/format";
+import { cn } from "@/lib/cn";
 import type { Locale } from "@/lib/i18n";
 import type { AdminStats } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 
+function Panel({
+  title,
+  action,
+  children,
+  className,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      className={cn("rounded-[14px] border border-border bg-card p-5 shadow-card", className)}
+    >
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="font-extrabold">{title}</h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function AdminDashboard({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const { token } = useAuth();
   const t = dict.admin.dash;
-  const statusMap = dict.dashboard.status as Record<string, string>;
+  const short = dict.dashboard.statusShort as Record<string, string>;
+  const base = `/${locale}/admin`;
   const { data, loading } = useApi<AdminStats>(token ? "/admin/stats" : null, token ?? undefined);
+  const num = (n: number) => new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US").format(n);
 
   if (loading || !data) {
     return (
       <Container className="space-y-6 py-8">
-        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-9 w-56" />
+        <Skeleton className="h-28 rounded-[14px]" />
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} className="h-24 rounded-2xl" />
+            <Skeleton key={i} className="h-24 rounded-[14px]" />
           ))}
         </div>
-        <Skeleton className="h-56 rounded-2xl" />
+        <Skeleton className="h-56 rounded-[14px]" />
       </Container>
     );
   }
 
+  const urgent = [
+    {
+      count: data.pendingReview,
+      label: t.urgentReceipts,
+      href: `${base}/receipts`,
+    },
+    { count: data.unfulfilled ?? 0, label: t.urgentUnfulfilled, href: `${base}/orders` },
+    {
+      count: data.lowStock.filter((p) => p.stock === 0).length,
+      label: t.urgentLowStock,
+      href: base,
+    },
+  ].filter((u) => u.count > 0);
+
   const maxRev = Math.max(1, ...data.salesByDay.map((d) => d.revenue));
-  const stats = [
-    { label: t.revenue, value: formatPrice(data.revenueTotal, data.currency, locale) },
-    { label: t.revenue30, value: formatPrice(data.revenue30, data.currency, locale) },
-    { label: t.paidOrders, value: String(data.paidOrders) },
-    { label: t.customers, value: String(data.customers) },
+  const kpis: { label: string; value: string; art: "knot" | "burst" | "grid" | "person" }[] = [
+    {
+      label: dict.admin.dash.revenue,
+      value: formatPrice(data.revenueTotal, data.currency, locale),
+      art: "burst",
+    },
+    {
+      label: dict.admin.dash.revenue30,
+      value: formatPrice(data.revenue30, data.currency, locale),
+      art: "knot",
+    },
+    { label: dict.admin.dash.paidOrders, value: num(data.paidOrders), art: "grid" },
+    { label: dict.admin.dash.customers, value: num(data.customers), art: "person" },
   ];
 
   return (
     <Container className="space-y-6 py-8">
-      <h1 className="text-2xl font-bold">{t.title}</h1>
+      <header>
+        <h1 className="text-3xl font-black">{t.title}</h1>
+        <p className="mt-1 text-sm text-muted">{t.subtitle}</p>
+      </header>
 
-      {(data.unfulfilled ?? 0) > 0 && (
-        <Link href={`/${locale}/admin/orders`} className="block">
-          <Card role="alert" className="border-primary/50 bg-primary/10 text-sm">
-            <strong className="me-2 text-primary">{data.unfulfilled}</strong>
-            {dict.admin.unfulfilledAlert}
-          </Card>
-        </Link>
-      )}
+      {/* What needs a human right now */}
+      <Envelope>
+        <div className="flex flex-wrap items-center gap-5 p-5">
+          <StatusPostmark
+            label={
+              <span className="text-2xl font-black">
+                {urgent.length ? num(urgent.reduce((s, u) => s + u.count, 0)) : "✓"}
+              </span>
+            }
+            tone={urgent.length ? "progress" : "delivered"}
+          />
+          <div className="min-w-0 flex-1">
+            <h2 className="font-extrabold">{t.urgentTitle}</h2>
+            {urgent.length === 0 ? (
+              <p className="mt-1 text-sm text-muted">{t.urgentNone}</p>
+            ) : (
+              <ul className="mt-2 flex flex-col gap-1.5">
+                {urgent.map((u) => (
+                  <li key={u.label} className="flex flex-wrap items-center gap-x-3 text-sm">
+                    <span>
+                      <strong className="text-primary">{num(u.count)}</strong> {u.label}
+                    </span>
+                    <Link href={u.href} className="font-bold text-primary hover:underline">
+                      {t.review} ←
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </Envelope>
 
+      {/* Money */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {stats.map((s) => (
-          <Card key={s.label} className="relative overflow-hidden">
-            <div className="absolute inset-x-0 -top-10 h-20 bg-brand-gradient opacity-10 blur-2xl" />
-            <p className="text-sm text-muted">{s.label}</p>
-            <p className="mt-1 text-2xl font-bold tracking-tight">{s.value}</p>
-          </Card>
+        {kpis.map((k) => (
+          <div
+            key={k.label}
+            className="flex items-center gap-3 rounded-[14px] border border-border bg-card p-4 shadow-card"
+          >
+            <span className="grid size-10 shrink-0 place-items-center rounded-[10px] bg-surface text-primary">
+              <StampArt kind={k.art} className="size-6" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-xs text-muted">{k.label}</span>
+              <span className="block text-base font-black sm:text-lg">{k.value}</span>
+            </span>
+          </div>
         ))}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <p className="text-sm text-muted">{t.orders}</p>
-          <p className="mt-1 text-xl font-semibold">{data.totalOrders}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-muted">{t.pendingReview}</p>
-          <p className="mt-1 text-xl font-semibold text-primary">{data.pendingReview}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-muted">{t.customers}</p>
-          <p className="mt-1 text-xl font-semibold">{data.customers}</p>
-        </Card>
-      </div>
-
-      {/* Sales chart */}
-      <Card>
-        <h2 className="mb-4 font-semibold">{t.salesChart}</h2>
+      <Panel title={t.salesChart}>
         {data.salesByDay.length === 0 ? (
           <p className="text-sm text-muted">{t.noData}</p>
         ) : (
-          <div className="flex h-40 items-end gap-1.5">
+          <div
+            className="flex h-44 items-end gap-1.5 border-b border-dashed border-border"
+            role="img"
+            aria-label={t.salesChart}
+          >
             {data.salesByDay.map((d) => (
               <div
                 key={d.day}
-                className="group flex flex-1 flex-col items-center justify-end gap-1"
+                className="flex h-full flex-1 flex-col items-center justify-end gap-1"
               >
                 <div
-                  className="w-full rounded-t bg-brand-gradient transition-all"
+                  className="w-full max-w-10 rounded-t-[4px] bg-primary/85 transition-colors hover:bg-primary"
                   style={{ height: `${Math.max(4, (d.revenue / maxRev) * 100)}%` }}
                   title={`${d.day}: ${formatPrice(d.revenue, data.currency, locale)} (${d.count})`}
                 />
-                <span className="text-[10px] text-muted">{d.day.slice(5)}</span>
+                <span className="pb-1 text-[10px] text-muted" dir="ltr">
+                  {d.day.slice(5)}
+                </span>
               </div>
             ))}
           </div>
         )}
-      </Card>
+      </Panel>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Top products */}
-        <Card>
-          <h2 className="mb-3 font-semibold">{t.topProducts}</h2>
+        <Panel title={t.topProducts}>
           {data.topProducts.length === 0 ? (
             <p className="text-sm text-muted">{t.noData}</p>
           ) : (
-            <div className="space-y-2">
+            <ol className="flex flex-col divide-y divide-dashed divide-border">
               {data.topProducts.map((p, i) => (
-                <div key={p.id} className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2">
-                    <span className="grid size-6 place-items-center rounded-md bg-primary/10 text-xs font-bold text-primary">
-                      {i + 1}
-                    </span>
-                    {p.name}
+                <li key={p.id} className="flex items-center gap-3 py-2.5">
+                  <span className="w-5 text-center text-sm font-black text-muted">
+                    {num(i + 1)}
                   </span>
-                  <span className="text-muted">
-                    {p.unitsSold} {t.unitsSold}
+                  <ProductStamp
+                    slug={p.slug}
+                    type={p.type}
+                    name={p.name}
+                    size="xs"
+                    hole="var(--c-card)"
+                  />
+                  <bdi className="min-w-0 flex-1 truncate text-sm font-bold">{p.name}</bdi>
+                  <span className="text-sm text-muted">
+                    {num(p.unitsSold)} {dict.admin.dash.unitsSold}
                   </span>
-                </div>
+                </li>
               ))}
-            </div>
+            </ol>
           )}
-        </Card>
+        </Panel>
 
-        {/* Low stock */}
-        <Card>
-          <h2 className="mb-3 font-semibold">{t.lowStock}</h2>
+        <Panel title={t.lowStock}>
           {data.lowStock.length === 0 ? (
             <p className="text-sm text-muted">{t.noData}</p>
           ) : (
-            <div className="space-y-2">
+            <ul className="flex flex-col divide-y divide-dashed divide-border">
               {data.lowStock.map((p) => (
-                <div key={p.id} className="flex items-center justify-between text-sm">
-                  <span>{p.name}</span>
-                  <Badge tone={p.stock === 0 ? "danger" : "muted"}>{p.stock}</Badge>
-                </div>
+                <li key={p.id}>
+                  <Link
+                    href={`${base}/products/${p.id}`}
+                    className="flex items-center gap-3 py-2.5 hover:text-primary"
+                  >
+                    <ProductStamp
+                      slug={p.slug}
+                      type={p.type}
+                      name={p.name}
+                      size="xs"
+                      hole="var(--c-card)"
+                    />
+                    <bdi className="min-w-0 flex-1 truncate text-sm font-bold">{p.name}</bdi>
+                    <span
+                      className={cn(
+                        "rounded-full px-2.5 py-0.5 text-xs font-bold",
+                        p.stock === 0 ? "bg-danger/15 text-danger" : "bg-surface text-foreground",
+                      )}
+                    >
+                      {num(p.stock)}
+                    </span>
+                  </Link>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
-        </Card>
+        </Panel>
       </div>
 
-      {/* Recent orders */}
-      <Card>
-        <h2 className="mb-3 font-semibold">{t.recentOrders}</h2>
+      <Panel
+        title={t.recentOrders}
+        action={
+          <Link href={`${base}/orders`} className="text-sm font-bold text-primary hover:underline">
+            {t.allOrders}
+          </Link>
+        }
+      >
         {data.recentOrders.length === 0 ? (
           <p className="text-sm text-muted">{t.noData}</p>
         ) : (
-          <div className="space-y-2">
+          <ul className="flex flex-col divide-y divide-dashed divide-border">
             {data.recentOrders.map((o) => (
-              <div
-                key={o.id}
-                className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2 text-sm last:border-0"
-              >
-                <div>
-                  <span className="font-medium">#{o.id.slice(-8)}</span>{" "}
-                  <span className="text-muted">
-                    {o.user.name} · {o.user.email ?? o.user.phone ?? "—"}
-                  </span>
+              <li key={o.id} className="flex items-center gap-4 py-3 text-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="font-mono text-xs text-muted" dir="ltr">
+                    #{o.id.slice(-8).toUpperCase()}
+                  </p>
+                  <p className="mt-0.5 truncate">
+                    <strong>{o.user.name}</strong>{" "}
+                    <span className="text-muted" dir="ltr">
+                      {o.user.email ?? o.user.phone ?? "—"}
+                    </span>
+                  </p>
+                  <p className="mt-0.5 flex flex-wrap gap-x-3 text-muted">
+                    <span>{formatDate(o.createdAt, locale)}</span>
+                    <strong className="text-foreground">
+                      {formatPrice(o.totalAmount, o.currency, locale)}
+                    </strong>
+                  </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-muted">{formatDate(o.createdAt, locale)}</span>
-                  <span className="font-semibold">
-                    {formatPrice(o.totalAmount, o.currency, locale)}
-                  </span>
-                  <Badge tone={orderStatusTone(o.paymentStatus)}>
-                    {statusMap[o.paymentStatus] ?? o.paymentStatus}
-                  </Badge>
-                </div>
-              </div>
+                <StatusPostmark
+                  label={short[o.paymentStatus] ?? o.paymentStatus}
+                  tone={postmarkTone(o.paymentStatus)}
+                  className="size-[58px] text-[9px]"
+                />
+              </li>
             ))}
-          </div>
+          </ul>
         )}
-      </Card>
+      </Panel>
     </Container>
   );
 }

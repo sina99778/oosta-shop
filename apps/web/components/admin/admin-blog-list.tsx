@@ -24,7 +24,7 @@ export function AdminBlogList({ locale, dict }: { locale: Locale; dict: Dictiona
   return (
     <Container className="space-y-4 py-8">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">{t.title}</h1>
+        <h1 className="text-2xl font-black">{t.title}</h1>
         <Link href={`/${locale}/admin/blog/new`}>
           <Button size="sm">+ {t.new}</Button>
         </Link>

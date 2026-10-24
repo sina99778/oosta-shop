@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getDictionary } from "../dictionaries";
 import { isLocale } from "@/lib/i18n";
 import { RequireAuth } from "@/components/require-auth";
-import { AdminNav } from "@/components/admin/admin-nav";
+import { AdminShell } from "@/components/admin/admin-nav";
 
 export default async function AdminLayout({
   children,
@@ -18,7 +18,7 @@ export default async function AdminLayout({
 
   return (
     <RequireAuth locale={locale} role="ADMIN">
-      <AdminNav
+      <AdminShell
         locale={locale}
         labels={{
           dashboard: dict.admin.dashboardTab,
@@ -30,9 +30,17 @@ export default async function AdminLayout({
           blog: dict.admin.blogTab,
           api: dict.admin.apiTab,
           settings: dict.admin.settingsTab,
+          sidebarTitle: dict.admin.sidebarTitle,
+          sidebarSubtitle: dict.admin.sidebarSubtitle,
+          groupSales: dict.admin.groupSales,
+          groupCatalog: dict.admin.groupCatalog,
+          groupCustomers: dict.admin.groupCustomers,
+          groupSystem: dict.admin.groupSystem,
+          backToStore: dict.admin.backToStore,
         }}
-      />
-      {children}
+      >
+        {children}
+      </AdminShell>
     </RequireAuth>
   );
 }

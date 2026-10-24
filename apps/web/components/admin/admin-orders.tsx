@@ -5,13 +5,12 @@ import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
 import { api, ApiError } from "@/lib/api";
 import { Container } from "@/components/ui/container";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Envelope, StatusPostmark } from "@/components/stamp";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/cn";
-import { orderStatusTone } from "@/lib/order-status";
+import { postmarkTone } from "@/lib/order-status";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
@@ -55,6 +54,7 @@ export function AdminOrders({ locale, dict }: { locale: Locale; dict: Dictionary
     token ?? undefined,
   );
   const statusMap = dict.dashboard.status as Record<string, string>;
+  const short = dict.dashboard.statusShort as Record<string, string>;
   const totalPages = data?.pagination.totalPages ?? 1;
 
   // Deliver a paid order whose stock ran out (after restocking its plan).
@@ -74,6 +74,7 @@ export function AdminOrders({ locale, dict }: { locale: Locale; dict: Dictionary
 
   return (
     <Container className="py-8">
+      <h1 className="mb-5 text-2xl font-black">{t.orders}</h1>
       <div className="mb-4 flex flex-wrap gap-2">
         {STATUSES.map((s) => (
           <button
@@ -104,7 +105,7 @@ export function AdminOrders({ locale, dict }: { locale: Locale; dict: Dictionary
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }, (_, i) => (
-            <Skeleton key={i} className="h-16 w-full rounded-2xl" />
+            <Skeleton key={i} className="h-24 w-full rounded-[14px]" />
           ))}
         </div>
       ) : !data || data.items.length === 0 ? (
@@ -113,35 +114,43 @@ export function AdminOrders({ locale, dict }: { locale: Locale; dict: Dictionary
         <>
           <div className="space-y-2">
             {data.items.map((order) => (
-              <Card
-                key={order.id}
-                className="flex flex-wrap items-center justify-between gap-4 text-sm"
-              >
-                <div>
-                  <p className="font-medium">#{order.id.slice(-8)}</p>
-                  <p className="text-muted">
-                    {order.user.name} · {order.user.email ?? order.user.phone ?? "—"}
-                  </p>
+              <Envelope key={order.id}>
+                <div className="flex flex-wrap items-center justify-between gap-4 p-4 text-sm">
+                  <div className="min-w-0">
+                    <p className="font-mono text-xs text-muted" dir="ltr">
+                      #{order.id.slice(-8).toUpperCase()}
+                    </p>
+                    <p className="font-bold">{order.user.name}</p>
+                    <p className="text-muted" dir="ltr">
+                      {order.user.email ?? order.user.phone ?? "—"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <span className="text-muted">{formatDate(order.createdAt, locale)}</span>
+                    <span className="font-semibold">
+                      {formatPrice(order.totalAmount, order.currency, locale)}
+                    </span>
+                    <StatusPostmark
+                      label={
+                        short[order.paymentStatus] ??
+                        statusMap[order.paymentStatus] ??
+                        order.paymentStatus
+                      }
+                      tone={postmarkTone(order.paymentStatus)}
+                      className="size-[64px] text-[10px]"
+                    />
+                    {order.paymentStatus === "PAID_UNFULFILLED" && (
+                      <Button
+                        size="sm"
+                        disabled={fulfilling !== null}
+                        onClick={() => fulfill(order.id)}
+                      >
+                        {fulfilling === order.id ? <Spinner /> : t.fulfill}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-4">
-                  <span className="text-muted">{formatDate(order.createdAt, locale)}</span>
-                  <span className="font-semibold">
-                    {formatPrice(order.totalAmount, order.currency, locale)}
-                  </span>
-                  <Badge tone={orderStatusTone(order.paymentStatus)}>
-                    {statusMap[order.paymentStatus] ?? order.paymentStatus}
-                  </Badge>
-                  {order.paymentStatus === "PAID_UNFULFILLED" && (
-                    <Button
-                      size="sm"
-                      disabled={fulfilling !== null}
-                      onClick={() => fulfill(order.id)}
-                    >
-                      {fulfilling === order.id ? <Spinner /> : t.fulfill}
-                    </Button>
-                  )}
-                </div>
-              </Card>
+              </Envelope>
             ))}
           </div>
 

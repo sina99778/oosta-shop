@@ -43,6 +43,7 @@ export function AdminTickets({ locale, dict }: { locale: Locale; dict: Dictionar
 
   return (
     <Container className="space-y-4 py-8">
+      <h1 className="text-2xl font-black">{dict.admin.ticketsTab}</h1>
       <div className="flex flex-wrap items-center gap-2">
         {tabs.map((tab) => (
           <button

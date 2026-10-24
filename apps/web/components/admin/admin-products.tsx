@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
 import { api, ApiError } from "@/lib/api";
 import { Container } from "@/components/ui/container";
+import { ProductStamp } from "@/components/stamp";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,13 +15,14 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { assetUrl } from "@/lib/api";
 import type { Locale } from "@/lib/i18n";
+import type { ProductType } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 
 type AdminProduct = {
   id: string;
   name: string;
   slug: string;
-  type: string;
+  type: ProductType;
   isActive: boolean;
   hasImage?: boolean;
   image?: string | null;
@@ -65,7 +67,7 @@ export function AdminProducts({ locale, dict }: { locale: Locale; dict: Dictiona
   return (
     <Container className="space-y-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">{t.products}</h2>
+        <h1 className="text-2xl font-black">{t.products}</h1>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowCat((s) => !s)}>
             + {t.newCategory}
@@ -108,24 +110,27 @@ export function AdminProducts({ locale, dict }: { locale: Locale; dict: Dictiona
       ) : (
         <div className="space-y-2">
           {products.data?.products.map((p) => (
-            <Card key={p.id} className="flex items-center justify-between gap-3">
+            <Card
+              key={p.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] py-2"
+            >
               <div className="flex items-center gap-3">
-                <div className="size-12 shrink-0 overflow-hidden rounded-lg border border-border bg-surface">
-                  {p.hasImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={`${assetUrl(`/products/${p.id}/image`)}?v=${reload}`}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="grid h-full place-items-center text-sm font-bold text-muted/50">
-                      {p.name.charAt(0)}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <p className="font-medium">{p.name}</p>
+                <ProductStamp
+                  slug={p.slug}
+                  type={p.type}
+                  name={p.name}
+                  image={
+                    p.image ??
+                    (p.hasImage ? `${assetUrl(`/products/${p.id}/image`)}?v=${reload}` : null)
+                  }
+                  size="sm"
+                  tilt={-2}
+                  hole="var(--c-card)"
+                />
+                <div className="min-w-0">
+                  <p className="font-bold">
+                    <bdi>{p.name}</bdi>
+                  </p>
                   <p className="text-sm text-muted">
                     {p.category.name} · {p.type} · {p.planCount} {t.plans} · {p.inventoryCount}{" "}
                     {t.available}

@@ -164,8 +164,8 @@ export type AdminStats = {
   unfulfilled?: number;
   customers: number;
   salesByDay: { day: string; count: number; revenue: number }[];
-  topProducts: { id: string; name: string; unitsSold: number }[];
-  lowStock: { id: string; name: string; stock: number }[];
+  topProducts: { id: string; name: string; slug: string; type: ProductType; unitsSold: number }[];
+  lowStock: { id: string; name: string; slug: string; type: ProductType; stock: number }[];
   recentOrders: {
     id: string;
     totalAmount: number;
