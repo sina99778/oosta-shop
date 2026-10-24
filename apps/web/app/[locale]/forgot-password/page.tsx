@@ -38,6 +38,7 @@ export default async function ForgotPasswordPage({
               </li>
             ))}
           </ol>
+          <p className="mt-5 rounded-[10px] bg-surface p-3 text-sm leading-7">{a.forgotBot}</p>
           <div className="mt-6 border-t border-dashed border-border pt-5">
             {contact.length === 0 ? (
               <p className="text-sm text-muted">{a.forgotNoContact}</p>

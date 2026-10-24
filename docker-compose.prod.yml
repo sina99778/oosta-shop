@@ -58,6 +58,7 @@ services:
       OPENROUTER_IMAGE_MODEL: ${OPENROUTER_IMAGE_MODEL:-google/gemini-3-pro-image-preview}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_ADMIN_ID: ${TELEGRAM_ADMIN_ID:-}
+      CUSTOMER_BOT_TOKEN: ${CUSTOMER_BOT_TOKEN:-}
       BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
     depends_on:
       postgres:

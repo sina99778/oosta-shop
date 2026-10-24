@@ -117,5 +117,25 @@ npm run db:local:stop     # stop it
   on its own — those are queued and need the admin's ✅ tap, and customer-written
   text (tickets, reviews) is treated as untrusted data.
 
+## Customer Telegram bot (optional)
+
+Set `CUSTOMER_BOT_TOKEN` to a **second** bot from @BotFather (not the admin bot).
+Buyers then get "Connect the Telegram bot" on their account page:
+
+- The site makes a **single-use deep link** (`t.me/<bot>?start=<token>`, valid
+  30 minutes, only its SHA-256 stored). Starting it binds that chat to the
+  account; a reused or expired link is refused. Group chats are ignored.
+- In the bot: orders and delivery details (credentials are spoilered and the
+  message is deleted after 10 minutes), name edit, support tickets, a password
+  reset link (a connected chat proves ownership), and bot-only discount codes.
+- Site notifications (delivered order, ticket reply, back in stock) go out
+  through an outbox, so a restart never loses or duplicates them; a chat that
+  blocks the bot is marked and skipped.
+- Admins send news/offers from **Customers → Message customers**; sending is
+  batched (~20/s) and resumes after a restart. Coupons can be **bot only**.
+
+`CUSTOMER_BOT_API_ROOT` / `CUSTOMER_BOT_LINK_BASE` point the bot at another
+Telegram-compatible Bot API host (also handy for a local fake API in tests).
+
 CI (`.github/workflows/ci.yml`) runs format, lint, typecheck, build and the
 Postgres-backed API tests on every push/PR.

@@ -6,6 +6,8 @@ import { validate } from "../../middleware/validate";
 import { uploadProductImage } from "../../middleware/upload";
 import * as schemas from "./admin.schemas";
 import * as ctrl from "./admin.controller";
+import * as telegram from "../telegram/telegram.controller";
+import { broadcastSchema } from "../telegram/telegram.routes";
 
 export const adminRouter = Router();
 
@@ -182,3 +184,7 @@ adminRouter.post(
   validate({ params: schemas.idParamSchema }),
   ctrl.createResetLink,
 );
+
+// Customer-bot broadcasts (news / exclusive offers to opted-in subscribers)
+adminRouter.get("/broadcasts", telegram.listBroadcasts);
+adminRouter.post("/broadcasts", validate({ body: broadcastSchema }), telegram.createBroadcast);

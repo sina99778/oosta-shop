@@ -962,7 +962,15 @@ export async function listCustomers(query: CustomersQuery) {
       orderBy: { createdAt: "desc" },
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
-      select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        createdAt: true,
+        telegram: { select: { username: true } },
+      },
     }),
   ]);
   const paid = await prisma.order.groupBy({
@@ -979,8 +987,9 @@ export async function listCustomers(query: CustomersQuery) {
   });
   return {
     currency: currencyRow?.currency ?? "IRR",
-    items: users.map((u) => ({
+    items: users.map(({ telegram, ...u }) => ({
       ...u,
+      telegram: telegram ? { username: telegram.username } : null,
       paidOrders: byUser.get(u.id)?._count._all ?? 0,
       spent: Number(byUser.get(u.id)?._sum.totalAmount ?? 0),
     })),

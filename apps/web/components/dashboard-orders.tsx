@@ -10,6 +10,7 @@ import { Container } from "@/components/ui/container";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Envelope, ProductStamp, StatusPostmark } from "@/components/stamp";
 import { DashboardTabs } from "@/components/dashboard-tabs";
+import { TelegramConnect } from "@/components/telegram-connect";
 import { postmarkTone } from "@/lib/order-status";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
@@ -40,6 +41,8 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
         <h1 className="text-3xl font-black">{d.orders}</h1>
         <p className="text-sm text-muted">{d.vaultSubtitle}</p>
       </header>
+
+      <TelegramConnect locale={locale} dict={dict} compact />
 
       {!loading && orders.length > 0 && (
         <dl className="mt-6 grid grid-cols-3 gap-px overflow-hidden rounded-[14px] border border-border bg-border text-center">

@@ -6,6 +6,7 @@ import { env } from "./config/env";
 import { createApp } from "./app";
 import { prisma } from "./lib/prisma";
 import { startBot } from "./bot";
+import { startCustomerBot } from "./customerBot";
 import { startOrderExpirySweeper } from "./modules/orders/orders.service";
 import { encryptLegacyCredentials } from "./lib/credentials";
 
@@ -17,6 +18,8 @@ const server = app.listen(env.API_PORT, () => {
 
 // Start the Telegram admin bot (no-op unless TELEGRAM_BOT_TOKEN + TELEGRAM_ADMIN_ID are set).
 startBot();
+// Customer bot: account linking, orders, tickets, notices (no-op without CUSTOMER_BOT_TOKEN).
+const stopCustomerBot = startCustomerBot();
 
 // Expire unpaid orders past their reservation window and return their stock.
 const stopSweeper = startOrderExpirySweeper();
@@ -31,6 +34,7 @@ encryptLegacyCredentials()
 async function shutdown(signal: string): Promise<void> {
   console.log(`\n[oosta-api] ${signal} received — shutting down...`);
   stopSweeper();
+  stopCustomerBot();
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await prisma.$disconnect();
   console.log("[oosta-api] shutdown complete");

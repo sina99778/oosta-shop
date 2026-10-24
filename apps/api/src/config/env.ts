@@ -104,6 +104,13 @@ const EnvSchema = z.object({
     z.coerce.number().int().positive().optional(),
   ),
 
+  // Customer bot (optional, separate from the admin bot): buyers connect their
+  // account, see orders/deliveries, open tickets, recover their password and get
+  // notices + news. API_ROOT/LINK_BASE allow a Telegram-compatible Bot API host.
+  CUSTOMER_BOT_TOKEN: z.string().optional(),
+  CUSTOMER_BOT_API_ROOT: z.string().url().optional(),
+  CUSTOMER_BOT_LINK_BASE: z.string().url().default("https://t.me"),
+
   // Automatic Telegram DB backups: send a dump every N hours (0 disables).
   // Only runs when the bot is enabled.
   BACKUP_INTERVAL_HOURS: z.preprocess(

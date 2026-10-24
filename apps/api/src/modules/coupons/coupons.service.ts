@@ -40,6 +40,9 @@ export async function applyCoupon(
   if (coupon.expiresAt && coupon.expiresAt <= new Date()) {
     throw invalid("COUPON_EXPIRED", "This discount code has expired");
   }
+  if (coupon.botOnly && !(await db.telegramLink.count({ where: { userId } }))) {
+    throw invalid("COUPON_BOT_ONLY", "This code is for customers who connected the Telegram bot");
+  }
   if (coupon.minAmount && subtotal.lt(coupon.minAmount)) {
     throw invalid("COUPON_MIN_AMOUNT", "The order is below this code's minimum amount", {
       minAmount: Number(coupon.minAmount),
@@ -65,6 +68,7 @@ export type CouponInput = {
   minAmount?: number | null;
   expiresAt?: Date | null;
   isActive?: boolean;
+  botOnly?: boolean;
 };
 
 export async function listCoupons() {
@@ -83,6 +87,7 @@ export async function listCoupons() {
     minAmount: c.minAmount == null ? null : Number(c.minAmount),
     expiresAt: c.expiresAt,
     isActive: c.isActive,
+    botOnly: c.botOnly,
     used: usedBy.get(c.id) ?? 0,
     createdAt: c.createdAt,
   }));

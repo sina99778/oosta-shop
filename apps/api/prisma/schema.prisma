@@ -75,15 +75,15 @@ enum PostStatus {
 // ── Models ───────────────────────────────────────────────────────────
 
 model User {
-  id                 String          @id @default(cuid())
+  id                 String              @id @default(cuid())
   name               String
-  email              String?         @unique
-  phone              String?         @unique
+  email              String?             @unique
+  phone              String?             @unique
   passwordHash       String
   // Sessions (JWTs) issued before this moment are rejected — set on password
   // change/reset so a stolen or forgotten session stops working.
   sessionsValidAfter DateTime?
-  role               Role            @default(USER)
+  role               Role                @default(USER)
   orders             Order[]
   reviews            Review[]
   tickets            Ticket[]
@@ -92,8 +92,10 @@ model User {
   notifications      Notification[]
   stockWatches       StockWatch[]
   passwordResets     PasswordReset[]
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  telegram           TelegramLink?
+  telegramTokens     TelegramLinkToken[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@map("users")
 }
@@ -407,6 +409,8 @@ model Coupon {
   minAmount Decimal?  @db.Decimal(12, 2) // minimum item subtotal
   expiresAt DateTime?
   isActive  Boolean   @default(true)
+  // Exclusive to customers who connected the Telegram bot.
+  botOnly   Boolean   @default(false)
   orders    Order[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -467,15 +471,18 @@ enum NotificationKind {
 //   ORDER_DELIVERED: { orderId }   TICKET_REPLY: { ticketId, subject }
 //   BACK_IN_STOCK:   { productId, slug, name }
 model Notification {
-  id        String           @id @default(cuid())
-  userId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kind      NotificationKind
-  data      Json
-  readAt    DateTime?
-  createdAt DateTime         @default(now())
+  id             String           @id @default(cuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind           NotificationKind
+  data           Json
+  readAt         DateTime?
+  // Outbox for the customer bot: set once delivered (or skipped) on Telegram.
+  telegramSentAt DateTime?
+  createdAt      DateTime         @default(now())
 
   @@index([userId, createdAt])
+  @@index([telegramSentAt])
   @@map("notifications")
 }
 
@@ -506,4 +513,52 @@ model PasswordReset {
 
   @@index([userId])
   @@map("password_resets")
+}
+
+// A site account connected to the customer Telegram bot (one chat per account
+// and one account per chat).
+model TelegramLink {
+  id        String    @id @default(cuid())
+  userId    String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatId    BigInt    @unique
+  username  String?
+  firstName String?
+  // Shop news and exclusive offers (order/support notices are always sent).
+  newsOptIn Boolean   @default(true)
+  // Set when Telegram reports the bot was blocked; cleared on the next /start.
+  blockedAt DateTime?
+  linkedAt  DateTime  @default(now())
+
+  @@map("telegram_links")
+}
+
+// Single-use, short-lived token in the bot deep link (t.me/<bot>?start=<token>).
+// Only its SHA-256 is stored.
+model TelegramLinkToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("telegram_link_tokens")
+}
+
+// Admin message sent to every opted-in bot subscriber.
+model Broadcast {
+  id         String    @id @default(cuid())
+  text       String
+  total      Int       @default(0)
+  sent       Int       @default(0)
+  failed     Int       @default(0)
+  // Progress cursor (TelegramLink.id), so a restart resumes instead of resending.
+  lastLinkId String?
+  doneAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@map("broadcasts")
 }

@@ -25,6 +25,7 @@ type Coupon = {
   minAmount: number | null;
   expiresAt: string | null;
   isActive: boolean;
+  botOnly: boolean;
   used: number;
 };
 
@@ -50,6 +51,7 @@ export function AdminCoupons({ locale, dict }: { locale: Locale; dict: Dictionar
   const [maxUses, setMaxUses] = useState("");
   const [minAmount, setMinAmount] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
+  const [botOnly, setBotOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
@@ -68,6 +70,7 @@ export function AdminCoupons({ locale, dict }: { locale: Locale; dict: Dictionar
           minAmount: minAmount ? Number(minAmount) : null,
           // End of the chosen day, local time.
           expiresAt: expiresAt ? new Date(`${expiresAt}T23:59:59`).toISOString() : null,
+          botOnly,
         },
         token ?? undefined,
       );
@@ -75,6 +78,7 @@ export function AdminCoupons({ locale, dict }: { locale: Locale; dict: Dictionar
       setMaxUses("");
       setMinAmount("");
       setExpiresAt("");
+      setBotOnly(false);
       setReload((r) => r + 1);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : dict.common.somethingWrong);
@@ -183,6 +187,15 @@ export function AdminCoupons({ locale, dict }: { locale: Locale; dict: Dictionar
             />
           </label>
         </div>
+        <label className="mt-3 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={botOnly}
+            onChange={(e) => setBotOnly(e.target.checked)}
+            className="size-4 accent-[var(--c-primary)]"
+          />
+          {t.botOnly}
+        </label>
         <p className="mt-3 text-xs leading-6 text-muted">{t.rules}</p>
         {error && (
           <p role="alert" className="mt-2 text-sm text-danger">
@@ -230,9 +243,16 @@ export function AdminCoupons({ locale, dict }: { locale: Locale; dict: Dictionar
                 </div>
                 <div className="min-w-0 flex-1 p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <code className="truncate font-mono text-lg font-black" dir="ltr">
-                      {c.code}
-                    </code>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <code className="truncate font-mono text-lg font-black" dir="ltr">
+                        {c.code}
+                      </code>
+                      {c.botOnly && (
+                        <span className="shrink-0 rounded-full bg-[#2a9fd8]/15 px-2 py-0.5 text-[11px] font-bold text-[#1d7fb0]">
+                          {t.botBadge}
+                        </span>
+                      )}
+                    </span>
                     <span
                       className={cn(
                         "shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold",

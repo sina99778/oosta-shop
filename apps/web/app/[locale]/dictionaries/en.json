@@ -151,7 +151,8 @@
     "resetCta": "Save new password",
     "resetDone": "Your password was changed. Sign in with the new one.",
     "resetInvalid": "This link is invalid or has expired. Ask support for a new one.",
-    "mismatch": "The new passwords don't match."
+    "mismatch": "The new passwords don't match.",
+    "forgotBot": "Connected the Telegram bot? It's faster there: “👤 My account” → “Reset site password”."
   },
   "checkout": {
     "verifying": "Confirming your payment…",
@@ -574,7 +575,9 @@
       "resume": "Resume",
       "delete": "Delete",
       "confirmDelete": "Delete code {code}? Past orders keep their discount.",
-      "of": "of"
+      "of": "of",
+      "botOnly": "Telegram bot members only (listed under “Special offers” in the bot)",
+      "botBadge": "Bot only"
     },
     "customers": {
       "tab": "Customers",
@@ -593,13 +596,32 @@
       "copy": "Copy",
       "copied": "Copied",
       "prev": "Previous",
-      "next": "Next"
+      "next": "Next",
+      "telegram": "Telegram"
     },
     "filePicker": {
       "choose": "Choose file",
       "none": "No file chosen",
       "selected": "{n} files selected",
       "drop": "or drop it here"
+    },
+    "broadcasts": {
+      "tab": "Message customers",
+      "title": "Message customers",
+      "subtitle": "Send news or an exclusive offer to Telegram bot members.",
+      "audience": "{n} people have news turned on.",
+      "disabled": "The customer bot isn't set up; add CUSTOMER_BOT_TOKEN to the server settings.",
+      "text": "Message",
+      "placeholder": "e.g. 🎉 Yalda sale — 25% off every account with YALDA25 until Sunday.",
+      "hint": "Plain text; everyone gets the same message. Create bot-only codes under “Discount codes”.",
+      "send": "Send to everyone",
+      "confirm": "Send this message to {n} people? It can't be undone.",
+      "history": "Previous messages",
+      "empty": "No messages sent yet.",
+      "progress": "{sent} of {total} sent",
+      "failed": "{n} failed",
+      "sending": "Sending…",
+      "done": "Sent"
     }
   },
   "footer": {
@@ -642,7 +664,8 @@
       "COUPON_EXPIRED": "This discount code has expired.",
       "COUPON_USED_UP": "This discount code has been fully used.",
       "COUPON_ALREADY_USED": "You've already used this code.",
-      "COUPON_MIN_AMOUNT": "Your envelope is below this code's minimum amount."
+      "COUPON_MIN_AMOUNT": "Your envelope is below this code's minimum amount.",
+      "COUPON_BOT_ONLY": "This code is for Telegram bot members — connect the bot from your account page."
     }
   },
   "account": {
@@ -663,5 +686,25 @@
     "passwordChanged": "Your password was changed.",
     "mismatch": "The new passwords don't match.",
     "wrongPassword": "Your current password is incorrect."
+  },
+  "telegram": {
+    "title": "Oosta Telegram bot",
+    "subtitle": "Connect your account to Telegram and get updates there.",
+    "connectedSubtitle": "This account is connected to Telegram.",
+    "connectedAs": "Connected to",
+    "unnamed": "a Telegram account",
+    "news": "Also send news and exclusive offers",
+    "unlink": "Disconnect",
+    "confirmUnlink": "Disconnect Telegram? You'll stop getting updates there.",
+    "perk1": "Instant notice when an order is delivered or support replies",
+    "perk2": "Your orders and delivery details in the bot",
+    "perk3": "Open tickets and recover your password — no SMS needed",
+    "perk4": "Discount codes only for bot members",
+    "connect": "Connect the Telegram bot",
+    "openBot": "Open the bot and press Start",
+    "waiting": "Press Start in Telegram; this page updates by itself.",
+    "linkNote": "The link is yours alone, works once and lasts 30 minutes. Don't share it.",
+    "nudgeTitle": "Get updates in Telegram",
+    "nudgeBody": "Connect the bot and get deliveries and support replies in Telegram instantly."
   }
 }

@@ -174,6 +174,7 @@ export const createCouponSchema = z.object({
   minAmount: z.coerce.number().min(0).nullable().optional(),
   expiresAt: z.coerce.date().nullable().optional(),
   isActive: z.boolean().optional(),
+  botOnly: z.boolean().optional(),
 });
 export const updateCouponSchema = createCouponSchema.partial();
 

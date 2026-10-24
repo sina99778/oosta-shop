@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { DashboardTabs } from "@/components/dashboard-tabs";
+import { TelegramConnect } from "@/components/telegram-connect";
 import type { Locale } from "@/lib/i18n";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 
@@ -199,6 +200,8 @@ export function AccountSettings({ locale, dict }: { locale: Locale; dict: Dictio
           </Button>
         </form>
       </section>
+
+      <TelegramConnect locale={locale} dict={dict} />
     </Container>
   );
 }

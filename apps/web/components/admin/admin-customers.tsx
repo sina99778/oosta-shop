@@ -25,6 +25,7 @@ type Customer = {
   createdAt: string;
   paidOrders: number;
   spent: number;
+  telegram: { username: string | null } | null;
 };
 
 type Page = {
@@ -128,6 +129,14 @@ export function AdminCustomers({ locale, dict }: { locale: Locale; dict: Diction
                   <div className="min-w-0 flex-1 basis-56">
                     <p className="font-bold">
                       <bdi>{c.name}</bdi>
+                      {c.telegram && (
+                        <span
+                          className="ms-2 rounded-full bg-[#2a9fd8]/15 px-2 py-0.5 text-[10px] font-bold text-[#1d7fb0]"
+                          title={c.telegram.username ? `@${c.telegram.username}` : undefined}
+                        >
+                          {t.telegram}
+                        </span>
+                      )}
                       {c.role === "ADMIN" && (
                         <span className="ms-2 rounded-full bg-ink px-2 py-0.5 text-[10px] font-bold text-[#f3eee4]">
                           {t.admin}

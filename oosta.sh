@@ -178,6 +178,8 @@ cmd_config() {
   [ -n "${v:-}" ] && set_env TELEGRAM_BOT_TOKEN "$v"
   read_tty v "Telegram admin id (blank to skip): " || true
   [ -n "${v:-}" ] && set_env TELEGRAM_ADMIN_ID "$v"
+  read_tty v "Customer bot token — a separate bot (blank to skip): " || true
+  [ -n "${v:-}" ] && set_env CUSTOMER_BOT_TOKEN "$v"
   ok "Saved to $ENV_FILE"
 }
 

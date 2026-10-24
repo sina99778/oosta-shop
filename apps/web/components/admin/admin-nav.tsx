@@ -20,6 +20,7 @@ type Labels = {
   reviews: string;
   tickets: string;
   customers: string;
+  broadcasts: string;
   blog: string;
   api: string;
   settings: string;
@@ -41,6 +42,7 @@ type IconName =
   | "reviews"
   | "tickets"
   | "customers"
+  | "broadcasts"
   | "blog"
   | "api"
   | "settings";
@@ -51,6 +53,7 @@ const ICONS: Record<IconName, string> = {
   orders: "M3 6h18v13H3zM3.5 7l8.5 6.5L20.5 7",
   receipts: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6",
   coupons: "M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4zM14 7v10M8 10l-1 4",
+  broadcasts: "M3 10v4h3l6 4V6L6 10zM16 8.5a4 4 0 0 1 0 7M18.5 6a7.5 7.5 0 0 1 0 12",
   reviews: "M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.6 6.7 19.4l1.2-6L3.4 9.3l6-.7z",
   tickets: "M4 5h16v11H8l-4 4zM8 9h8M8 12h5",
   customers:
@@ -125,6 +128,7 @@ export function AdminShell({
       title: labels.groupCustomers,
       items: [
         { href: `${base}/customers`, label: labels.customers, icon: "customers" },
+        { href: `${base}/broadcasts`, label: labels.broadcasts, icon: "broadcasts" },
         { href: `${base}/tickets`, label: labels.tickets, icon: "tickets" },
       ],
     },
