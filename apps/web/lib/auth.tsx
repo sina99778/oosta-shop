@@ -27,6 +27,7 @@ type AuthContextValue = {
   login: (identifier: string, password: string) => Promise<void>;
   signup: (input: SignupInput) => Promise<void>;
   logout: () => void;
+  updateName: (name: string) => Promise<void>;
 };
 
 // Pre-cookie builds kept the JWT here; it is removed on load and never read.
@@ -65,10 +66,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void api.post("/auth/logout").catch(() => {});
   }, []);
 
+  const updateName = useCallback(async (name: string) => {
+    const result = await api.patch<AuthResult>("/auth/me", { name }, COOKIE_SESSION);
+    setUser(result.user);
+  }, []);
+
   const token = user ? COOKIE_SESSION : null;
   const value = useMemo(
-    () => ({ user, token, loading, login, signup, logout }),
-    [user, token, loading, login, signup, logout],
+    () => ({ user, token, loading, login, signup, logout, updateName }),
+    [user, token, loading, login, signup, logout, updateName],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

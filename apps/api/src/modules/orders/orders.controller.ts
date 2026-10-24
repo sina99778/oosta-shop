@@ -2,11 +2,15 @@
 
 import type { Request, Response } from "express";
 import * as orders from "./orders.service";
-import type { CreateOrderInput, VerifyPaymentInput } from "./orders.schemas";
+import type { CreateOrderInput, QuoteInput, VerifyPaymentInput } from "./orders.schemas";
 
 export async function createOrder(req: Request, res: Response): Promise<void> {
   const result = await orders.createOrder(req.user!.id, req.body as CreateOrderInput);
   res.status(201).json(result);
+}
+
+export async function quote(req: Request, res: Response): Promise<void> {
+  res.json({ quote: await orders.quoteOrder(req.user!.id, req.body as QuoteInput) });
 }
 
 export async function listMyOrders(req: Request, res: Response): Promise<void> {

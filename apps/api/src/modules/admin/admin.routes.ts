@@ -160,3 +160,13 @@ adminRouter.post(
   validate({ params: schemas.idParamSchema, body: schemas.ticketStatusSchema }),
   ctrl.setTicketStatus,
 );
+
+// Discount codes
+adminRouter.get("/coupons", ctrl.listCoupons);
+adminRouter.post("/coupons", validate({ body: schemas.createCouponSchema }), ctrl.createCoupon);
+adminRouter.patch(
+  "/coupons/:id",
+  validate({ params: schemas.idParamSchema, body: schemas.updateCouponSchema }),
+  ctrl.updateCoupon,
+);
+adminRouter.delete("/coupons/:id", validate({ params: schemas.idParamSchema }), ctrl.deleteCoupon);

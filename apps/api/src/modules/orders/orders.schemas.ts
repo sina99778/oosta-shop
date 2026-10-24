@@ -2,6 +2,13 @@
 
 import { z } from "zod";
 
+const couponCode = z
+  .string()
+  .trim()
+  .min(2)
+  .max(40)
+  .regex(/^[A-Za-z0-9_-]+$/, "Invalid discount code");
+
 export const createOrderSchema = z.object({
   items: z
     .array(
@@ -16,6 +23,13 @@ export const createOrderSchema = z.object({
   method: z.enum(["online", "card_to_card"]).default("online"),
   // Storefront language, so the gateway returns the buyer to the same locale.
   locale: z.enum(["fa", "en"]).optional(),
+  couponCode: couponCode.optional(),
+});
+
+// Price preview with a discount code (nothing is reserved).
+export const quoteSchema = z.object({
+  items: createOrderSchema.shape.items,
+  couponCode,
 });
 
 // Optional note the buyer can attach to a card-to-card receipt (tracking no, last 4, etc.).
@@ -33,4 +47,5 @@ export const orderParamsSchema = z.object({
 });
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
+export type QuoteInput = z.infer<typeof quoteSchema>;
 export type VerifyPaymentInput = z.infer<typeof verifyPaymentSchema>;

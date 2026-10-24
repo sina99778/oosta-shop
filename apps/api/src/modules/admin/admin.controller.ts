@@ -3,7 +3,10 @@
 import type { Request, Response } from "express";
 import * as admin from "./admin.service";
 import { fulfillPaidOrder } from "../orders/orders.service";
+import * as coupons from "../coupons/coupons.service";
 import type {
+  CreateCouponInput,
+  UpdateCouponInput,
   BulkInventoryInput,
   CreateApiKeyInput,
   CreateCategoryInput,
@@ -185,4 +188,24 @@ export async function rejectReceipt(req: Request, res: Response): Promise<void> 
   res.json({
     receipt: await admin.rejectReceipt(String(req.params.id), req.body as ReviewReceiptInput),
   });
+}
+
+// ── Discount codes ───────────────────────────────────────────────────
+
+export async function listCoupons(_req: Request, res: Response): Promise<void> {
+  res.json({ coupons: await coupons.listCoupons() });
+}
+
+export async function createCoupon(req: Request, res: Response): Promise<void> {
+  res.status(201).json({ coupon: await coupons.createCoupon(req.body as CreateCouponInput) });
+}
+
+export async function updateCoupon(req: Request, res: Response): Promise<void> {
+  const coupon = await coupons.updateCoupon(String(req.params.id), req.body as UpdateCouponInput);
+  res.json({ coupon });
+}
+
+export async function deleteCoupon(req: Request, res: Response): Promise<void> {
+  await coupons.deleteCoupon(String(req.params.id));
+  res.status(204).end();
 }

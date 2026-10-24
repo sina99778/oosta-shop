@@ -82,6 +82,13 @@ export function OrderDetail({
               <strong className="text-foreground">
                 {formatPrice(order.totalAmount, order.currency, locale)}
               </strong>
+              {(order.discountAmount ?? 0) > 0 && (
+                <span className="text-primary">
+                  {" "}
+                  · {dict.cart.discount}{" "}
+                  {formatPrice(order.discountAmount ?? 0, order.currency, locale)}
+                </span>
+              )}
             </p>
             <p className="mt-1 text-xs text-muted">
               {statusMap[order.paymentStatus] ?? order.paymentStatus}

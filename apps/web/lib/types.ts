@@ -227,6 +227,7 @@ export type ReceiptInfo = {
 export type OrderDetail = {
   id: string;
   totalAmount: number;
+  discountAmount?: number;
   currency: string;
   paymentStatus: string;
   paymentProvider: string | null;

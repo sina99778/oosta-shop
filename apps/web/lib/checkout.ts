@@ -12,11 +12,31 @@ export async function placeOrder(
   method: PaymentMethod,
   locale: string,
   token: string,
+  couponCode?: string,
 ): Promise<{ href: string; external: boolean }> {
-  const res = await api.post<CreateOrderResponse>("/orders", { items, method, locale }, token);
+  const res = await api.post<CreateOrderResponse>(
+    "/orders",
+    { items, method, locale, ...(couponCode ? { couponCode } : {}) },
+    token,
+  );
   if (method === "card_to_card") {
     return { href: `/${locale}/checkout/card/${res.order.id}`, external: false };
   }
   if (!res.payment?.redirectUrl) throw new Error("Missing payment redirect");
   return { href: res.payment.redirectUrl, external: true };
+}
+
+export type CouponQuote = {
+  code: string;
+  percent: number;
+  subtotal: number;
+  discount: number;
+  total: number;
+  currency: string;
+};
+
+// Prices the cart with a discount code (reserves nothing).
+export async function quoteCoupon(items: CheckoutItem[], couponCode: string, token: string) {
+  const res = await api.post<{ quote: CouponQuote }>("/orders/quote", { items, couponCode }, token);
+  return res.quote;
 }

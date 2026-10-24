@@ -2,7 +2,13 @@
 // req.body is already parsed. Thrown errors propagate to the central error handler.
 
 import type { Request, Response } from "express";
-import { getUserById, loginUser, registerUser } from "./auth.service";
+import {
+  changePassword,
+  getUserById,
+  loginUser,
+  registerUser,
+  updateProfile,
+} from "./auth.service";
 import { clearSessionCookie, setSessionCookie } from "../../lib/session";
 
 // The token is also returned in the body for API clients/scripts; browsers use
@@ -32,4 +38,13 @@ export async function me(req: Request, res: Response): Promise<void> {
 
 export async function session(req: Request, res: Response): Promise<void> {
   res.json({ user: await getUserById(req.user!.id) });
+}
+
+export async function updateMe(req: Request, res: Response): Promise<void> {
+  res.json({ user: await updateProfile(req.user!.id, req.body) });
+}
+
+export async function changeMyPassword(req: Request, res: Response): Promise<void> {
+  await changePassword(req.user!.id, req.body);
+  res.status(204).end();
 }

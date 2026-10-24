@@ -370,6 +370,12 @@ model Order {
 
   receipts  Receipt[]
 
+  // Discount code applied at checkout. totalAmount is what the buyer pays;
+  // discountAmount is what the coupon took off the item subtotal.
+  couponId       String?
+  coupon         Coupon?  @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  discountAmount Decimal  @default(0) @db.Decimal(12, 2)
+
   // While PENDING, the order's inventory is RESERVED until this moment; the
   // expiry sweeper then marks the order EXPIRED and releases the stock.
   expiresAt DateTime?
@@ -380,7 +386,25 @@ model Order {
   @@index([userId])
   @@index([paymentStatus])
   @@index([paymentStatus, expiresAt])
+  @@index([couponId])
   @@map("orders")
+}
+
+// Percentage discount code. A use is counted by the orders that hold it
+// (pending or paid), so an expired/failed order frees its use automatically.
+model Coupon {
+  id         String    @id @default(cuid())
+  code       String    @unique // stored upper-case
+  percent    Int // 1–90: never a free order (gateways can't charge 0)
+  maxUses    Int? // null = unlimited
+  minAmount  Decimal?  @db.Decimal(12, 2) // minimum item subtotal
+  expiresAt  DateTime?
+  isActive   Boolean   @default(true)
+  orders     Order[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@map("coupons")
 }
 
 model OrderItem {

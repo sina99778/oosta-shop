@@ -9,6 +9,7 @@ import { useApi } from "@/lib/use-api";
 import { Container } from "@/components/ui/container";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Envelope, ProductStamp, StatusPostmark } from "@/components/stamp";
+import { DashboardTabs } from "@/components/dashboard-tabs";
 import { postmarkTone } from "@/lib/order-status";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
@@ -33,7 +34,8 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
 
   return (
     <Container className="py-10 animate-fade-in">
-      <header className="flex flex-col gap-1">
+      <DashboardTabs locale={locale} dict={dict} />
+      <header className="mt-6 flex flex-col gap-1">
         {user && <span className="text-sm text-muted">{user.name}</span>}
         <h1 className="text-3xl font-black">{d.orders}</h1>
         <p className="text-sm text-muted">{d.vaultSubtitle}</p>

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
 import { useApi } from "@/lib/use-api";
 import { ApiError } from "@/lib/api";
-import { placeOrder } from "@/lib/checkout";
+import { placeOrder, quoteCoupon } from "@/lib/checkout";
+import type { CouponQuote } from "@/lib/checkout";
 import { formatPrice } from "@/lib/format";
 import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,53 @@ export function CartView({ locale, dict }: { locale: Locale; dict: Dictionary })
   const [busy, setBusy] = useState<PaymentMethod | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [codeInput, setCodeInput] = useState("");
+  const [coupon, setCoupon] = useState<CouponQuote | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponBusy, setCouponBusy] = useState(false);
+
   const currency = cart.lines[0]?.currency ?? "IRR";
+  const items = cart.lines.map((l) => ({ planId: l.planId, quantity: l.quantity }));
+  const itemsKey = JSON.stringify(items);
+
+  function couponMessage(e: unknown) {
+    const known = t.couponErrors as Record<string, string>;
+    if (e instanceof ApiError && e.code && known[e.code]) return known[e.code];
+    return e instanceof ApiError ? e.message : dict.common.somethingWrong;
+  }
+
+  async function applyCoupon(code: string) {
+    if (!token) return;
+    setCouponBusy(true);
+    setCouponError(null);
+    try {
+      setCoupon(await quoteCoupon(JSON.parse(itemsKey), code, token));
+    } catch (e) {
+      setCoupon(null);
+      setCouponError(couponMessage(e));
+    } finally {
+      setCouponBusy(false);
+    }
+  }
+
+  // The discount depends on the cart: re-price when it changes.
+  const appliedCode = coupon?.code;
+  useEffect(() => {
+    if (!appliedCode || !token || cart.lines.length === 0) return;
+    let live = true;
+    quoteCoupon(JSON.parse(itemsKey), appliedCode, token)
+      .then((q) => live && setCoupon(q))
+      .catch((e: unknown) => {
+        if (!live) return;
+        setCoupon(null);
+        setCouponError(couponMessage(e));
+      });
+    return () => {
+      live = false;
+    };
+    // Only a cart change re-prices; applying a code already fetched its quote.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemsKey]);
   const stepperLabels = {
     quantity: dict.common.quantity,
     increase: dict.common.increase,
@@ -43,18 +90,15 @@ export function CartView({ locale, dict }: { locale: Locale; dict: Dictionary })
     setBusy(method);
     setError(null);
     try {
-      const next = await placeOrder(
-        cart.lines.map((l) => ({ planId: l.planId, quantity: l.quantity })),
-        method,
-        locale,
-        token,
-      );
+      const next = await placeOrder(items, method, locale, token, coupon?.code);
       // The order now holds the stock — the cart has done its job.
       cart.clear();
       if (next.external) window.location.assign(next.href);
       else router.push(next.href);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : dict.common.somethingWrong);
+      // A code that stopped being valid since it was applied (used up, expired…).
+      if (e instanceof ApiError && e.code?.startsWith("COUPON_")) setCoupon(null);
+      setError(couponMessage(e));
       setBusy(null);
     }
   }
@@ -186,10 +230,91 @@ export function CartView({ locale, dict }: { locale: Locale; dict: Dictionary })
                 <span className="border-b border-[#cfc5b2] pb-1">{dict.home.envelopeVault}</span>
               </div>
 
-              <div className="relative mt-5 flex items-baseline justify-between border-t-2 border-double border-[#1b2433] pt-3">
+              <div className="relative mt-5">
+                {coupon ? (
+                  <div className="flex items-center justify-between gap-2 rounded-[8px] border border-dashed border-[#b4321f] px-3 py-2 text-[13px]">
+                    <span className="font-bold text-[#b4321f]">
+                      {t.couponApplied
+                        .replace("{code}", coupon.code)
+                        .replace(
+                          "{percent}",
+                          new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US").format(
+                            coupon.percent,
+                          ),
+                        )}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCoupon(null)}
+                      className="shrink-0 text-xs text-[#4a5366] underline-offset-4 hover:underline"
+                    >
+                      {t.couponRemove}
+                    </button>
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!user) {
+                        router.push(
+                          `/${locale}/login?next=${encodeURIComponent(`/${locale}/cart`)}`,
+                        );
+                        return;
+                      }
+                      if (codeInput.trim()) void applyCoupon(codeInput.trim());
+                    }}
+                  >
+                    <label htmlFor="coupon" className="text-[13px] font-bold">
+                      {t.couponLabel}
+                    </label>
+                    <div className="mt-1 flex gap-2">
+                      <input
+                        id="coupon"
+                        value={codeInput}
+                        onChange={(e) => setCodeInput(e.target.value)}
+                        placeholder={t.couponPlaceholder}
+                        dir="ltr"
+                        autoComplete="off"
+                        maxLength={40}
+                        aria-invalid={couponError ? true : undefined}
+                        aria-describedby={couponError ? "coupon-error" : undefined}
+                        className="h-10 min-w-0 flex-1 rounded-[8px] border border-[#cfc5b2] bg-white/70 px-3 font-mono text-sm uppercase placeholder:font-sans placeholder:normal-case focus:border-[#1b2433] focus:outline-none"
+                      />
+                      <button
+                        type="submit"
+                        disabled={couponBusy}
+                        className="h-10 shrink-0 rounded-[8px] border border-[#1b2433] px-4 text-sm font-bold transition-colors hover:bg-[#1b2433] hover:text-[#f6f1e7] disabled:opacity-50"
+                      >
+                        {couponBusy ? <Spinner /> : t.couponApply}
+                      </button>
+                    </div>
+                    {couponError && (
+                      <p id="coupon-error" role="alert" className="mt-1.5 text-xs text-[#b42318]">
+                        {couponError}
+                      </p>
+                    )}
+                    {!user && <p className="mt-1.5 text-xs text-[#4a5366]">{t.couponLogin}</p>}
+                  </form>
+                )}
+              </div>
+
+              {coupon && (
+                <dl className="relative mt-4 space-y-1 text-sm text-[#4a5366]">
+                  <div className="flex justify-between">
+                    <dt>{t.subtotal}</dt>
+                    <dd>{formatPrice(coupon.subtotal, coupon.currency, locale)}</dd>
+                  </div>
+                  <div className="flex justify-between text-[#b4321f]">
+                    <dt>{t.discount}</dt>
+                    <dd>− {formatPrice(coupon.discount, coupon.currency, locale)}</dd>
+                  </div>
+                </dl>
+              )}
+
+              <div className="relative mt-3 flex items-baseline justify-between border-t-2 border-double border-[#1b2433] pt-3">
                 <span className="text-sm text-[#4a5366]">{t.total}</span>
                 <span className="text-2xl font-black">
-                  {formatPrice(cart.total, currency, locale)}
+                  {formatPrice(coupon ? coupon.total : cart.total, currency, locale)}
                 </span>
               </div>
               <p className="relative mt-2 text-xs leading-6 text-[#4a5366]">{t.priceNote}</p>

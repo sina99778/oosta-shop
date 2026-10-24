@@ -14,6 +14,7 @@ import { prisma } from "../src/lib/prisma";
 import * as orders from "../src/modules/orders/orders.service";
 import * as admin from "../src/modules/admin/admin.service";
 import * as creds from "../src/lib/credentials";
+import * as coupons from "../src/modules/coupons/coupons.service";
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 const uid = () => randomBytes(5).toString("hex");
@@ -224,6 +225,73 @@ describe("card-to-card", () => {
     const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
     assert.equal(order.paymentStatus, "REJECTED");
     assert.equal(await countByStatus(plan.id, "AVAILABLE"), 1);
+  });
+});
+
+describe("coupons", () => {
+  const couponOrder = (userId: string, planId: string, couponCode: string) =>
+    orders.createOrder(userId, { items: [{ planId, quantity: 1 }], method: "online", couponCode });
+
+  test("takes the percentage off the total and records the discount", async () => {
+    const plan = await makePlan(5); // price 1000
+    const code = `off-${uid()}`;
+    await coupons.createCoupon({ code, percent: 15 });
+    const user = await makeUser();
+    const quote = await orders.quoteOrder(user.id, {
+      items: [{ planId: plan.id, quantity: 1 }],
+      couponCode: code,
+    });
+    assert.deepEqual([quote.subtotal, quote.discount, quote.total], [1000, 150, 850]);
+    const { order } = await couponOrder(user.id, plan.id, code.toLowerCase());
+    assert.equal(order.totalAmount, 850);
+    const saved = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    assert.equal(Number(saved.discountAmount), 150);
+  });
+
+  test("one use per buyer, and maxUses caps all buyers", async () => {
+    const plan = await makePlan(5);
+    const code = `once-${uid()}`;
+    await coupons.createCoupon({ code, percent: 10, maxUses: 2 });
+    const [a, b, c] = [await makeUser(), await makeUser(), await makeUser()];
+    await couponOrder(a.id, plan.id, code);
+    await assert.rejects(couponOrder(a.id, plan.id, code), { code: "COUPON_ALREADY_USED" });
+    await couponOrder(b.id, plan.id, code);
+    await assert.rejects(couponOrder(c.id, plan.id, code), { code: "COUPON_USED_UP" });
+  });
+
+  test("an expired order gives its use back", async () => {
+    const plan = await makePlan(5);
+    const code = `back-${uid()}`;
+    await coupons.createCoupon({ code, percent: 10, maxUses: 1 });
+    const [a, b] = [await makeUser(), await makeUser()];
+    const { order } = await couponOrder(a.id, plan.id, code);
+    await assert.rejects(couponOrder(b.id, plan.id, code), { code: "COUPON_USED_UP" });
+    await orders.closeUnpaidOrder(order.id, "EXPIRED");
+    await couponOrder(b.id, plan.id, code);
+  });
+
+  test("concurrent checkouts cannot overspend the last use", async () => {
+    const plan = await makePlan(10);
+    const code = `race-${uid()}`;
+    await coupons.createCoupon({ code, percent: 10, maxUses: 1 });
+    const users = await Promise.all(Array.from({ length: 5 }, () => makeUser()));
+    const results = await Promise.allSettled(users.map((u) => couponOrder(u.id, plan.id, code)));
+    assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+  });
+
+  test("minimum amount, expiry and inactive codes are refused", async () => {
+    const plan = await makePlan(5);
+    const user = await makeUser();
+    const min = `min-${uid()}`;
+    await coupons.createCoupon({ code: min, percent: 10, minAmount: 5000 });
+    await assert.rejects(couponOrder(user.id, plan.id, min), { code: "COUPON_MIN_AMOUNT" });
+    const old = `old-${uid()}`;
+    await coupons.createCoupon({ code: old, percent: 10, expiresAt: new Date(Date.now() - 1000) });
+    await assert.rejects(couponOrder(user.id, plan.id, old), { code: "COUPON_EXPIRED" });
+    const off = `off-${uid()}`;
+    await coupons.createCoupon({ code: off, percent: 10, isActive: false });
+    await assert.rejects(couponOrder(user.id, plan.id, off), { code: "COUPON_NOT_FOUND" });
+    assert.equal(await countByStatus(plan.id, "RESERVED"), 0, "refused orders hold no stock");
   });
 });
 

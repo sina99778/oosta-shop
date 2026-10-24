@@ -14,7 +14,8 @@ import { getPaymentProvider, getPaymentProviderForOrder } from "../payments/prov
 import { getGatewayConfig } from "../../lib/gatewayConfig";
 import { openCredentials } from "../../lib/credentials";
 import { notifyAdmin } from "../../bot";
-import type { CreateOrderInput } from "./orders.schemas";
+import { applyCoupon } from "../coupons/coupons.service";
+import type { CreateOrderInput, QuoteInput } from "./orders.schemas";
 
 type OrderWithItems = Prisma.OrderGetPayload<{
   include: {
@@ -102,6 +103,7 @@ async function serializeOrderDetail(order: OrderWithItems) {
   return {
     id: order.id,
     totalAmount: Number(order.totalAmount),
+    discountAmount: Number(order.discountAmount),
     currency: order.currency,
     paymentStatus: order.paymentStatus,
     paymentProvider: order.paymentProvider,
@@ -144,20 +146,65 @@ async function serializeOrderDetail(order: OrderWithItems) {
   };
 }
 
-export async function createOrder(userId: string, input: CreateOrderInput) {
-  const planIds = [...new Set(input.items.map((i) => i.planId))];
+// Prices the cart exactly as checkout will charge it. Throws on unknown/inactive
+// plans and mixed currencies.
+async function priceItems(items: CreateOrderInput["items"]) {
+  const planIds = [...new Set(items.map((i) => i.planId))];
   const plans = await prisma.productPlan.findMany({
     where: { id: { in: planIds }, isActive: true },
     include: { product: true },
   });
   const planMap = new Map(plans.map((p) => [p.id, p]));
 
-  for (const item of input.items) {
+  for (const item of items) {
     const plan = planMap.get(item.planId);
     if (!plan || !plan.product.isActive) {
       throw new AppError(404, "NOT_FOUND", `Plan not found: ${item.planId}`);
     }
   }
+
+  // All line items must share one currency — summing across currencies (and
+  // stamping the order with plans[0]) would charge a wrong total.
+  const currencies = new Set(items.map((i) => planMap.get(i.planId)!.currency));
+  if (currencies.size > 1) {
+    throw new AppError(400, "MIXED_CURRENCY", "All items in an order must use the same currency");
+  }
+  const currency = planMap.get(items[0].planId)?.currency ?? env.ZARINPAL_CURRENCY;
+  let subtotal = new Prisma.Decimal(0);
+  const itemsData = items.map((item) => {
+    const plan = planMap.get(item.planId)!;
+    // Charge the sale price when it is set and genuinely lower than the regular price.
+    const unitPrice =
+      plan.salePrice != null && plan.salePrice.lt(plan.price) ? plan.salePrice : plan.price;
+    const lineTotal = unitPrice.mul(item.quantity);
+    subtotal = subtotal.add(lineTotal);
+    return {
+      productId: plan.productId,
+      planId: plan.id,
+      quantity: item.quantity,
+      unitPrice,
+      lineTotal,
+    };
+  });
+  return { planMap, currency, subtotal, itemsData };
+}
+
+// Checkout preview for a discount code: what the cart costs with it applied.
+export async function quoteOrder(userId: string, input: QuoteInput) {
+  const { currency, subtotal } = await priceItems(input.items);
+  const { coupon, discount } = await applyCoupon(prisma, input.couponCode, userId, subtotal);
+  return {
+    code: coupon.code,
+    percent: coupon.percent,
+    subtotal: Number(subtotal),
+    discount: Number(discount),
+    total: Number(subtotal.sub(discount)),
+    currency,
+  };
+}
+
+export async function createOrder(userId: string, input: CreateOrderInput) {
+  const { planMap, currency, subtotal, itemsData } = await priceItems(input.items);
 
   // Each unpaid order holds stock, so cap how many a user can have open at once
   // (otherwise one account could reserve the whole shelf).
@@ -176,29 +223,9 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
     );
   }
 
-  // All line items must share one currency — summing across currencies (and
-  // stamping the order with plans[0]) would charge a wrong total.
-  const currencies = new Set(input.items.map((i) => planMap.get(i.planId)!.currency));
-  if (currencies.size > 1) {
-    throw new AppError(400, "MIXED_CURRENCY", "All items in an order must use the same currency");
-  }
-  const currency = planMap.get(input.items[0].planId)?.currency ?? env.ZARINPAL_CURRENCY;
-  let total = new Prisma.Decimal(0);
-  const itemsData = input.items.map((item) => {
-    const plan = planMap.get(item.planId)!;
-    // Charge the sale price when it is set and genuinely lower than the regular price.
-    const unitPrice =
-      plan.salePrice != null && plan.salePrice.lt(plan.price) ? plan.salePrice : plan.price;
-    const lineTotal = unitPrice.mul(item.quantity);
-    total = total.add(lineTotal);
-    return {
-      productId: plan.productId,
-      planId: plan.id,
-      quantity: item.quantity,
-      unitPrice,
-      lineTotal,
-    };
-  });
+  // Fail fast on a bad code before touching the gateway or stock; it is checked
+  // again under a row lock inside the transaction below.
+  if (input.couponCode) await applyCoupon(prisma, input.couponCode, userId, subtotal);
 
   const isCard = input.method === "card_to_card";
   if (isCard) {
@@ -215,10 +242,16 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
   // Create the order and RESERVE its units atomically: if any line can't be
   // fully reserved the whole transaction rolls back and nothing is held.
   const order = await prisma.$transaction(async (tx) => {
+    const applied = input.couponCode
+      ? await applyCoupon(tx, input.couponCode, userId, subtotal, { lock: true })
+      : null;
+    const discount = applied?.discount ?? new Prisma.Decimal(0);
     const created = await tx.order.create({
       data: {
         userId,
-        totalAmount: total,
+        totalAmount: subtotal.sub(discount),
+        couponId: applied?.coupon.id ?? null,
+        discountAmount: discount,
         currency,
         paymentStatus: "PENDING",
         paymentProvider: isCard ? "CARD_TO_CARD" : provider!.name,
@@ -244,6 +277,7 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
     }
     return created;
   });
+  const total = order.totalAmount;
 
   const orderSummary = {
     id: order.id,

@@ -160,3 +160,22 @@ export type TicketReplyInput = z.infer<typeof ticketReplySchema>;
 export type TicketStatusInput = z.infer<typeof ticketStatusSchema>;
 export type SeoGenerateInput = z.infer<typeof seoGenerateSchema>;
 export type CreateApiKeyInput = z.infer<typeof createApiKeySchema>;
+
+// Discount codes
+export const createCouponSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .min(2)
+    .max(40)
+    .regex(/^[A-Za-z0-9_-]+$/, "Letters, digits, - and _ only"),
+  percent: z.coerce.number().int().min(1).max(90),
+  maxUses: z.coerce.number().int().min(1).nullable().optional(),
+  minAmount: z.coerce.number().min(0).nullable().optional(),
+  expiresAt: z.coerce.date().nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+export const updateCouponSchema = createCouponSchema.partial();
+
+export type CreateCouponInput = z.infer<typeof createCouponSchema>;
+export type UpdateCouponInput = z.infer<typeof updateCouponSchema>;

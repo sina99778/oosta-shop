@@ -5,7 +5,12 @@ import { prisma } from "../../lib/prisma";
 import { hashPassword, verifyPassword } from "../../lib/password";
 import { signAccessToken } from "../../lib/jwt";
 import { AppError } from "../../utils/httpError";
-import type { LoginInput, SignupInput } from "./auth.schemas";
+import type {
+  ChangePasswordInput,
+  LoginInput,
+  SignupInput,
+  UpdateProfileInput,
+} from "./auth.schemas";
 
 export type PublicUser = Omit<User, "passwordHash">;
 export type AuthResult = { user: PublicUser; token: string };
@@ -76,4 +81,20 @@ export async function getUserById(id: string): Promise<PublicUser> {
     throw new AppError(404, "NOT_FOUND", "User not found");
   }
   return toPublicUser(user);
+}
+
+export async function updateProfile(id: string, input: UpdateProfileInput): Promise<PublicUser> {
+  return toPublicUser(await prisma.user.update({ where: { id }, data: { name: input.name } }));
+}
+
+export async function changePassword(id: string, input: ChangePasswordInput): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) throw new AppError(404, "NOT_FOUND", "User not found");
+  if (!(await verifyPassword(input.currentPassword, user.passwordHash))) {
+    throw new AppError(400, "WRONG_PASSWORD", "Current password is incorrect");
+  }
+  await prisma.user.update({
+    where: { id },
+    data: { passwordHash: await hashPassword(input.newPassword) },
+  });
 }

@@ -3,6 +3,7 @@
 // Admin shell — the "sorting room". Desktop: a grouped sidebar beside the page.
 // Phones/tablets: the same links as a scrollable strip above the page.
 
+import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -15,6 +16,7 @@ type Labels = {
   products: string;
   orders: string;
   receipts: string;
+  coupons: string;
   reviews: string;
   tickets: string;
   blog: string;
@@ -34,6 +36,7 @@ type IconName =
   | "products"
   | "orders"
   | "receipts"
+  | "coupons"
   | "reviews"
   | "tickets"
   | "blog"
@@ -45,6 +48,7 @@ const ICONS: Record<IconName, string> = {
   products: "M6 3h12v18H6zM9 7h6M9 11h6M9 15h3",
   orders: "M3 6h18v13H3zM3.5 7l8.5 6.5L20.5 7",
   receipts: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6",
+  coupons: "M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4zM14 7v10M8 10l-1 4",
   reviews: "M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.6 6.7 19.4l1.2-6L3.4 9.3l6-.7z",
   tickets: "M4 5h16v11H8l-4 4zM8 9h8M8 12h5",
   blog: "M5 4h10l4 4v12H5zM14 4v5h5M8 13h8M8 16h6",
@@ -83,6 +87,14 @@ export function AdminShell({
 }) {
   const pathname = usePathname();
   const base = `/${locale}/admin`;
+  const strip = useRef<HTMLElement>(null);
+
+  // Keep the current section visible in the phone strip (it scrolls sideways).
+  useEffect(() => {
+    strip.current
+      ?.querySelector('[aria-current="page"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [pathname]);
 
   const groups: {
     title: string;
@@ -94,6 +106,7 @@ export function AdminShell({
         { href: `${base}/dashboard`, label: labels.dashboard, icon: "desk" },
         { href: `${base}/orders`, label: labels.orders, icon: "orders" },
         { href: `${base}/receipts`, label: labels.receipts, icon: "receipts" },
+        { href: `${base}/coupons`, label: labels.coupons, icon: "coupons" },
       ],
     },
     {
@@ -126,6 +139,7 @@ export function AdminShell({
     <div className="mx-auto flex w-full max-w-[1440px] flex-col lg:flex-row">
       {/* Phones/tablets: section strip */}
       <nav
+        ref={strip}
         aria-label={labels.sidebarTitle}
         className="flex gap-1 overflow-x-auto border-b border-border px-4 lg:hidden"
       >
