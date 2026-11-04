@@ -137,8 +137,12 @@ export function AdminBlogEditor({
 
   async function remove() {
     if (!postId || !token) return;
-    await api.del(`/admin/blog/${postId}`, token).catch(() => {});
-    router.push(`/${locale}/admin/blog`);
+    try {
+      await api.del(`/admin/blog/${postId}`, token);
+      router.push(`/${locale}/admin/blog`);
+    } catch {
+      setMsg(dict.common.somethingWrong);
+    }
   }
 
   if (postId && loading) {
@@ -161,55 +165,65 @@ export function AdminBlogEditor({
         <Card className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm text-muted">{t.postTitle}</label>
-              <Input
-                value={title}
-                onChange={(e) => {
-                  setTitle(e.target.value);
-                  if (!slugTouched) setSlug(slugify(e.target.value));
-                }}
-                required
-              />
+              <label className="block">
+                <span className="mb-1 block text-sm text-muted">{t.postTitle}</span>
+                <Input
+                  value={title}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    if (!slugTouched) setSlug(slugify(e.target.value));
+                  }}
+                  required
+                />
+              </label>
             </div>
             <div>
-              <label className="mb-1 block text-sm text-muted">{t.slug}</label>
-              <Input
-                value={slug}
-                onChange={(e) => {
-                  setSlug(e.target.value);
-                  setSlugTouched(true);
-                }}
-                required
-                dir="ltr"
-              />
+              <label className="block">
+                <span className="mb-1 block text-sm text-muted">{t.slug}</span>
+                <Input
+                  value={slug}
+                  onChange={(e) => {
+                    setSlug(e.target.value);
+                    setSlugTouched(true);
+                  }}
+                  required
+                  dir="ltr"
+                />
+              </label>
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-sm text-muted">{t.excerpt}</label>
-            <Input value={excerpt} onChange={(e) => setExcerpt(e.target.value)} />
+            <label className="block">
+              <span className="mb-1 block text-sm text-muted">{t.excerpt}</span>
+              <Input value={excerpt} onChange={(e) => setExcerpt(e.target.value)} />
+            </label>
           </div>
           <div>
-            <label className="mb-1 block text-sm text-muted">{t.content}</label>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={14}
-              required
-              className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 font-mono text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
-            />
+            <label className="block">
+              <span className="mb-1 block text-sm text-muted">{t.content}</span>
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                rows={14}
+                required
+                className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 font-mono text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+              />
+            </label>
             <p className="mt-1 text-xs text-muted">{t.contentHint}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div>
-              <label className="mb-1 block text-sm text-muted">{t.status}</label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as "DRAFT" | "PUBLISHED")}
-                className={selectClass}
-              >
-                <option value="DRAFT">{t.draft}</option>
-                <option value="PUBLISHED">{t.published}</option>
-              </select>
+              <label className="block">
+                <span className="mb-1 block text-sm text-muted">{t.status}</span>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as "DRAFT" | "PUBLISHED")}
+                  className={selectClass}
+                >
+                  <option value="DRAFT">{t.draft}</option>
+                  <option value="PUBLISHED">{t.published}</option>
+                </select>
+              </label>
             </div>
           </div>
           {msg && <p className="text-sm text-muted">{msg}</p>}
@@ -239,7 +253,7 @@ export function AdminBlogEditor({
             </div>
             <input
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp,image/gif"
               onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)}
               className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-surface file:px-3 file:py-2 file:text-sm"
             />
@@ -252,7 +266,7 @@ export function AdminBlogEditor({
             <h2 className="font-semibold">{t.uploadMedia}</h2>
             <input
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp,image/gif"
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) void uploadMedia(f);

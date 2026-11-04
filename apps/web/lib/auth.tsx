@@ -4,7 +4,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 
 export type AuthUser = {
   id: string;
@@ -21,6 +21,8 @@ type AuthContextValue = {
   user: AuthUser | null;
   token: string | null;
   loading: boolean;
+  sessionError: boolean;
+  retrySession: () => void;
   login: (identifier: string, password: string) => Promise<void>;
   signup: (input: SignupInput) => Promise<void>;
   logout: () => void;
@@ -33,6 +35,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionError, setSessionError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const retrySession = useCallback(() => {
+    setLoading(true);
+    setSessionError(false);
+    setAttempt((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(TOKEN_KEY);
@@ -40,21 +49,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queueMicrotask(() => setLoading(false));
       return;
     }
-    queueMicrotask(() => setToken(stored));
+    let active = true;
+    const isCurrent = () => active && window.localStorage.getItem(TOKEN_KEY) === stored;
+    queueMicrotask(() => {
+      if (isCurrent()) setToken(stored);
+    });
     api
       .get<{ user: AuthUser }>("/auth/me", stored)
-      .then((data) => setUser(data.user))
-      .catch(() => {
-        window.localStorage.removeItem(TOKEN_KEY);
-        setToken(null);
+      .then((data) => {
+        if (isCurrent()) setUser(data.user);
       })
-      .finally(() => setLoading(false));
+      .catch((error: unknown) => {
+        if (!isCurrent()) return;
+        if (error instanceof ApiError && error.status === 401) {
+          window.localStorage.removeItem(TOKEN_KEY);
+          setToken(null);
+        } else {
+          setSessionError(true);
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [attempt]);
+
+  useEffect(() => {
+    const invalidate = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== window.localStorage.getItem(TOKEN_KEY)) return;
+      window.localStorage.removeItem(TOKEN_KEY);
+      setToken(null);
+      setUser(null);
+      setSessionError(false);
+    };
+    window.addEventListener("oosta:unauthorized", invalidate);
+    return () => window.removeEventListener("oosta:unauthorized", invalidate);
   }, []);
 
   const persist = useCallback((result: AuthResult) => {
     window.localStorage.setItem(TOKEN_KEY, result.token);
     setToken(result.token);
     setUser(result.user);
+    setSessionError(false);
   }, []);
 
   const login = useCallback(
@@ -78,8 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, token, loading, login, signup, logout }),
-    [user, token, loading, login, signup, logout],
+    () => ({ user, token, loading, sessionError, retrySession, login, signup, logout }),
+    [user, token, loading, sessionError, retrySession, login, signup, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

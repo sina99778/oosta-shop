@@ -163,7 +163,8 @@
       "FAILED": "ناموفق",
       "REJECTED": "رد شده",
       "REFUNDED": "بازگشت داده‌شده",
-      "EXPIRED": "منقضی‌شده"
+      "EXPIRED": "منقضی‌شده",
+      "PAID_PENDING_FULFILLMENT": "پرداخت شده؛ در انتظار تحویل"
     }
   },
   "blog": {
@@ -185,7 +186,11 @@
     "staff": "پشتیبانی",
     "writeReply": "پاسخ بنویسید…",
     "created": "تیکت ساخته شد.",
-    "status": { "OPEN": "باز", "ANSWERED": "پاسخ داده‌شده", "CLOSED": "بسته" }
+    "status": {
+      "OPEN": "باز",
+      "ANSWERED": "پاسخ داده‌شده",
+      "CLOSED": "بسته"
+    }
   },
   "admin": {
     "title": "مدیریت",
@@ -204,7 +209,11 @@
       "writeReply": "پاسخ بنویسید…",
       "staff": "پشتیبانی",
       "you": "مشتری",
-      "status": { "OPEN": "باز", "ANSWERED": "پاسخ داده‌شده", "CLOSED": "بسته" }
+      "status": {
+        "OPEN": "باز",
+        "ANSWERED": "پاسخ داده‌شده",
+        "CLOSED": "بسته"
+      }
     },
     "blogTab": "وبلاگ",
     "blog": {

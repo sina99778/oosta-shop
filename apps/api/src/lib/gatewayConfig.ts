@@ -84,7 +84,11 @@ async function loadGatewayConfig(): Promise<GatewayConfig> {
 // public checkout config, card-to-card flow and the admin/bot/agent recovery
 // screens keep working and can switch the provider back.
 export function isOnlinePaymentBlocked(config: GatewayConfig): boolean {
-  return env.isProduction && config.provider === "mock" && !env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION;
+  return (
+    env.isProduction &&
+    ((config.provider === "mock" && !env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION) ||
+      (config.provider === "zarinpal" && config.zarinpalSandbox))
+  );
 }
 
 export function assertOnlinePaymentAllowed(config: GatewayConfig): void {
@@ -111,6 +115,10 @@ export async function patchGatewayConfig(patch: GatewayPatch): Promise<GatewayCo
   // otherwise break every online checkout).
   const current = await loadGatewayConfig();
   const next = {
+    sandbox:
+      patch.zarinpalSandbox === undefined
+        ? current.zarinpalSandbox
+        : (patch.zarinpalSandbox ?? env.ZARINPAL_SANDBOX),
     provider:
       patch.provider === undefined ? current.provider : (patch.provider ?? env.PAYMENT_PROVIDER),
     merchant:
@@ -118,12 +126,22 @@ export async function patchGatewayConfig(patch: GatewayPatch): Promise<GatewayCo
         ? current.zarinpalMerchantId
         : (patch.zarinpalMerchantId ?? env.ZARINPAL_MERCHANT_ID),
   };
+  if (env.isProduction && next.provider === "zarinpal" && next.sandbox) {
+    throw new AppError(400, "SANDBOX_DISABLED", "Sandbox payments are disabled in production");
+  }
   if (next.provider === "zarinpal" && (!next.merchant || next.merchant === PLACEHOLDER_MERCHANT)) {
     throw new AppError(
       400,
       "MERCHANT_REQUIRED",
       "Set a real Zarinpal merchant id before enabling the Zarinpal gateway",
     );
+  }
+  if (
+    env.isProduction &&
+    next.provider === "zarinpal" &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(next.merchant)
+  ) {
+    throw new AppError(400, "MERCHANT_REQUIRED", "A valid production merchant UUID is required");
   }
   if (env.isProduction && next.provider === "mock" && !env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION) {
     throw new AppError(400, "MOCK_DISABLED", "Mock payments are disabled in production");

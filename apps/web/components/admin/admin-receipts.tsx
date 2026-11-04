@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { PaginationControls } from "@/components/pagination-controls";
+import { QueryError } from "@/components/query-error";
 import { useApi } from "@/lib/use-api";
 import { api, ApiError } from "@/lib/api";
 import { Container } from "@/components/ui/container";
@@ -27,11 +29,12 @@ function tone(status: string): "success" | "muted" | "danger" {
 export function AdminReceipts({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const { token } = useAuth();
   const t = dict.admin.receipts;
+  const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<Filter>("PENDING");
   const [reload, setReload] = useState(0);
 
-  const query = `?${filter ? `status=${filter}&` : ""}_r=${reload}`;
-  const { data, loading } = useApi<AdminReceiptList>(
+  const query = `?page=${page}&pageSize=50&${filter ? `status=${filter}&` : ""}_r=${reload}`;
+  const { data, loading, error, refetch } = useApi<AdminReceiptList>(
     token ? `/admin/receipts${query}` : null,
     token ?? undefined,
   );
@@ -49,7 +52,10 @@ export function AdminReceipts({ locale, dict }: { locale: Locale; dict: Dictiona
         {tabs.map((tab) => (
           <button
             key={tab.key || "all"}
-            onClick={() => setFilter(tab.key)}
+            onClick={() => {
+              setFilter(tab.key);
+              setPage(1);
+            }}
             className={cn(
               "rounded-full border px-4 py-1.5 text-sm transition-colors",
               filter === tab.key
@@ -69,6 +75,8 @@ export function AdminReceipts({ locale, dict }: { locale: Locale; dict: Dictiona
 
       {loading ? (
         <Spinner className="size-6" />
+      ) : error ? (
+        <QueryError message={dict.common.somethingWrong} onRetry={refetch} />
       ) : !data || data.items.length === 0 ? (
         <p className="text-muted">{t.none}</p>
       ) : (
@@ -84,6 +92,9 @@ export function AdminReceipts({ locale, dict }: { locale: Locale; dict: Dictiona
             />
           ))}
         </div>
+      )}
+      {data && (
+        <PaginationControls pagination={data.pagination} onPage={setPage} labels={dict.common} />
       )}
     </Container>
   );

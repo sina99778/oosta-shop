@@ -42,15 +42,19 @@ export function AdminTicketDetailView({
 
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   async function reply(e: FormEvent) {
     e.preventDefault();
     if (!token || !body.trim()) return;
     setBusy(true);
+    setActionError(null);
     try {
       await api.post(`/admin/tickets/${ticketId}/messages`, { body }, token);
       setBody("");
       setReload((r) => r + 1);
+    } catch {
+      setActionError(dict.common.somethingWrong);
     } finally {
       setBusy(false);
     }
@@ -58,8 +62,13 @@ export function AdminTicketDetailView({
 
   async function setStatus(status: "OPEN" | "CLOSED") {
     if (!token) return;
-    await api.post(`/admin/tickets/${ticketId}/status`, { status }, token).catch(() => {});
-    setReload((r) => r + 1);
+    setActionError(null);
+    try {
+      await api.post(`/admin/tickets/${ticketId}/status`, { status }, token);
+      setReload((r) => r + 1);
+    } catch {
+      setActionError(dict.common.somethingWrong);
+    }
   }
 
   if (loading) {
@@ -119,8 +128,15 @@ export function AdminTicketDetailView({
         ))}
       </div>
 
+      {actionError && (
+        <p role="alert" className="text-danger">
+          {actionError}
+        </p>
+      )}
       <form onSubmit={reply} className="space-y-2">
         <textarea
+          aria-label={t.writeReply}
+          maxLength={5000}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           rows={3}

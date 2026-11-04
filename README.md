@@ -103,6 +103,6 @@ This project is being built in phases.
   compose file, and skeleton `api` / `web` workspaces.
 - **Phase 1 — Database modeling** ✅ — Prisma schema (User, Category, Product,
   ProductPlan, InventoryItem, Order, OrderItem) with gateway-agnostic payment fields,
-  the initial migration, and an idempotent seed script.
+  the initial migration, and a development seed script that resets demo data.
 
 Subsequent phases add the API, payments + instant-delivery engine, and the frontend.

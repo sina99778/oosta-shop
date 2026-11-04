@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/lib/use-api";
 import { useAuth } from "@/lib/auth";
-import { api, ApiError, assetUrl } from "@/lib/api";
+import { api, ApiError, assetUrl, productImageUrl } from "@/lib/api";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,12 +70,19 @@ export function ProductDetailView({
     );
   }
   if (error || !data) {
-    return <Container className="py-20 text-center text-muted">{t.notFound}</Container>;
+    return (
+      <Container className="space-y-4 py-20 text-center text-muted">
+        <p role="alert">{error?.status === 404 ? t.notFound : dict.common.somethingWrong}</p>
+        <Button onClick={() => window.location.reload()}>
+          {locale === "fa" ? "تلاش دوباره" : "Try again"}
+        </Button>
+      </Container>
+    );
   }
 
   const product = data.product;
   const images = [
-    ...(product.hasImage ? [assetUrl(`/products/${product.id}/image`)] : []),
+    ...(productImageUrl(product) ? [productImageUrl(product)!] : []),
     ...product.galleryImageIds.map((id) => assetUrl(`/product-images/${id}`)),
   ];
   const activePlanId =
@@ -139,7 +146,7 @@ export function ProductDetailView({
         createdAt: new Date().toISOString(),
         isPendingLocal: true,
       };
-      setReviewsList((prev) => [newReview, ...prev]);
+      setReviewsList((prev) => [newReview, ...prev.filter((r) => !r.isPendingLocal)]);
 
       setComment("");
       setReviewMsg(t.reviewThanks);
@@ -190,6 +197,8 @@ export function ProductDetailView({
               {images.map((src, i) => (
                 <button
                   key={i}
+                  aria-label={`${product.name} — ${i + 1}`}
+                  aria-pressed={activeImage === i}
                   onClick={() => setActiveImage(i)}
                   className={cn(
                     "size-16 overflow-hidden rounded-lg border",
@@ -295,7 +304,13 @@ export function ProductDetailView({
             <Button
               className="mt-4 w-full"
               size="lg"
-              disabled={!plan || !plan.inStock || buying !== null}
+              disabled={
+                !plan ||
+                !plan.inStock ||
+                buying !== null ||
+                paymentConfig.loading ||
+                !paymentConfig.data?.online
+              }
               onClick={() => buy("online")}
             >
               {buying === "online" ? (
@@ -329,14 +344,28 @@ export function ProductDetailView({
               </Button>
             )}
 
+            {(!paymentConfig.data?.online || paymentConfig.error) && (
+              <p role="status" className="mt-3 text-sm text-muted">
+                {locale === "fa"
+                  ? "پرداخت آنلاین فعلاً در دسترس نیست."
+                  : "Online payment is currently unavailable."}
+              </p>
+            )}
             <p className="mt-3 text-center text-xs text-muted">⚡ {t.instantDelivery}</p>
+            {paymentConfig.data?.cardToCard && (
+              <p className="mt-2 text-center text-xs text-muted">
+                {locale === "fa"
+                  ? "تحویل کارت‌به‌کارت پس از تأیید رسید توسط پشتیبانی انجام می‌شود."
+                  : "Card transfers are delivered after receipt approval."}
+              </p>
+            )}
           </Card>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="mt-10">
-        <div className="flex gap-1 border-b border-border">
+        <div role="tablist" aria-label={product.name} className="flex gap-1 border-b border-border">
           {(
             [
               ["description", t.tabDescription],
@@ -346,6 +375,26 @@ export function ProductDetailView({
           ).map(([key, label]) => (
             <button
               key={key}
+              role="tab"
+              id={`product-tab-${key}`}
+              aria-controls="product-panel"
+              aria-selected={tab === key}
+              tabIndex={tab === key ? 0 : -1}
+              onKeyDown={(event) => {
+                const keys = ["description", "specs", "reviews"] as const;
+                const index = keys.indexOf(key);
+                let next = index;
+                if (event.key === "Home") next = 0;
+                else if (event.key === "End") next = keys.length - 1;
+                else if (event.key === "ArrowRight")
+                  next = (index + (locale === "fa" ? -1 : 1) + keys.length) % keys.length;
+                else if (event.key === "ArrowLeft")
+                  next = (index + (locale === "fa" ? 1 : -1) + keys.length) % keys.length;
+                else return;
+                event.preventDefault();
+                setTab(keys[next]);
+                document.getElementById(`product-tab-${keys[next]}`)?.focus();
+              }}
               onClick={() => setTab(key)}
               className={cn(
                 "border-b-2 px-4 py-3 text-sm transition-colors",
@@ -359,7 +408,12 @@ export function ProductDetailView({
           ))}
         </div>
 
-        <div className="py-6">
+        <div
+          role="tabpanel"
+          id="product-panel"
+          aria-labelledby={`product-tab-${tab}`}
+          className="py-6"
+        >
           {tab === "description" && <Markdown text={product.description} className="text-muted" />}
 
           {tab === "specs" &&
@@ -428,6 +482,8 @@ export function ProductDetailView({
                         {[1, 2, 3, 4, 5].map((n) => (
                           <button
                             key={n}
+                            aria-label={`${n} / 5`}
+                            aria-pressed={n === rating}
                             type="button"
                             onClick={() => setRating(n)}
                             className={n <= rating ? "text-amber-400" : "text-muted/40"}

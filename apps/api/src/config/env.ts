@@ -15,6 +15,8 @@ const EnvSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("7d"),
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(4).max(15).default(12),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
+  // Trust nginx's Docker subnet only; nginx normalizes the CDN client address.
+  TRUST_PROXY: z.string().default("loopback,172.30.0.0/24"),
 
   PAYMENT_PROVIDER: z.enum(["mock", "zarinpal"]).default("mock"),
   ALLOW_MOCK_PAYMENTS_IN_PRODUCTION: z
@@ -92,7 +94,10 @@ function loadEnv() {
   // Production safety guards: refuse to boot with insecure placeholder values.
   if (data.NODE_ENV === "production") {
     const problems: string[] = [];
-    if (data.JWT_SECRET === "dev-only-secret-change-me") {
+    if (
+      data.JWT_SECRET.length < 32 ||
+      ["dev-only-secret-change-me", "replace-with-a-long-random-secret"].includes(data.JWT_SECRET)
+    ) {
       problems.push("JWT_SECRET must be set to a strong, unique value in production");
     }
     if (data.PAYMENT_PROVIDER === "mock" && !data.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION) {
@@ -102,11 +107,17 @@ function loadEnv() {
     }
     if (
       data.PAYMENT_PROVIDER === "zarinpal" &&
-      data.ZARINPAL_MERCHANT_ID === "00000000-0000-0000-0000-000000000000"
+      (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        data.ZARINPAL_MERCHANT_ID,
+      ) ||
+        data.ZARINPAL_MERCHANT_ID === "00000000-0000-0000-0000-000000000000")
     ) {
       problems.push(
         "ZARINPAL_MERCHANT_ID must be set when PAYMENT_PROVIDER=zarinpal in production",
       );
+    }
+    if (data.PAYMENT_PROVIDER === "zarinpal" && data.ZARINPAL_SANDBOX) {
+      problems.push("ZARINPAL_SANDBOX must be false in production");
     }
     if (problems.length > 0) {
       throw new Error(

@@ -10,7 +10,8 @@ import { prisma } from "../../lib/prisma";
 import { env } from "../../config/env";
 import { AppError } from "../../utils/httpError";
 import { getPaymentProvider, getPaymentProviderForOrder } from "../payments/provider";
-import { getGatewayConfig } from "../../lib/gatewayConfig";
+import { getGatewayConfig, isOnlinePaymentBlocked } from "../../lib/gatewayConfig";
+import { lockOrder } from "../../lib/orderLock";
 import { notifyAdmin } from "../../bot";
 import type { CreateOrderInput } from "./orders.schemas";
 
@@ -222,32 +223,58 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
 }
 
 export async function deliverOrder(orderId: string, refId: string | null): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
-    if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
-    if (order.paymentStatus === "PAID") return; // idempotent
+  await prisma.$transaction((tx) => deliverOrderInTransaction(tx, orderId, refId));
+}
 
-    for (const item of order.items) {
-      // Lock and claim available units; SKIP LOCKED makes concurrent claims race-safe.
-      const rows = await tx.$queryRaw<{ id: string }[]>`
+export async function deliverOrderInTransaction(
+  tx: Prisma.TransactionClient,
+  orderId: string,
+  refId: string | null,
+): Promise<void> {
+  await lockOrder(tx, orderId);
+  const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
+  if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
+  if (order.paymentStatus === "PAID") return; // idempotent
+  if (order.paymentStatus === "REFUNDED" || order.paymentStatus === "EXPIRED") {
+    throw new AppError(409, "ORDER_CLOSED", "This order can no longer be fulfilled");
+  }
+
+  for (const item of order.items) {
+    // Lock and claim available units; SKIP LOCKED makes concurrent claims race-safe.
+    const rows = await tx.$queryRaw<{ id: string }[]>`
         SELECT id FROM inventory_items
         WHERE "planId" = ${item.planId} AND status = 'AVAILABLE'
         ORDER BY "createdAt" ASC
         LIMIT ${item.quantity}
         FOR UPDATE SKIP LOCKED`;
-      if (rows.length < item.quantity) {
-        throw new AppError(409, "OUT_OF_STOCK", "Items went out of stock during fulfillment");
-      }
-      await tx.inventoryItem.updateMany({
-        where: { id: { in: rows.map((r) => r.id) } },
-        data: { status: "SOLD", orderItemId: item.id, soldAt: new Date() },
-      });
+    if (rows.length < item.quantity) {
+      throw new AppError(409, "OUT_OF_STOCK", "Items went out of stock during fulfillment");
     }
-
-    await tx.order.update({
-      where: { id: orderId },
-      data: { paymentStatus: "PAID", paidAt: new Date(), paymentRefId: refId },
+    await tx.inventoryItem.updateMany({
+      where: { id: { in: rows.map((r) => r.id) } },
+      data: { status: "SOLD", orderItemId: item.id, soldAt: new Date() },
     });
+  }
+
+  await tx.order.update({
+    where: { id: orderId },
+    data: { paymentStatus: "PAID", paidAt: new Date(), paymentRefId: refId },
+  });
+}
+
+async function recordVerificationFailure(orderId: string) {
+  return prisma.$transaction(async (tx) => {
+    await lockOrder(tx, orderId);
+    const order = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+    if (order.paymentStatus === "PAID") return { status: "paid" as const, orderId };
+    if (order.paymentStatus === "PAID_PENDING_FULFILLMENT") {
+      return { status: "pending" as const, orderId };
+    }
+    await tx.order.updateMany({
+      where: { id: orderId, paymentStatus: { in: ["PENDING", "FAILED"] } },
+      data: { paymentStatus: "FAILED" },
+    });
+    return { status: "failed" as const, orderId };
   });
 }
 
@@ -263,8 +290,7 @@ export async function verifyAndDeliver(authority: string, status: string) {
   }
 
   if (status !== "OK") {
-    await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "FAILED" } });
-    return { status: "failed" as const };
+    return recordVerificationFailure(order.id);
   }
 
   const provider = getPaymentProviderForOrder(order.paymentProvider);
@@ -275,27 +301,32 @@ export async function verifyAndDeliver(authority: string, status: string) {
     verificationContext: order.paymentMetadata,
   });
   if (!verification.success) {
-    await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "FAILED" } });
-    return { status: "failed" as const };
+    return recordVerificationFailure(order.id);
   }
 
   try {
     await deliverOrder(order.id, verification.refId);
   } catch (error) {
     if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
-      await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "FAILED" } });
+      await prisma.order.updateMany({
+        where: {
+          id: order.id,
+          paymentStatus: { in: ["PENDING", "FAILED", "PAID_PENDING_FULFILLMENT"] },
+        },
+        data: { paymentStatus: "PAID_PENDING_FULFILLMENT", paymentRefId: verification.refId },
+      });
 
       // Notify admin about stock exhaustion and manual refund requirement
       void notifyAdmin(
         `⚠️ *کمبود موجودی در حین پرداخت*\n\n` +
           `سفارش *#${order.id.slice(-8)}* با مبلغ ${Number(order.totalAmount)} ${order.currency} پرداخت شد، اما موجودی محصول به اتمام رسیده بود.\n` +
-          `وضعیت سفارش به FAILED تغییر یافت. لطفا نسبت به بازگردانی وجه کاربر یا شارژ مجدد انبار اقدام نمایید.`,
+          `پرداخت ثبت شده و سفارش منتظر تأمین موجودی است. لطفا نسبت به بازگردانی وجه کاربر یا شارژ مجدد انبار اقدام نمایید.`,
       ).catch(() => {});
 
       throw new AppError(
         409,
         "OUT_OF_STOCK",
-        "Payment captured but stock was exhausted; order failed and must be refunded",
+        "Payment received; fulfillment is pending. Please contact support before paying again.",
       );
     }
     throw error;
@@ -409,37 +440,52 @@ export async function uploadReceipt(
     throw new AppError(400, "BAD_FILE_TYPE", "Receipt must be an image (JPG/PNG/WebP) or PDF");
   }
 
-  const order = await prisma.order.findFirst({ where: { id: orderId, userId } });
-  if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
-  if (order.paymentProvider !== "CARD_TO_CARD") {
-    throw new AppError(400, "NOT_CARD_TO_CARD", "This order is not a card-to-card order");
-  }
-  if (order.paymentStatus === "PAID") {
-    throw new AppError(400, "ALREADY_PAID", "This order is already paid");
-  }
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+    await lockOrder(tx, orderId);
+    const order = await tx.order.findFirst({ where: { id: orderId, userId } });
+    if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
+    if (order.paymentProvider !== "CARD_TO_CARD") {
+      throw new AppError(400, "NOT_CARD_TO_CARD", "This order is not a card-to-card order");
+    }
+    if (!["PENDING", "PENDING_REVIEW", "REJECTED"].includes(order.paymentStatus)) {
+      throw new AppError(400, "ALREADY_PAID", "This order is already paid");
+    }
 
-  const receipt = await prisma.receipt.create({
-    data: {
-      orderId: order.id,
-      imageData: new Uint8Array(file.buffer),
-      mimeType: file.mimetype,
-      reference: reference?.trim() || null,
-      status: "PENDING",
-    },
-  });
-  await prisma.order.update({
-    where: { id: order.id },
-    data: { paymentStatus: "PENDING_REVIEW" },
-  });
+    const count = await tx.receipt.count({ where: { orderId } });
+    const recent = await tx.receipt.count({
+      where: { order: { userId }, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+    });
+    if (count >= 5 || recent >= 20) {
+      throw new AppError(
+        429,
+        "RECEIPT_LIMIT",
+        "Receipt upload limit reached; please contact support",
+      );
+    }
+    const receipt = await tx.receipt.create({
+      data: {
+        orderId: order.id,
+        imageData: new Uint8Array(file.buffer),
+        mimeType: file.mimetype,
+        reference: reference?.trim() || null,
+        status: "PENDING",
+      },
+    });
+    await tx.order.update({
+      where: { id: order.id },
+      data: { paymentStatus: "PENDING_REVIEW" },
+    });
 
-  return { ok: true, receiptId: receipt.id, paymentStatus: "PENDING_REVIEW" as const };
+    return { ok: true, receiptId: receipt.id, paymentStatus: "PENDING_REVIEW" as const };
+  });
 }
 
 // Public payment configuration the storefront uses to decide which methods to offer.
 export async function getPaymentConfig() {
   const gw = await getGatewayConfig();
   return {
-    online: true,
+    online: !isOnlinePaymentBlocked(gw),
     cardToCard: gw.cardEnabled,
     card: gw.cardEnabled ? await cardToCardInfo() : null,
   };

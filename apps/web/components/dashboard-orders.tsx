@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { QueryError } from "@/components/query-error";
 import { useApi } from "@/lib/use-api";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
@@ -20,7 +21,7 @@ function statusTone(status: string): "success" | "muted" | "danger" {
 
 export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const { token } = useAuth();
-  const { data, loading } = useApi<{ orders: OrderSummary[] }>(
+  const { data, loading, error, refetch } = useApi<{ orders: OrderSummary[] }>(
     token ? "/orders" : null,
     token ?? undefined,
   );
@@ -32,6 +33,8 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
       <h1 className="mb-6 text-2xl font-bold">{d.orders}</h1>
       {loading ? (
         <Spinner className="size-6" />
+      ) : error ? (
+        <QueryError message={dict.common.somethingWrong} onRetry={refetch} />
       ) : !data || data.orders.length === 0 ? (
         <p className="text-muted">{d.noOrders}</p>
       ) : (

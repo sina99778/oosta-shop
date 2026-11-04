@@ -22,7 +22,7 @@ export async function generateMetadata({
   params: Promise<{ locale: string; slug: string }>;
 }): Promise<Metadata> {
   const { locale, slug } = await params;
-  const data = await fetchJson<{ product: ProductDetail }>(`/products/${slug}`);
+  const data = await fetchJson<{ product: ProductDetail }>(`/products/${slug}`, 60, true);
   const p = data?.product;
   if (!p) return { title: "Not found" };
 
@@ -62,7 +62,7 @@ export default async function ProductDetailPage({
   const dict = await getDictionary(locale);
 
   // Server-fetch for Product structured data (JSON-LD). The view re-fetches client-side.
-  const data = await fetchJson<{ product: ProductDetail }>(`/products/${slug}`);
+  const data = await fetchJson<{ product: ProductDetail }>(`/products/${slug}`, 60, true);
   const p = data?.product;
   // A missing/inactive product must be a real 404 (matches blog/[slug] and p/[slug]),
   // not a 200 soft-404 that search engines penalize.

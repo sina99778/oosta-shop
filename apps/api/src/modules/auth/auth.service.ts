@@ -9,6 +9,7 @@ import type { LoginInput, SignupInput } from "./auth.schemas";
 
 export type PublicUser = Omit<User, "passwordHash">;
 export type AuthResult = { user: PublicUser; token: string };
+const dummyPasswordHash = hashPassword("oosta-account-that-does-not-exist");
 
 function toPublicUser(user: User): PublicUser {
   const { passwordHash: _passwordHash, ...rest } = user;
@@ -53,8 +54,12 @@ export async function loginUser(input: LoginInput): Promise<AuthResult> {
     where: { OR: [{ email: identifier }, { phone: identifier }] },
   });
 
-  // Verify password even when the user is absent? Keep it simple: uniform error message.
-  if (!user || !(await verifyPassword(input.password, user.passwordHash))) {
+  // Keep the expensive password check on both paths to reduce timing enumeration.
+  const validPassword = await verifyPassword(
+    input.password,
+    user?.passwordHash ?? (await dummyPasswordHash),
+  );
+  if (!user || !validPassword) {
     throw new AppError(401, "UNAUTHORIZED", "Invalid credentials");
   }
 

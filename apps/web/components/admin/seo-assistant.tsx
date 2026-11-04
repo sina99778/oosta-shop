@@ -116,8 +116,10 @@ export function SeoAssistant({
       </div>
 
       <div className="border-t border-border pt-3">
-        <label className="mb-1 block text-sm text-muted">{t.focusKeyword}</label>
-        <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} />
+        <label className="block">
+          <span className="mb-1 block text-sm text-muted">{t.focusKeyword}</span>
+          <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} />
+        </label>
       </div>
 
       {ai.data?.enabled ? (

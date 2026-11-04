@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { QueryError } from "@/components/query-error";
 import { useApi } from "@/lib/use-api";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
@@ -24,7 +25,17 @@ type AdminOrder = {
 };
 type Pagination = { page: number; pageSize: number; total: number; totalPages: number };
 
-const STATUSES = ["", "PAID", "PENDING_REVIEW", "PENDING", "FAILED", "REJECTED"] as const;
+const STATUSES = [
+  "",
+  "PAID",
+  "PENDING_REVIEW",
+  "PENDING",
+  "FAILED",
+  "REJECTED",
+  "REFUNDED",
+  "EXPIRED",
+  "PAID_PENDING_FULFILLMENT",
+] as const;
 
 function statusTone(status: string): "success" | "muted" | "danger" {
   if (status === "PAID") return "success";
@@ -40,7 +51,7 @@ export function AdminOrders({ locale, dict }: { locale: Locale; dict: Dictionary
 
   const query = new URLSearchParams({ page: String(page), pageSize: "50" });
   if (status) query.set("status", status);
-  const { data, loading } = useApi<{ items: AdminOrder[]; pagination: Pagination }>(
+  const { data, loading, error, refetch } = useApi<{ items: AdminOrder[]; pagination: Pagination }>(
     token ? `/admin/orders?${query.toString()}` : null,
     token ?? undefined,
   );
@@ -72,6 +83,8 @@ export function AdminOrders({ locale, dict }: { locale: Locale; dict: Dictionary
 
       {loading ? (
         <Spinner className="size-6" />
+      ) : error ? (
+        <QueryError message={dict.common.somethingWrong} onRetry={refetch} />
       ) : !data || data.items.length === 0 ? (
         <p className="text-muted">{t.noOrders}</p>
       ) : (

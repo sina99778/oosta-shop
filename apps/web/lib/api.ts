@@ -32,6 +32,53 @@ export class ApiError extends Error {
   }
 }
 
+async function fetchWithTimeout(
+  path: string,
+  options: RequestInit,
+  token?: string,
+): Promise<Response> {
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      signal: AbortSignal.timeout(options.body instanceof FormData ? 60000 : 20000),
+      cache: "no-store",
+    });
+    if (res.status === 401 && token && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("oosta:unauthorized", { detail: token }));
+    }
+    return res;
+  } catch (error) {
+    throw new ApiError(
+      error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)
+        ? "Request timed out. Please retry."
+        : "Unable to connect. Please check your connection.",
+      0,
+      "NETWORK_ERROR",
+    );
+  }
+}
+
+async function readJson<T>(res: Response): Promise<T> {
+  if (res.status === 204) return undefined as T;
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    throw new ApiError(
+      "The server returned an invalid response. Please retry.",
+      res.ok ? 502 : res.status,
+      "INVALID_RESPONSE",
+    );
+  }
+  if (!res.ok) {
+    const err = data?.error ?? {};
+    throw new ApiError(err.message ?? "Request failed", res.status, err.code, err.details);
+  }
+  if (!data || typeof data !== "object")
+    throw new ApiError("The server returned an invalid response.", 502, "INVALID_RESPONSE");
+  return data as T;
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -41,48 +88,40 @@ async function request<T>(
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["content-type"] = "application/json";
   if (token) headers.authorization = `Bearer ${token}`;
-
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-    cache: "no-store",
-  });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = data?.error ?? {};
-    throw new ApiError(err.message ?? "Request failed", res.status, err.code, err.details);
-  }
-  return data as T;
+  return readJson<T>(
+    await fetchWithTimeout(
+      path,
+      { method, headers, body: body === undefined ? undefined : JSON.stringify(body) },
+      token,
+    ),
+  );
 }
-
-// Multipart upload (e.g. card-to-card receipts). The browser sets the multipart
-// boundary header automatically, so we must NOT set content-type ourselves.
 async function upload<T>(path: string, form: FormData, token?: string): Promise<T> {
-  const headers: Record<string, string> = {};
-  if (token) headers.authorization = `Bearer ${token}`;
-
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: "POST",
-    headers,
-    body: form,
-    cache: "no-store",
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = data?.error ?? {};
-    throw new ApiError(err.message ?? "Upload failed", res.status, err.code, err.details);
+  const types = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"]);
+  for (const value of form.values()) {
+    if (value instanceof Blob && (value.size > 5 * 1024 * 1024 || !types.has(value.type))) {
+      throw new ApiError(
+        "Choose a JPG, PNG, WebP, GIF or PDF file up to 5 MB.",
+        400,
+        "INVALID_FILE",
+      );
+    }
   }
-  return data as T;
+  return readJson<T>(
+    await fetchWithTimeout(
+      path,
+      { method: "POST", headers: token ? { authorization: `Bearer ${token}` } : {}, body: form },
+      token,
+    ),
+  );
 }
-
-// Fetch a protected binary resource (e.g. a receipt image) as a Blob.
 async function blob(path: string, token?: string): Promise<Blob> {
-  const headers: Record<string, string> = {};
-  if (token) headers.authorization = `Bearer ${token}`;
-  const res = await fetch(`${BASE_URL}${path}`, { headers, cache: "no-store" });
-  if (!res.ok) throw new ApiError("Request failed", res.status);
+  const res = await fetchWithTimeout(
+    path,
+    { headers: token ? { authorization: `Bearer ${token}` } : {} },
+    token,
+  );
+  if (!res.ok) throw new ApiError("Unable to load this file. Please retry.", res.status);
   return res.blob();
 }
 

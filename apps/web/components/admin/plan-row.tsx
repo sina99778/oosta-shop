@@ -76,16 +76,22 @@ export function PlanRow({
     <div className="space-y-2 rounded-lg border border-border p-3">
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-32 flex-1">
-          <label className="mb-1 block text-xs text-muted">{t.planLabel}</label>
-          <Input value={label} onChange={(e) => setLabel(e.target.value)} />
+          <label className="block">
+            <span className="mb-1 block text-xs text-muted">{t.planLabel}</span>
+            <Input value={label} onChange={(e) => setLabel(e.target.value)} />
+          </label>
         </div>
         <div className="w-28">
-          <label className="mb-1 block text-xs text-muted">{t.price}</label>
-          <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
+          <label className="block">
+            <span className="mb-1 block text-xs text-muted">{t.price}</span>
+            <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
+          </label>
         </div>
         <div className="w-32">
-          <label className="mb-1 block text-xs text-muted">{t.salePrice}</label>
-          <Input type="number" value={sale} onChange={(e) => setSale(e.target.value)} />
+          <label className="block">
+            <span className="mb-1 block text-xs text-muted">{t.salePrice}</span>
+            <Input type="number" value={sale} onChange={(e) => setSale(e.target.value)} />
+          </label>
         </div>
         <Badge tone={plan.availableStock > 0 ? "success" : "muted"}>
           {plan.availableStock} {t.available}

@@ -22,7 +22,9 @@
     "db:down": "docker compose down",
     "db:local:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pg-local.ps1 start",
     "db:local:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pg-local.ps1 stop",
-    "db:local:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pg-local.ps1 status"
+    "db:local:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pg-local.ps1 status",
+    "test:isolated": "node scripts/test-isolated.cjs",
+    "test:security": "node scripts/security-regression.cjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",

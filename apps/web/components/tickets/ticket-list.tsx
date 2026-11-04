@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useAuth } from "@/lib/auth";
+import { QueryError } from "@/components/query-error";
 import { useApi } from "@/lib/use-api";
 import { api, ApiError } from "@/lib/api";
 import { Container } from "@/components/ui/container";
@@ -28,7 +29,7 @@ export function TicketList({ locale, dict }: { locale: Locale; dict: Dictionary 
   const t = dict.tickets;
   const statusMap = t.status as Record<string, string>;
   const [reload, setReload] = useState(0);
-  const { data, loading } = useApi<{ tickets: TicketListItem[] }>(
+  const { data, loading, error, refetch } = useApi<{ tickets: TicketListItem[] }>(
     token ? `/tickets?_r=${reload}` : null,
     token ?? undefined,
   );
@@ -64,12 +65,16 @@ export function TicketList({ locale, dict }: { locale: Locale; dict: Dictionary 
         <h2 className="mb-3 font-semibold">{t.new}</h2>
         <form onSubmit={create} className="space-y-2">
           <Input
+            aria-label={t.subject}
+            maxLength={200}
             placeholder={t.subject}
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             required
           />
           <textarea
+            aria-label={t.message}
+            maxLength={5000}
             placeholder={t.message}
             value={body}
             onChange={(e) => setBody(e.target.value)}
@@ -86,6 +91,8 @@ export function TicketList({ locale, dict }: { locale: Locale; dict: Dictionary 
 
       {loading ? (
         <Spinner className="size-6" />
+      ) : error ? (
+        <QueryError message={dict.common.somethingWrong} onRetry={refetch} />
       ) : !data || data.tickets.length === 0 ? (
         <p className="text-muted">{t.empty}</p>
       ) : (

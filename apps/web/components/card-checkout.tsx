@@ -191,21 +191,31 @@ export function CardCheckout({
               <h2 className="mb-3 font-semibold">{t.uploadTitle}</h2>
               <form onSubmit={submit} className="space-y-3">
                 <div>
-                  <label className="mb-1 block text-sm text-muted">{t.file}</label>
+                  <label htmlFor="receipt-upload" className="mb-1 block text-sm text-muted">
+                    {t.file}
+                  </label>
                   <input
+                    id="receipt-upload"
                     ref={fileRef}
                     type="file"
-                    accept="image/*,application/pdf"
+                    accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
                     onChange={onFileChange}
                     className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
                   />
                 </div>
                 <Input
+                  aria-label={t.reference}
+                  maxLength={200}
                   placeholder={t.reference}
                   value={reference}
                   onChange={(e) => setReference(e.target.value)}
                 />
-                {formError && <p className="text-sm text-danger">{formError}</p>}
+                <p className="text-xs text-muted">JPG / PNG / WebP / GIF / PDF · 5 MB</p>
+                {formError && (
+                  <p role="alert" className="text-sm text-danger">
+                    {formError}
+                  </p>
+                )}
                 <Button type="submit" className="w-full" disabled={busy}>
                   {busy ? (
                     <>
@@ -221,6 +231,9 @@ export function CardCheckout({
         </>
       )}
 
+      <Button variant="outline" onClick={() => setReload((n) => n + 1)}>
+        {locale === "fa" ? "بررسی وضعیت سفارش" : "Refresh order status"}
+      </Button>
       {/* Receipt history for this order */}
       {order.receipts.length > 0 && (
         <div className="mt-6">
@@ -271,7 +284,12 @@ function CardField({
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
         <p className="text-xs text-muted">{label}</p>
-        <p className={mono ? "truncate font-mono text-lg tracking-wide" : "truncate"}>{value}</p>
+        <p
+          dir={mono ? "ltr" : undefined}
+          className={mono ? "truncate font-mono text-lg tracking-wide" : "truncate"}
+        >
+          {value}
+        </p>
       </div>
       <Button size="sm" variant="outline" onClick={() => onCopy(value)} type="button">
         {copied === value ? copiedLabel : copyLabel}

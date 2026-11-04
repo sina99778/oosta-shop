@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { QueryError } from "@/components/query-error";
 import { useApi } from "@/lib/use-api";
 import { ProductCard } from "@/components/product-card";
 import { Container } from "@/components/ui/container";
@@ -66,7 +67,7 @@ export function ProductsBrowser({ locale, dict }: { locale: Locale; dict: Dictio
           <Spinner className="size-6" />
         </div>
       ) : products.error ? (
-        <p className="text-danger">{dict.common.somethingWrong}</p>
+        <QueryError message={dict.common.somethingWrong} onRetry={products.refetch} />
       ) : products.data && products.data.items.length > 0 ? (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -193,7 +193,7 @@ export function AdminProductDetail({
       await api.del(`/admin/products/${product.id}/image`, token);
       setReload((r) => r + 1);
     } catch {
-      /* surfaced on reload */
+      setImgMsg(dict.common.somethingWrong);
     } finally {
       setImgBusy(false);
     }
@@ -222,7 +222,7 @@ export function AdminProductDetail({
       await api.del(`/admin/product-images/${imageId}`, token);
       setReload((r) => r + 1);
     } catch {
-      /* surfaced on reload */
+      setImgMsg(dict.common.somethingWrong);
     }
   }
 
@@ -322,7 +322,7 @@ export function AdminProductDetail({
           </div>
           <input
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp,image/gif"
             onChange={(e) => setImgFile(e.target.files?.[0] ?? null)}
             className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
           />
@@ -365,7 +365,7 @@ export function AdminProductDetail({
             )}
             <input
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp,image/gif"
               onChange={(e) => setGalFile(e.target.files?.[0] ?? null)}
               className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-surface file:px-3 file:py-2 file:text-sm hover:file:opacity-90"
             />
@@ -387,27 +387,40 @@ export function AdminProductDetail({
           <form onSubmit={saveDetails} className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm text-muted">{t.name}</label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} required />
+                <label className="block">
+                  <span className="mb-1 block text-sm text-muted">{t.name}</span>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} required />
+                </label>
               </div>
               <div>
-                <label className="mb-1 block text-sm text-muted">{t.slug}</label>
-                <Input value={slug} onChange={(e) => setSlug(e.target.value)} required dir="ltr" />
+                <label className="block">
+                  <span className="mb-1 block text-sm text-muted">{t.slug}</span>
+                  <Input
+                    value={slug}
+                    onChange={(e) => setSlug(e.target.value)}
+                    required
+                    dir="ltr"
+                  />
+                </label>
               </div>
             </div>
             <div>
-              <label className="mb-1 block text-sm text-muted">{t.shortDescription}</label>
-              <Input value={shortDesc} onChange={(e) => setShortDesc(e.target.value)} />
+              <label className="block">
+                <span className="mb-1 block text-sm text-muted">{t.shortDescription}</span>
+                <Input value={shortDesc} onChange={(e) => setShortDesc(e.target.value)} />
+              </label>
             </div>
             <div>
-              <label className="mb-1 block text-sm text-muted">{t.description}</label>
-              <textarea
-                value={desc}
-                onChange={(e) => setDesc(e.target.value)}
-                rows={6}
-                required
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
-              />
+              <label className="block">
+                <span className="mb-1 block text-sm text-muted">{t.description}</span>
+                <textarea
+                  value={desc}
+                  onChange={(e) => setDesc(e.target.value)}
+                  rows={6}
+                  required
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
+                />
+              </label>
               <p className="mt-1 text-xs text-muted">{t.markdownHint}</p>
             </div>
 
@@ -481,33 +494,37 @@ export function AdminProductDetail({
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm text-muted">{t.category}</label>
-                <select
-                  value={catId}
-                  onChange={(e) => setCatId(e.target.value)}
-                  required
-                  className={selectClass}
-                >
-                  {categories.data?.categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                <label className="block">
+                  <span className="mb-1 block text-sm text-muted">{t.category}</span>
+                  <select
+                    value={catId}
+                    onChange={(e) => setCatId(e.target.value)}
+                    required
+                    className={selectClass}
+                  >
+                    {categories.data?.categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
               <div>
-                <label className="mb-1 block text-sm text-muted">{t.type}</label>
-                <select
-                  value={type}
-                  onChange={(e) => setType(e.target.value as ProductType)}
-                  className={selectClass}
-                >
-                  {productTypes.map((tp) => (
-                    <option key={tp} value={tp}>
-                      {tp}
-                    </option>
-                  ))}
-                </select>
+                <label className="block">
+                  <span className="mb-1 block text-sm text-muted">{t.type}</span>
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value as ProductType)}
+                    className={selectClass}
+                  >
+                    {productTypes.map((tp) => (
+                      <option key={tp} value={tp}>
+                        {tp}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
             </div>
             <div className="flex flex-wrap gap-4">

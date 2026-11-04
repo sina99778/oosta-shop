@@ -5,8 +5,9 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/httpError";
 import { isSafeRasterMime } from "../../middleware/upload";
-import { deliverOrder, lowStockWarning } from "../orders/orders.service";
+import { deliverOrderInTransaction, lowStockWarning } from "../orders/orders.service";
 import { notifyAdmin } from "../../bot";
+import { lockOrder } from "../../lib/orderLock";
 import { generateSeo, isAiEnabled } from "../../lib/gemini";
 import { generateApiKey } from "../../lib/apiKey";
 import type {
@@ -541,70 +542,67 @@ async function loadReceiptForReview(id: string) {
 // Approve: deliver the order (atomic inventory claim) and mark the receipt APPROVED.
 // If delivery fails (e.g. out of stock) the receipt stays PENDING so it can be retried.
 export async function approveReceipt(id: string, input: ReviewReceiptInput) {
-  const receipt = await loadReceiptForReview(id);
-  if (receipt.order.paymentProvider !== "CARD_TO_CARD") {
-    throw new AppError(400, "NOT_CARD_TO_CARD", "This receipt is not for a card-to-card order");
-  }
-  // Idempotency: an order can carry several PENDING receipts (re-uploads). Once
-  // one is approved and the order is PAID, approving another must not re-deliver.
-  if (receipt.status !== "PENDING") {
-    throw new AppError(409, "ALREADY_REVIEWED", "This receipt was already reviewed");
-  }
-  if (receipt.order.paymentStatus === "PAID") {
-    throw new AppError(409, "ALREADY_PAID", "This order is already paid and delivered");
-  }
-  await deliverOrder(receipt.orderId, `card:${receipt.id}`);
-  await prisma.receipt.update({
-    where: { id },
-    data: { status: "APPROVED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
+  const initial = await loadReceiptForReview(id);
+  await prisma.$transaction(async (tx) => {
+    await lockOrder(tx, initial.orderId);
+    const receipt = await tx.receipt.findUniqueOrThrow({ where: { id }, include: { order: true } });
+    if (receipt.order.paymentProvider !== "CARD_TO_CARD") {
+      throw new AppError(400, "NOT_CARD_TO_CARD", "This receipt is not for a card-to-card order");
+    }
+    if (receipt.status !== "PENDING") {
+      throw new AppError(409, "ALREADY_REVIEWED", "This receipt was already reviewed");
+    }
+    if (receipt.order.paymentStatus === "PAID") {
+      throw new AppError(409, "ALREADY_PAID", "This order is already paid and delivered");
+    }
+    await deliverOrderInTransaction(tx, receipt.orderId, `card:${receipt.id}`);
+    await tx.receipt.update({
+      where: { id },
+      data: {
+        status: "APPROVED",
+        reviewedAt: new Date(),
+        reviewerNote: input.note ?? null,
+      },
+    });
   });
-  // Card-to-card sales consume inventory too — warn the admin when a plan runs low.
-  void lowStockWarning(receipt.orderId)
+  void lowStockWarning(initial.orderId)
     .then((warning) => (warning ? notifyAdmin(warning) : undefined))
     .catch(() => {});
   return serializeReceipt(await loadReceiptForReview(id));
 }
 
-// Reject a receipt. Three cases:
-//  - this receipt delivered the order (APPROVED + order PAID): undo it — REFUND
-//    the order and release its inventory back to AVAILABLE.
-//  - a stale duplicate on an order another receipt already PAID: just mark the
-//    receipt REJECTED; leave the order PAID and its inventory untouched.
-//  - the order is not yet paid: normal reject — move the order to REJECTED.
+// A disclosed credential must never re-enter available stock, even after refund.
 export async function rejectReceipt(id: string, input: ReviewReceiptInput) {
-  const receipt = await loadReceiptForReview(id);
-  const undo = receipt.status === "APPROVED" && receipt.order.paymentStatus === "PAID";
-  const orderAlreadyPaidElsewhere =
-    receipt.status !== "APPROVED" && receipt.order.paymentStatus === "PAID";
-
+  const initial = await loadReceiptForReview(id);
   await prisma.$transaction(async (tx) => {
+    await lockOrder(tx, initial.orderId);
+    const receipt = await tx.receipt.findUniqueOrThrow({ where: { id }, include: { order: true } });
+    const undo = receipt.status === "APPROVED" && receipt.order.paymentStatus === "PAID";
     await tx.receipt.update({
       where: { id },
-      data: { status: "REJECTED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
+      data: {
+        status: "REJECTED",
+        reviewedAt: new Date(),
+        reviewerNote: input.note ?? null,
+      },
     });
-
-    // Don't touch a sale that a different receipt completed.
-    if (!orderAlreadyPaidElsewhere) {
+    if (undo) {
       await tx.order.update({
         where: { id: receipt.orderId },
-        data: { paymentStatus: undo ? "REFUNDED" : "REJECTED" },
+        data: { paymentStatus: "REFUNDED" },
       });
-    }
-
-    if (undo) {
-      const orderItems = await tx.orderItem.findMany({
-        where: { orderId: receipt.orderId },
-        select: { id: true },
+    } else if (["PENDING", "PENDING_REVIEW", "REJECTED"].includes(receipt.order.paymentStatus)) {
+      const pending = await tx.receipt.count({
+        where: { orderId: receipt.orderId, status: "PENDING" },
       });
-      const orderItemIds = orderItems.map((oi) => oi.id);
-
-      await tx.inventoryItem.updateMany({
-        where: { orderItemId: { in: orderItemIds } },
-        data: { status: "AVAILABLE", orderItemId: null, soldAt: null },
+      await tx.order.update({
+        where: { id: receipt.orderId },
+        data: {
+          paymentStatus: pending ? "PENDING_REVIEW" : "REJECTED",
+        },
       });
     }
   });
-
   return serializeReceipt(await loadReceiptForReview(id));
 }
 
@@ -800,7 +798,7 @@ export function generateProductSeo(input: SeoGenerateInput) {
 
 // ---------------- Sales dashboard / analytics ----------------
 export async function getStats() {
-  const [paidAgg, totalOrders, pendingReview, customers, currencyRow] = await Promise.all([
+  const [paidAgg, totalOrders, pendingReview, customers] = await Promise.all([
     prisma.order.aggregate({
       where: { paymentStatus: "PAID" },
       _sum: { totalAmount: true },
@@ -809,20 +807,22 @@ export async function getStats() {
     prisma.order.count(),
     prisma.order.count({ where: { paymentStatus: "PENDING_REVIEW" } }),
     prisma.user.count({ where: { role: "USER" } }),
-    prisma.order.findFirst({ where: { paymentStatus: "PAID" }, select: { currency: true } }),
   ]);
 
-  const [revenue30Rows, salesByDay] = await Promise.all([
+  const [revenue30Rows, salesByDay, revenueTotalRows] = await Promise.all([
     prisma.$queryRaw<{ revenue: number }[]>`
-      SELECT COALESCE(SUM("totalAmount"), 0)::float AS revenue FROM orders
+      SELECT COALESCE(SUM(CASE WHEN currency = 'IRT' THEN "totalAmount" * 10 ELSE "totalAmount" END), 0)::float AS revenue FROM orders
       WHERE "paymentStatus" = 'PAID' AND "paidAt" >= NOW() - INTERVAL '30 days'`,
     prisma.$queryRaw<{ day: string; count: number; revenue: number }[]>`
       SELECT to_char(date_trunc('day', "paidAt"), 'YYYY-MM-DD') AS day,
              COUNT(*)::int AS count,
-             COALESCE(SUM("totalAmount"), 0)::float AS revenue
+             COALESCE(SUM(CASE WHEN currency = 'IRT' THEN "totalAmount" * 10 ELSE "totalAmount" END), 0)::float AS revenue
       FROM orders
       WHERE "paymentStatus" = 'PAID' AND "paidAt" >= NOW() - INTERVAL '13 days'
       GROUP BY 1 ORDER BY 1`,
+    prisma.$queryRaw<{ revenue: number }[]>`
+      SELECT COALESCE(SUM(CASE WHEN currency = 'IRT' THEN "totalAmount" * 10 ELSE "totalAmount" END), 0)::float AS revenue
+      FROM orders WHERE "paymentStatus" = 'PAID'`,
   ]);
 
   // Top products by units sold
@@ -870,8 +870,8 @@ export async function getStats() {
   });
 
   return {
-    currency: currencyRow?.currency ?? "IRR",
-    revenueTotal: Number(paidAgg._sum.totalAmount ?? 0),
+    currency: "IRR",
+    revenueTotal: revenueTotalRows[0]?.revenue ?? 0,
     revenue30: revenue30Rows[0]?.revenue ?? 0,
     paidOrders: paidAgg._count._all,
     totalOrders,

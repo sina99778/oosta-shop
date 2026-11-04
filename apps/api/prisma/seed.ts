@@ -190,6 +190,11 @@ async function seedCatalog(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "Demo seed is forbidden in production. Use db:bootstrap to create an administrator without deleting data.",
+    );
+  }
   await reset();
   await seedUsers();
   await seedCatalog();

@@ -163,7 +163,8 @@
       "FAILED": "Failed",
       "REJECTED": "Rejected",
       "REFUNDED": "Refunded",
-      "EXPIRED": "Expired"
+      "EXPIRED": "Expired",
+      "PAID_PENDING_FULFILLMENT": "Payment received; awaiting delivery"
     }
   },
   "blog": {
@@ -185,7 +186,11 @@
     "staff": "Support",
     "writeReply": "Write a reply…",
     "created": "Ticket created.",
-    "status": { "OPEN": "Open", "ANSWERED": "Answered", "CLOSED": "Closed" }
+    "status": {
+      "OPEN": "Open",
+      "ANSWERED": "Answered",
+      "CLOSED": "Closed"
+    }
   },
   "admin": {
     "title": "Admin",
@@ -204,7 +209,11 @@
       "writeReply": "Write a reply…",
       "staff": "Staff",
       "you": "Customer",
-      "status": { "OPEN": "Open", "ANSWERED": "Answered", "CLOSED": "Closed" }
+      "status": {
+        "OPEN": "Open",
+        "ANSWERED": "Answered",
+        "CLOSED": "Closed"
+      }
     },
     "blogTab": "Blog",
     "blog": {

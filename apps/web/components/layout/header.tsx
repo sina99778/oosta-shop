@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ export function Header({
 }) {
   const { user, logout, loading } = useAuth();
   const pathname = usePathname();
+  const [menuOpen, setMenuOpen] = useState(false);
   const base = `/${locale}`;
 
   const link = (href: string, label: string) => {
@@ -41,6 +43,7 @@ export function Header({
     return (
       <Link
         href={href}
+        onClick={() => setMenuOpen(false)}
         className={cn(
           "text-sm transition-colors",
           active ? "font-medium text-foreground" : "text-muted hover:text-foreground",
@@ -75,27 +78,17 @@ export function Header({
         </div>
 
         <div className="flex items-center gap-2">
-          <Link
-            href={`${base}/products`}
-            aria-label={dict.products}
-            className="relative hidden size-10 items-center justify-center border border-border text-foreground transition-colors hover:border-primary hover:text-primary sm:inline-flex"
+          <Button
+            variant="outline"
+            size="sm"
+            className="md:hidden"
+            aria-label={locale === "fa" ? "منوی اصلی" : "Main menu"}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-navigation"
+            onClick={() => setMenuOpen((open) => !open)}
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-            >
-              <path d="M3 3h2l2.4 11.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.6L21 7H6" />
-              <circle cx="10" cy="20" r="1" />
-              <circle cx="18" cy="20" r="1" />
-            </svg>
-            <span className="absolute -end-1 -top-1 grid size-4 place-items-center rounded-full bg-primary text-[9px] font-bold text-white">
-              0
-            </span>
-          </Link>
+            ☰
+          </Button>
           <ThemeToggle label={themeLabel} />
           <LocaleSwitcher current={locale} />
           {!loading &&
@@ -116,7 +109,7 @@ export function Header({
                 </Link>
                 <Link
                   href={`${base}/signup`}
-                  className="inline-flex h-10 items-center bg-primary px-4 text-sm font-bold text-white transition-colors hover:bg-primary-hover active:scale-[0.98]"
+                  className="hidden sm:inline-flex h-10 items-center bg-brand-gradient px-4 text-sm font-bold text-white transition-colors hover:brightness-110 active:scale-[0.98]"
                 >
                   {dict.signup}
                 </Link>
@@ -124,6 +117,21 @@ export function Header({
             ))}
         </div>
       </Container>
+      {menuOpen && (
+        <nav
+          id="mobile-navigation"
+          className="flex flex-wrap gap-5 border-t border-border px-4 py-4 md:hidden"
+        >
+          {link(base, dict.home)}
+          {link(`${base}/products`, dict.products)}
+          {link(`${base}/blog`, dict.blog)}
+          {!user && link(`${base}/login`, dict.login)}
+          {!user && link(`${base}/signup`, dict.signup)}
+          {user && link(`${base}/dashboard`, dict.dashboard)}
+          {user && link(`${base}/support`, dict.support)}
+          {user?.role === "ADMIN" && link(`${base}/admin`, dict.admin)}
+        </nav>
+      )}
     </header>
   );
 }

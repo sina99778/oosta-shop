@@ -5,13 +5,15 @@
 
 import { Telegraf, Markup } from "telegraf";
 import { message } from "telegraf/filters";
-import { unlink, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { env } from "./config/env";
 import { prisma } from "./lib/prisma";
+import { beginMaintenance, endMaintenance, isMaintenance } from "./lib/maintenance";
 import { createBackup, restoreFromFile } from "./lib/backup";
-import { isAgentEnabled, runAgent } from "./lib/agent";
+import { approveAgentAction, pendingAgentActions, isAgentEnabled, runAgent } from "./lib/agent";
 import { isOpenRouterEnabled } from "./lib/openrouter";
 import { getVisitStats } from "./modules/analytics/analytics.service";
 import {
@@ -347,8 +349,12 @@ export function startBot(): void {
 
   // Restrict every incoming update (messages AND button taps) strictly to the admin.
   bot.use(async (ctx, next) => {
-    if (ctx.from?.id !== adminId) {
+    if (ctx.from?.id !== adminId || ctx.chat?.type !== "private" || ctx.chat.id !== adminId) {
       await ctx.reply("⛔ Unauthorized.");
+      return;
+    }
+    if (isMaintenance()) {
+      await ctx.reply("A database restore is in progress. Please retry shortly.");
       return;
     }
     return next();
@@ -381,12 +387,12 @@ export function startBot(): void {
   });
   bot.action("backup", async (ctx) => {
     await ctx.answerCbQuery("Creating backup…");
-    await sendBackup(ctx.chat?.id ?? adminId);
+    await sendBackup(adminId);
   });
   bot.action("restore", async (ctx) => {
     await ctx.answerCbQuery();
     await ctx.reply(
-      "♻️ To restore, send me a backup file (.sql or .sql.gz) with the caption: restore",
+      "♻️ To restore, send me a backup file (.sql or .sql.gz) with the exact caption: restore (separate confirmation required)",
       mainMenu(),
     );
   });
@@ -551,28 +557,64 @@ export function startBot(): void {
     }
   });
 
-  // Restore: admin sends a .sql/.sql.gz dump with the caption "restore".
+  const pendingRestores = new Map<string, { fileId: string; gzip: boolean; expires: number }>();
   bot.on(message("document"), async (ctx) => {
-    const caption = ctx.message.caption ?? "";
-    if (!/restore/i.test(caption)) {
-      await ctx.reply('📥 To restore this backup, resend the file with the caption: "restore"');
+    if ((ctx.message.caption ?? "").trim().toLowerCase() !== "restore") {
+      await ctx.reply(
+        'No restore started. Use the exact caption "restore" only for a trusted backup.',
+      );
       return;
     }
-    await ctx.reply("⏳ Restoring database… the site may be briefly unavailable.");
+    const name = ctx.message.document.file_name ?? "";
+    if (
+      !/\.sql(\.gz)?$/i.test(name) ||
+      (ctx.message.document.file_size ?? Infinity) > 20 * 1024 * 1024
+    ) {
+      await ctx.reply("A .sql or .sql.gz backup up to 20 MB is required.");
+      return;
+    }
+    pendingRestores.clear();
+    const nonce = randomBytes(12).toString("hex");
+    pendingRestores.set(nonce, {
+      fileId: ctx.message.document.file_id,
+      gzip: /\.gz$/i.test(name),
+      expires: Date.now() + 120000,
+    });
+    await ctx.reply(
+      "This replaces the database with the selected trusted backup. Confirm within 2 minutes.",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("Confirm database replacement", `restore_confirm_${nonce}`)],
+      ]),
+    );
+  });
+  bot.action(/^restore_confirm_([a-f0-9]{24})$/, async (ctx) => {
+    const pending = pendingRestores.get(ctx.match[1]);
+    pendingRestores.delete(ctx.match[1]);
+    if (!pending || pending.expires < Date.now()) {
+      await ctx.answerCbQuery("Restore confirmation expired");
+      return;
+    }
+    await ctx.answerCbQuery("Restoring selected backup");
+    const dir = await mkdtemp(path.join(os.tmpdir(), "oosta-bot-restore-"));
     try {
-      const link = await ctx.telegram.getFileLink(ctx.message.document.file_id);
-      const response = await fetch(link.href);
+      const link = await ctx.telegram.getFileLink(pending.fileId);
+      const response = await fetch(link.href, { signal: AbortSignal.timeout(30000) });
+      if (!response.ok) throw new Error("Backup download failed");
       const buffer = Buffer.from(await response.arrayBuffer());
-      const name = ctx.message.document.file_name ?? "restore.sql.gz";
-      const tmp = path.join(os.tmpdir(), `oosta-restore-${name}`);
-      await writeFile(tmp, buffer);
-      await restoreFromFile(tmp);
-      await unlink(tmp).catch(() => {});
-      await ctx.reply("✅ Restore complete.");
+      if (buffer.length > 20 * 1024 * 1024) throw new Error("Backup is too large");
+      const file = path.join(dir, pending.gzip ? "snapshot.sql.gz" : "snapshot.sql");
+      await writeFile(file, buffer, { flag: "wx", mode: 0o600 });
+      await beginMaintenance();
+      try {
+        await restoreFromFile(file);
+      } finally {
+        endMaintenance();
+      }
+      await ctx.reply("Restore complete.");
     } catch (error) {
-      await ctx.reply(
-        `❌ Restore failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      await ctx.reply(`Restore failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   });
 
@@ -594,7 +636,9 @@ export function startBot(): void {
     await bot.telegram.sendChatAction(chatId, "typing").catch(() => {});
     const thinking = await bot.telegram.sendMessage(chatId, "🤖 در حال انجام…").catch(() => null);
     try {
+      const approvals = new Set<string>();
       const result = await runAgent(instruction, {
+        approvals,
         image,
         onStep: (note) => {
           void bot?.telegram.sendChatAction(chatId, "typing").catch(() => {});
@@ -602,7 +646,26 @@ export function startBot(): void {
         },
       });
       if (thinking) await bot.telegram.deleteMessage(chatId, thinking.message_id).catch(() => {});
-      await bot.telegram.sendMessage(chatId, result.slice(0, 3800), mainMenu());
+      await bot.telegram.sendMessage(
+        chatId,
+        approvals.size
+          ? "تغییرات پیشنهادی آماده‌اند و فقط پس از تأیید عملیات مشخص توسط شما اجرا می‌شوند."
+          : result.slice(0, 3800),
+        mainMenu(),
+      );
+      for (const action of pendingAgentActions(approvals)) {
+        const chunks = Array.from(action.description);
+        for (let offset = 0; offset < chunks.length; offset += 1800) {
+          await bot.telegram.sendMessage(chatId, chunks.slice(offset, offset + 1800).join(""));
+        }
+        await bot.telegram.sendMessage(
+          chatId,
+          "Approve only the operation shown above (expires in 2 minutes).",
+          Markup.inlineKeyboard([
+            [Markup.button.callback("Approve this operation", `agent_confirm_${action.id}`)],
+          ]),
+        );
+      }
     } catch (error) {
       await bot.telegram.sendMessage(
         chatId,
@@ -611,6 +674,15 @@ export function startBot(): void {
       );
     }
   }
+
+  bot.action(/^agent_confirm_([a-f0-9]{24})$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    try {
+      await ctx.reply(await approveAgentAction(ctx.match[1]));
+    } catch (error) {
+      await ctx.reply(error instanceof Error ? error.message : String(error));
+    }
+  });
 
   // AI agent: any plain text message (not a command) is treated as an instruction.
   bot.on(message("text"), async (ctx) => {

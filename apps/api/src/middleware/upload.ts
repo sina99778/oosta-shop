@@ -10,9 +10,22 @@ export function isSafeRasterMime(mimetype: string): boolean {
   return SAFE_RASTER_MIMES.has(mimetype.toLowerCase());
 }
 
+const uploadLimits: NonNullable<multer.Options["limits"]> & {
+  fieldNestingDepth: number;
+  fieldArrayIndexLimit: number;
+} = {
+  fileSize: 5 * 1024 * 1024,
+  files: 1,
+  fields: 2,
+  parts: 3,
+  fieldNameSize: 40,
+  fieldSize: 1024,
+  fieldNestingDepth: 0,
+  fieldArrayIndexLimit: 0,
+};
 const imageUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024, files: 1 }, // 5 MB
+  limits: uploadLimits,
 });
 
 export const uploadReceiptImage = imageUpload.single("receipt");
