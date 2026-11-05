@@ -9,6 +9,7 @@ import { Container } from "@/components/ui/container";
 import { cn } from "@/lib/cn";
 import { LocaleSwitcher } from "./locale-switcher";
 import { ThemeToggle } from "./theme-toggle";
+import { Wordmark } from "@/components/wordmark";
 import type { Locale } from "@/lib/i18n";
 
 type NavDict = {
@@ -43,6 +44,7 @@ export function Header({
     return (
       <Link
         href={href}
+        aria-current={active ? "page" : undefined}
         onClick={() => setMenuOpen(false)}
         className={cn(
           "text-sm transition-colors",
@@ -55,24 +57,22 @@ export function Header({
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-xl">
-      <Container className="flex h-[70px] items-center justify-between gap-4">
+    <header className="oosta-header sticky top-0 z-40 border-b border-border bg-background">
+      <Container className="flex h-[78px] items-center justify-between gap-4">
         <div className="flex items-center gap-8">
           <Link
             href={base}
-            className="flex items-center gap-2 text-2xl font-black tracking-[-0.06em]"
+            aria-label={locale === "fa" ? "اوستا، صفحهٔ اصلی" : "Oosta home"}
+            className="flex items-center gap-2"
           >
-            <span>
-              oosta<span className="text-primary">AI</span>
-            </span>
-            <span className="size-2 rounded-full bg-primary" />
+            <Wordmark />
           </Link>
           <nav className="hidden items-center gap-7 md:flex">
             {link(base, dict.home)}
             {link(`${base}/products`, dict.products)}
             {link(`${base}/blog`, dict.blog)}
             {user && link(`${base}/dashboard`, dict.dashboard)}
-            {user && link(`${base}/support`, dict.support)}
+            {link(`${base}/support`, dict.support)}
             {user?.role === "ADMIN" && link(`${base}/admin`, dict.admin)}
           </nav>
         </div>
@@ -103,13 +103,13 @@ export function Header({
               <>
                 <Link
                   href={`${base}/login`}
-                  className="hidden h-10 items-center border border-border px-4 text-sm text-foreground transition-colors hover:border-primary hover:text-primary sm:inline-flex"
+                  className="hidden h-10 items-center rounded border border-border px-4 text-xs text-foreground transition-colors hover:border-primary hover:text-primary sm:inline-flex"
                 >
                   {dict.login}
                 </Link>
                 <Link
                   href={`${base}/signup`}
-                  className="hidden sm:inline-flex h-10 items-center bg-brand-gradient px-4 text-sm font-bold text-white transition-colors hover:brightness-110 active:scale-[0.98]"
+                  className="hidden sm:inline-flex h-10 items-center rounded bg-brand-gradient px-4 text-xs font-medium text-white transition-colors hover:brightness-110"
                 >
                   {dict.signup}
                 </Link>
@@ -128,7 +128,7 @@ export function Header({
           {!user && link(`${base}/login`, dict.login)}
           {!user && link(`${base}/signup`, dict.signup)}
           {user && link(`${base}/dashboard`, dict.dashboard)}
-          {user && link(`${base}/support`, dict.support)}
+          {link(`${base}/support`, dict.support)}
           {user?.role === "ADMIN" && link(`${base}/admin`, dict.admin)}
         </nav>
       )}

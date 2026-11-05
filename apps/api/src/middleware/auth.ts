@@ -36,8 +36,8 @@ export async function authenticate(
       }
       req.user = { id: resolved.userId, role: resolved.role };
       next();
-    } catch {
-      next(new AppError(401, "UNAUTHORIZED", "Invalid API key"));
+    } catch (error) {
+      next(error);
     }
     return;
   }

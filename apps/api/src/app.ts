@@ -44,6 +44,12 @@ export function createApp() {
   // Logging
   app.use(morgan(env.isProduction ? "combined" : "dev"));
 
+  // Account data, credentials and payment results must not enter browser/proxy caches.
+  app.use(["/auth", "/orders", "/tickets", "/admin", "/payments/verify"], (_req, res, next) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    next();
+  });
+
   // Global rate limiting
 
   // Routes

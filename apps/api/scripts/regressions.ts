@@ -7,6 +7,7 @@ import {
   deliverOrder,
   uploadReceipt,
   verifyAndDeliver,
+  getOrderDetail,
 } from "../src/modules/orders/orders.service";
 import { getStats, approveReceipt, rejectReceipt } from "../src/modules/admin/admin.service";
 import { signupSchema } from "../src/modules/auth/auth.schemas";
@@ -112,10 +113,48 @@ async function main() {
     1,
   );
   await assert.rejects(deliverOrder(card.id, "retry"));
+  const refunded = await getOrderDetail(user.id, card.id);
+  assert.equal(refunded.cardToCard, null, "Closed orders must not return payment instructions");
+  assert(refunded.items.every((item) => item.credentials.length === 0));
+  const forgedAdminRole = signAccessToken({ sub: user.id, role: "ADMIN" });
+  const forbidden = await inject(app, {
+    method: "GET",
+    url: "/admin/stats",
+    remoteAddress: "203.0.113.41",
+    headers: { authorization: `Bearer ${forgedAdminRole}` },
+  });
+  assert.equal(forbidden.statusCode, 403, "Current database role must override a stale admin JWT");
+  console.log(
+    "PASS: refunded orders hide payment details and credentials; stale admin claims cannot elevate access",
+  );
   console.log(
     "PASS: concurrent receipt transitions stay paid; disclosed units never re-enter stock",
   );
 
+  const waiting = await order();
+  await prisma.order.update({
+    where: { id: waiting.id },
+    data: {
+      paymentStatus: "PAID_PENDING_FULFILLMENT",
+      paymentAuthority: "waiting-authority",
+      paymentRefId: "confirmed-ref",
+    },
+  });
+  const cancellation = await verifyAndDeliver("waiting-authority", "NOK");
+  assert.equal(cancellation.status, "pending");
+  assert.equal(
+    (await prisma.order.findUniqueOrThrow({ where: { id: waiting.id } })).paymentStatus,
+    "PAID_PENDING_FULFILLMENT",
+  );
+  const redelivered = await verifyAndDeliver("waiting-authority", "OK");
+  assert.equal(redelivered.status, "paid");
+  assert.equal(
+    await prisma.inventoryItem.count({ where: { orderItem: { orderId: waiting.id } } }),
+    1,
+  );
+  console.log(
+    "PASS: confirmed pending payments survive cancellation and can fulfill without a second order",
+  );
   const limited = await order("CARD_TO_CARD");
   for (let i = 0; i < 5; i++) await uploadReceipt(user.id, limited.id, file);
   await assert.rejects(

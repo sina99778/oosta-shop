@@ -126,7 +126,7 @@ export function CardCheckout({
       ) : (
         <>
           {/* Destination card + amount */}
-          {card && (
+          {card && canUpload && (
             <Card className="mt-6 space-y-4">
               <p className="text-sm text-muted">{t.instructions}</p>
 

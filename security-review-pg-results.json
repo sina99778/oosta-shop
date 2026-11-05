@@ -1,0 +1,8 @@
+{
+  "database": "isolated PostgreSQL 16.4",
+  "controlledScheduling": true,
+  "expectedQuantity": 1,
+  "deliveredUnits": 2,
+  "paymentStatus": "PAID",
+  "uniqueDeliveredUnits": 2
+}

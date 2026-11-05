@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { Markdown } from "@/components/markdown";
 import { ProductCard } from "@/components/product-card";
+import { ProductMark } from "@/components/product-mark";
+import styles from "./shop.module.css";
 import { cn } from "@/lib/cn";
 import { formatPrice, formatDate } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
@@ -158,9 +160,12 @@ export function ProductDetailView({
   }
 
   return (
-    <Container className="py-8 animate-fade-in">
+    <Container className={styles.detail}>
       {/* Breadcrumb */}
-      <nav className="mb-4 flex flex-wrap items-center gap-1 text-sm text-muted">
+      <nav
+        aria-label={locale === "fa" ? "مسیر صفحه" : "Breadcrumb"}
+        className={cn("flex flex-wrap items-center text-muted", styles.detailBreadcrumb)}
+      >
         <Link href={`/${locale}`} className="hover:text-foreground">
           {dict.nav.home}
         </Link>
@@ -175,10 +180,10 @@ export function ProductDetailView({
         <span className="text-foreground">{product.name}</span>
       </nav>
 
-      <div className="grid gap-8 lg:grid-cols-2">
+      <div className={cn("grid lg:grid-cols-2", styles.detailGrid)}>
         {/* Gallery */}
         <div>
-          <div className="aspect-[4/3] overflow-hidden rounded-xl border border-border bg-surface">
+          <div className={styles.gallery}>
             {images.length > 0 ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -187,10 +192,17 @@ export function ProductDetailView({
                 className="h-full w-full object-cover"
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-6xl font-bold text-muted/30">
-                {product.name.charAt(0)}
-              </div>
+              <ProductMark
+                name={product.name}
+                slug={product.slug}
+                type={product.type}
+                className={styles.galleryMark}
+              />
             )}
+            <span className={styles.galleryCaption} aria-hidden="true">
+              <span>OOSTA / DIGITAL ACCESS</span>
+              <span>CHOOSE YOUR NEXT TOOL ↗</span>
+            </span>
           </div>
           {images.length > 1 && (
             <div className="mt-3 flex flex-wrap gap-2">
@@ -214,7 +226,7 @@ export function ProductDetailView({
         </div>
 
         {/* Info */}
-        <div>
+        <div className={styles.detailInfo}>
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Badge tone="muted">{product.category.name}</Badge>
             {product.isFeatured && <Badge tone="primary">{t.featured}</Badge>}
@@ -224,7 +236,9 @@ export function ProductDetailView({
               </Badge>
             )}
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">{product.name}</h1>
+          <h1>
+            <bdi>{product.name}</bdi>
+          </h1>
 
           {product.rating.count > 0 && (
             <p className="mt-2 text-sm text-amber-400">
@@ -241,7 +255,7 @@ export function ProductDetailView({
 
           {/* Price */}
           {plan && (
-            <div className="mt-5 flex items-end gap-3">
+            <div className={cn("mt-5 flex flex-wrap items-end gap-3", styles.detailPrice)}>
               <span className="text-3xl font-bold">
                 {formatPrice(plan.effectivePrice, plan.currency, locale)}
               </span>
@@ -254,7 +268,7 @@ export function ProductDetailView({
           )}
 
           {/* Plans */}
-          <Card className="mt-5 h-fit">
+          <Card className={cn("h-fit", styles.planCard)}>
             <h2 className="font-semibold">{t.perPlan}</h2>
             <div className="mt-3 space-y-2">
               {product.plans.map((pl) => (
@@ -351,7 +365,7 @@ export function ProductDetailView({
                   : "Online payment is currently unavailable."}
               </p>
             )}
-            <p className="mt-3 text-center text-xs text-muted">⚡ {t.instantDelivery}</p>
+            <p className="mt-3 text-center text-xs text-muted">{t.instantDelivery}</p>
             {paymentConfig.data?.cardToCard && (
               <p className="mt-2 text-center text-xs text-muted">
                 {locale === "fa"
@@ -360,11 +374,21 @@ export function ProductDetailView({
               </p>
             )}
           </Card>
+          <div className={styles.supportNote}>
+            <span>
+              {locale === "fa"
+                ? "نوع دسترسی و شرایط پلن را پیش از خرید بررسی کن."
+                : "Review access type and plan terms before buying."}
+            </span>
+            <Link href={`/${locale}/support`}>
+              {locale === "fa" ? "سؤال دربارهٔ محصول" : "Ask about this tool"} ↗
+            </Link>
+          </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="mt-10">
+      <div className={styles.detailTabs}>
         <div role="tablist" aria-label={product.name} className="flex gap-1 border-b border-border">
           {(
             [
@@ -381,6 +405,7 @@ export function ProductDetailView({
               aria-selected={tab === key}
               tabIndex={tab === key ? 0 : -1}
               onKeyDown={(event) => {
+                if (event.altKey || event.ctrlKey || event.metaKey) return;
                 const keys = ["description", "specs", "reviews"] as const;
                 const index = keys.indexOf(key);
                 let next = index;

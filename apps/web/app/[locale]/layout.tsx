@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Geist, Geist_Mono, Vazirmatn } from "next/font/google";
 import { notFound } from "next/navigation";
+import Script from "next/script";
 import { getDictionary } from "./dictionaries";
 import { dirFor, isLocale, locales } from "@/lib/i18n";
 import { getSiteConfig, localizedSetting, themeCss } from "@/lib/settings";
@@ -75,14 +76,19 @@ export default async function LocaleLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${vazirmatn.variable} h-full antialiased`}
     >
       <body className={`flex min-h-full flex-col bg-background text-foreground ${fontClass}`}>
-        {/* Set the theme class before paint to avoid a flash. Defaults to dark. */}
-        <script
+        {/* Apply the saved preference before paint; the storefront defaults to light. */}
+        <Script
+          id="oosta-theme-init"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('theme');if(t==='light'){document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark')}}catch(e){document.documentElement.classList.add('dark')}`,
+            __html: `try{document.documentElement.classList.toggle('dark',localStorage.getItem('theme')==='dark')}catch(e){document.documentElement.classList.remove('dark')}`,
           }}
         />
         {themeOverrides ? <style dangerouslySetInnerHTML={{ __html: themeOverrides }} /> : null}
         <Providers>
+          <a className="skip-link" href="#main-content">
+            {locale === "fa" ? "رفتن به محتوای اصلی" : "Skip to main content"}
+          </a>
           <Track />
           {announcement ? (
             <div className="bg-brand-gradient px-4 py-2 text-center text-sm font-medium text-white">
@@ -90,7 +96,9 @@ export default async function LocaleLayout({
             </div>
           ) : null}
           <Header locale={locale} dict={dict.nav} themeLabel={dict.common.toggleTheme} />
-          <main className="flex-1">{children}</main>
+          <main id="main-content" tabIndex={-1} className="flex-1">
+            {children}
+          </main>
           <Footer locale={locale} dict={dict.footer} nav={dict.nav} config={config} />
         </Providers>
       </body>

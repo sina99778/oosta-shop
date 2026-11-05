@@ -3,6 +3,7 @@ import { Container } from "@/components/ui/container";
 import { assetUrl } from "@/lib/api";
 import { localizedSetting, type SiteConfig } from "@/lib/settings";
 import type { Locale } from "@/lib/i18n";
+import { Wordmark } from "@/components/wordmark";
 
 type FooterDict = {
   tagline: string;
@@ -59,12 +60,11 @@ export function Footer({
   if (settings.contactPhone) {
     contact.push({ label: settings.contactPhone, href: `tel:${settings.contactPhone}` });
   }
-  if (settings.contactTelegram) {
-    contact.push({
-      label: `Telegram — ${settings.contactTelegram.replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "@")}`,
-      href: socialHref(settings.contactTelegram, "https://t.me"),
-    });
-  }
+  const telegram = settings.contactTelegram || "@oostaAiSupport";
+  contact.push({
+    label: `Telegram — ${telegram.replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "@")}`,
+    href: socialHref(telegram, "https://t.me"),
+  });
   if (settings.contactInstagram) {
     contact.push({
       label: `Instagram — ${settings.contactInstagram.replace(/^https?:\/\/(www\.)?instagram\.com\//i, "@")}`,
@@ -82,17 +82,16 @@ export function Footer({
   ) : null;
 
   return (
-    <footer className="mt-20 border-t-2 border-primary bg-[#0d0d0d] text-[#f7f3ea]">
-      <Container className="grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-4">
+    <footer className="oosta-footer mt-16 border-t border-border bg-surface text-foreground">
+      <Container
+        className={`grid gap-10 py-14 sm:grid-cols-2 ${badge ? "lg:grid-cols-4" : "lg:grid-cols-[2fr_1fr_1fr]"}`}
+      >
         <div className="space-y-4">
           <Link
             href={base}
             className="flex items-center gap-2 text-2xl font-black tracking-[-0.06em]"
           >
-            <span>
-              oosta<span className="text-primary">AI</span>
-            </span>
-            <span className="size-2 rounded-full bg-primary" />
+            <Wordmark />
           </Link>
           <p className="text-sm font-medium text-muted">{dict.tagline}</p>
           <p className="text-sm leading-relaxed text-muted">{about}</p>
@@ -106,6 +105,14 @@ export function Footer({
             <FooterLink href={base} label={nav.home} />
             <FooterLink href={`${base}/products`} label={nav.products} />
             <FooterLink href={`${base}/blog`} label={nav.blog} />
+            <a
+              href="https://t.me/oostaAi"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-muted hover:text-primary"
+            >
+              {locale === "fa" ? "کانال تلگرام اوستا" : "Oosta Telegram channel"}
+            </a>
           </div>
         </div>
 
@@ -140,28 +147,29 @@ export function Footer({
           )}
         </div>
 
-        <div className="space-y-3">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">
-            {dict.trustTitle}
-          </h3>
-          {badge &&
-            (settings.enamadLink ? (
-              <a
-                href={settings.enamadLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block transition-transform hover:scale-105"
-              >
-                {badge}
-              </a>
-            ) : (
-              badge
-            ))}
-          {!badge && <p className="text-sm text-muted">—</p>}
-        </div>
+        {badge && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">
+              {dict.trustTitle}
+            </h3>
+            {badge &&
+              (settings.enamadLink ? (
+                <a
+                  href={settings.enamadLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block transition-transform hover:scale-105"
+                >
+                  {badge}
+                </a>
+              ) : (
+                badge
+              ))}
+          </div>
+        )}
       </Container>
 
-      <div className="border-t border-[#393939]">
+      <div className="border-t border-border">
         <Container className="flex flex-col items-center justify-between gap-2 py-5 text-sm text-muted sm:flex-row">
           <p>© {year} oostaAI</p>
           <p>{dict.rights}</p>

@@ -15,7 +15,7 @@ import type { Dictionary } from "@/app/[locale]/dictionaries";
 
 function statusTone(status: string): "success" | "muted" | "danger" {
   if (status === "PAID") return "success";
-  if (status === "PENDING") return "muted";
+  if (["PENDING", "PENDING_REVIEW", "PAID_PENDING_FULFILLMENT"].includes(status)) return "muted";
   return "danger";
 }
 

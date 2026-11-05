@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 export function ThemeToggle({ label }: { label: string }) {
-  const [dark, setDark] = useState(true);
+  const [dark, setDark] = useState(false);
 
   useEffect(() => {
     queueMicrotask(() => setDark(document.documentElement.classList.contains("dark")));

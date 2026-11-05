@@ -1,7 +1,7 @@
 {
   "meta": {
-    "title": "oostaAI — Digital products, delivered instantly",
-    "description": "Buy AI accounts, software licenses and gift cards with automatic instant delivery — your purchase is in your dashboard seconds after payment."
+    "title": "Oosta AI — Learning, prompts and digital tools",
+    "description": "Practical AI tutorials, prompts and tool guides, alongside subscriptions, software licenses and digital products."
   },
   "nav": {
     "home": "Home",
@@ -13,7 +13,7 @@
     "logout": "Log out",
     "account": "Account",
     "support": "Support",
-    "blog": "Blog"
+    "blog": "Journal"
   },
   "common": {
     "loading": "Loading…",
@@ -33,8 +33,8 @@
     "somethingWrong": "Something went wrong."
   },
   "home": {
-    "heroTitle": "Everything digital,",
-    "heroSubtitle": "AI accounts, software licenses, and gift cards with secure payment and fully automatic dashboard delivery.",
+    "heroTitle": "Think further.\nMake more.",
+    "heroSubtitle": "From prompting and research to images and content: learn how to use AI, then find the tools that fit your work.",
     "browse": "Browse products",
     "browseSecondary": "Read the blog",
     "categories": "Categories",
@@ -165,7 +165,9 @@
       "REFUNDED": "Refunded",
       "EXPIRED": "Expired",
       "PAID_PENDING_FULFILLMENT": "Payment received; awaiting delivery"
-    }
+    },
+    "pendingFulfillmentTitle": "Payment confirmed; awaiting delivery",
+    "pendingFulfillmentBody": "Do not pay again. Your order is waiting for stock and delivery. Contact support for an update."
   },
   "blog": {
     "title": "Blog",
@@ -447,10 +449,10 @@
     }
   },
   "footer": {
-    "tagline": "Instant digital goods delivery",
+    "tagline": "Learn. Try. Move your ideas forward.",
     "rights": "All rights reserved.",
     "aboutTitle": "About oostaAI",
-    "aboutDefault": "oostaAI sells AI accounts, software licenses and gift cards with fully automatic delivery — your purchase is in your dashboard seconds after payment.",
+    "aboutDefault": "Your companion for learning AI, writing better prompts and choosing tools for research, content and everyday work.",
     "shopTitle": "Shop",
     "supportTitle": "Customer care",
     "contactTitle": "Contact",

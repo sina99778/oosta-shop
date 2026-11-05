@@ -14,7 +14,7 @@
   --color-border: var(--c-border);
   --color-primary: var(--c-primary);
   --color-primary-hover: var(--c-primary-hover);
-  --color-primary-foreground: #ffffff;
+  --color-primary-foreground: var(--c-on-primary);
   --color-accent: var(--c-accent);
   --color-success: #16a34a;
   --color-danger: #ef4444;
@@ -26,32 +26,34 @@
 
 /* ---- Light theme (default) ---- */
 :root {
-  --c-bg: #f4f0e7;
-  --c-surface: #fffaf0;
+  --c-on-primary: #ffffff;
+  --c-bg: #f8fbfc;
+  --c-surface: #eef4f6;
   --c-card: #ffffff;
-  --c-fg: #151515;
-  --c-muted: #6d685f;
-  --c-border: #d8d1c4;
-  --c-primary: #ff4d00;
-  --c-primary-hover: #df3d00;
-  --c-accent: #ffd500;
-  --shadow-card: 0 16px 45px -30px rgba(28, 20, 10, 0.35);
-  --shadow-glow: 0 12px 34px -18px rgba(255, 77, 0, 0.58);
+  --c-fg: #173342;
+  --c-muted: #5c717e;
+  --c-border: #dce7eb;
+  --c-primary: #176c80;
+  --c-primary-hover: #11586a;
+  --c-accent: #36b9c6;
+  --shadow-card: 0 2px 8px -5px rgba(18, 59, 66, 0.12);
+  --shadow-glow: none;
 }
 
 /* ---- Dark theme ---- */
 .dark {
-  --c-bg: #0c0c0c;
-  --c-surface: #111111;
-  --c-card: #151515;
-  --c-fg: #f7f3ea;
-  --c-muted: #aaa49a;
-  --c-border: #393939;
-  --c-primary: #ff4d00;
-  --c-primary-hover: #ff6a2b;
-  --c-accent: #ffd500;
+  --c-on-primary: #102c2d;
+  --c-bg: #101e20;
+  --c-surface: #142629;
+  --c-card: #182d30;
+  --c-fg: #e7f2ef;
+  --c-muted: #a0b6b3;
+  --c-border: #31494b;
+  --c-primary: #55cebd;
+  --c-primary-hover: #80dfd0;
+  --c-accent: #36b9c6;
   --shadow-card: 0 22px 60px -35px rgba(0, 0, 0, 0.9);
-  --shadow-glow: 0 12px 36px -18px rgba(255, 77, 0, 0.8);
+  --shadow-glow: none;
 }
 
 html,
@@ -77,11 +79,8 @@ body {
   color: transparent;
 }
 .bg-brand-gradient {
-  background-image: linear-gradient(
-    115deg,
-    color-mix(in srgb, var(--c-primary) 40%, black),
-    color-mix(in srgb, var(--c-primary) 36%, black)
-  );
+  background-color: #123b42;
+  background-image: none;
 }
 .shadow-card {
   box-shadow: var(--shadow-card);
@@ -222,4 +221,183 @@ body {
 }
 .animate-fade-in {
   animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.oosta-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-vazirmatn), Tahoma, sans-serif;
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  line-height: 1.5;
+}
+.oosta-wordmark svg {
+  color: #239b98;
+}
+.oosta-header > div,
+.oosta-footer > div {
+  max-width: 1248px;
+  padding-inline: 40px;
+}
+.oosta-header nav a {
+  font-size: 12px;
+  position: relative;
+}
+.oosta-header nav a[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  height: 2px;
+  width: 12px;
+  background: #30bfbf;
+  bottom: -10px;
+  inset-inline-start: 0;
+}
+.oosta-header button {
+  border-radius: 4px;
+}
+.oosta-header :is(a, button):focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 4px;
+}
+@media (max-width: 640px) {
+  .oosta-header > div,
+  .oosta-footer > div {
+    padding-inline: 20px;
+  }
+  .oosta-header > div {
+    height: 68px;
+    gap: 10px;
+  }
+  .oosta-wordmark {
+    font-size: 25px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Owner-supplied Oosta AI identity. */
+.oosta-wordmark {
+  gap: 10px;
+  font-size: 26px;
+  letter-spacing: -0.04em;
+}
+.oosta-wordmark img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 50%;
+  background: #edf8fb;
+}
+.oosta-ai-label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--c-primary);
+}
+@media (max-width: 640px) {
+  .oosta-wordmark {
+    gap: 8px;
+    font-size: 23px;
+  }
+  .oosta-wordmark img {
+    width: 36px;
+    height: 36px;
+  }
+  .oosta-ai-label {
+    font-size: 9px;
+  }
+  .oosta-header > div {
+    padding-inline: 16px;
+  }
+  .oosta-header > div > div {
+    gap: 8px;
+  }
+}
+/* Fixed brand colors keep the header consistent across storefront themes. */
+.oosta-header {
+  --c-bg: #101d2e;
+  --c-fg: #f3f6f8;
+  --c-muted: #b0c0ce;
+  --c-border: #344153;
+  --c-primary: #b7ecd8;
+  --c-primary-hover: #d5f7e9;
+  --c-on-primary: #102b28;
+  --c-accent: #b7ecd8;
+  --color-background: #101d2e;
+  --color-foreground: #f3f6f8;
+  --color-muted: #b0c0ce;
+  --color-border: #344153;
+  --color-primary: #b7ecd8;
+  --color-primary-foreground: #102b28;
+  --color-card: #182a3f;
+  --color-surface: #182a3f;
+  background: #101d2e;
+  color: #f3f6f8;
+}
+.oosta-header nav a[aria-current="page"]::after {
+  background: #b7ecd8;
+}
+.oosta-header .oosta-ai-label {
+  color: #b7ecd8;
+}
+.oosta-header :is(a, button):focus-visible {
+  outline-color: #b7ecd8;
+}
+.oosta-header button[aria-controls="mobile-navigation"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+.oosta-footer {
+  border-top: 3px solid var(--c-primary);
+}
+.skip-link {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-start: 16px;
+  z-index: 60;
+  transform: translateY(-200%);
+  background: #b7ecd8;
+  color: #102b28;
+  padding: 12px 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.skip-link:focus {
+  transform: translateY(0);
+  outline: 2px solid #102b28;
+  outline-offset: 2px;
+}
+.oosta-product-mark {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  background: #e1ede5;
+  color: #29463a;
+  font:
+    750 24px var(--font-geist-sans),
+    sans-serif;
+}
+.oosta-product-mark[data-kind="LICENSE"] {
+  background: #dfeaf0;
+  color: #254a60;
+}
+.oosta-product-mark[data-kind="GIFTCARD"] {
+  background: #eee5d9;
+  color: #5d4834;
+}
+.oosta-product-mark[aria-hidden="true"] {
+  user-select: none;
 }

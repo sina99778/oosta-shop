@@ -33,7 +33,7 @@ export function CheckoutCallback({ locale, dict }: { locale: Locale; dict: Dicti
       })
       .then((result) => {
         if (!active) return;
-        if (result.status === "paid" && result.orderId)
+        if ((result.status === "paid" || result.status === "pending") && result.orderId)
           router.replace(`/${locale}/dashboard/orders/${encodeURIComponent(result.orderId)}`);
         else if (result.status === "failed") router.replace(`/${locale}/checkout/cancel`);
         else setState("unknown");

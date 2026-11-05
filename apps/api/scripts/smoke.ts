@@ -465,14 +465,17 @@ async function testOrders(): Promise<void> {
   const paidCount = [vB1, vB2].filter(
     (v) => v.statusCode === 200 && body(v).status === "paid",
   ).length;
-  const oosCount = [vB1, vB2].filter((v) => v.statusCode === 409).length;
+  const oosCount = [vB1, vB2].filter(
+    (v) =>
+      v.statusCode === 200 && body(v).status === "pending" && typeof body(v).orderId === "string",
+  ).length;
   record(
     "oversell: exactly one paid",
     paidCount === 1,
     `codes=${vB1.statusCode},${vB2.statusCode}`,
   );
   record(
-    "oversell: exactly one 409 out-of-stock",
+    "oversell: confirmed payment returns a pending delivery with order id",
     oosCount === 1,
     `codes=${vB1.statusCode},${vB2.statusCode}`,
   );

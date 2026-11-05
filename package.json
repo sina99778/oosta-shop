@@ -18,13 +18,16 @@
     "format:check": "prettier --check .",
     "dev:api": "npm run dev -w @oosta/api",
     "dev:web": "npm run dev -w @oosta/web",
+    "preview:storefront": "node scripts/storefront-preview.cjs",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:local:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pg-local.ps1 start",
     "db:local:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pg-local.ps1 stop",
     "db:local:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pg-local.ps1 status",
     "test:isolated": "node scripts/test-isolated.cjs",
-    "test:security": "node scripts/security-regression.cjs"
+    "test:security": "node scripts/security-regression.cjs",
+    "test:contracts": "node scripts/storefront-contracts.cjs",
+    "verify": "npm run typecheck && npm run test:contracts && npm run test:security && npm run test:isolated"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",

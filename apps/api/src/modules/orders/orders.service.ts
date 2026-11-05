@@ -78,7 +78,8 @@ async function serializeOrderDetail(order: OrderWithItems) {
     })),
     // For an unpaid card-to-card order, surface the destination card so the buyer can pay.
     cardToCard:
-      order.paymentProvider === "CARD_TO_CARD" && order.paymentStatus !== "PAID"
+      order.paymentProvider === "CARD_TO_CARD" &&
+      ["PENDING", "PENDING_REVIEW", "REJECTED"].includes(order.paymentStatus)
         ? await cardToCardInfo()
         : null,
   };
@@ -323,11 +324,7 @@ export async function verifyAndDeliver(authority: string, status: string) {
           `پرداخت ثبت شده و سفارش منتظر تأمین موجودی است. لطفا نسبت به بازگردانی وجه کاربر یا شارژ مجدد انبار اقدام نمایید.`,
       ).catch(() => {});
 
-      throw new AppError(
-        409,
-        "OUT_OF_STOCK",
-        "Payment received; fulfillment is pending. Please contact support before paying again.",
-      );
+      return { status: "pending" as const, orderId: order.id };
     }
     throw error;
   }

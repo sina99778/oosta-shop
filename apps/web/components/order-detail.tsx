@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { CredentialField } from "@/components/credential-field";
+import { QueryError } from "@/components/query-error";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import type { Credential, OrderDetail as OrderDetailDto } from "@/lib/types";
@@ -16,7 +17,7 @@ import type { Dictionary } from "@/app/[locale]/dictionaries";
 
 function statusTone(status: string): "success" | "muted" | "danger" {
   if (status === "PAID") return "success";
-  if (status === "PENDING" || status === "PENDING_REVIEW") return "muted";
+  if (["PENDING", "PENDING_REVIEW", "PAID_PENDING_FULFILLMENT"].includes(status)) return "muted";
   return "danger";
 }
 
@@ -30,7 +31,7 @@ export function OrderDetail({
   dict: Dictionary;
 }) {
   const { token } = useAuth();
-  const { data, loading, error } = useApi<{ order: OrderDetailDto }>(
+  const { data, loading, error, refetch } = useApi<{ order: OrderDetailDto }>(
     token ? `/orders/${orderId}` : null,
     token ?? undefined,
   );
@@ -46,7 +47,9 @@ export function OrderDetail({
   }
   if (error || !data) {
     return (
-      <Container className="py-20 text-center text-muted">{dict.common.somethingWrong}</Container>
+      <Container className="py-20">
+        <QueryError message={dict.common.somethingWrong} onRetry={refetch} />
+      </Container>
     );
   }
 
@@ -71,17 +74,32 @@ export function OrderDetail({
         {formatPrice(order.totalAmount, order.currency, locale)}
       </p>
 
-      {order.paymentProvider === "CARD_TO_CARD" && order.paymentStatus !== "PAID" && (
-        <Card className="mt-4">
-          {order.paymentStatus === "PENDING_REVIEW" ? (
-            <p className="text-sm text-muted">{d.awaitingReview}</p>
-          ) : (
-            <Link href={`/${locale}/checkout/card/${order.id}`}>
-              <Button>{d.completePayment}</Button>
+      {order.paymentStatus === "PAID_PENDING_FULFILLMENT" && (
+        <Card className="mt-5 space-y-3 border-primary" role="status">
+          <h2 className="font-bold">{d.pendingFulfillmentTitle}</h2>
+          <p className="text-sm leading-7 text-muted">{d.pendingFulfillmentBody}</p>
+          <div className="flex flex-wrap items-center gap-4">
+            <Button variant="outline" onClick={refetch}>
+              {dict.common.retry}
+            </Button>
+            <Link href={`/${locale}/support`} className="text-sm text-primary underline">
+              {dict.nav.support}
             </Link>
-          )}
+          </div>
         </Card>
       )}
+      {order.paymentProvider === "CARD_TO_CARD" &&
+        ["PENDING", "PENDING_REVIEW", "REJECTED"].includes(order.paymentStatus) && (
+          <Card className="mt-4">
+            {order.paymentStatus === "PENDING_REVIEW" ? (
+              <p className="text-sm text-muted">{d.awaitingReview}</p>
+            ) : (
+              <Link href={`/${locale}/checkout/card/${order.id}`}>
+                <Button>{d.completePayment}</Button>
+              </Link>
+            )}
+          </Card>
+        )}
 
       <div className="mt-6 space-y-4">
         {order.items.map((item) => (

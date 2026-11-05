@@ -134,6 +134,38 @@ async function main() {
     require("../apps/api/src/lib/gatewayConfig.ts").patchGatewayConfig({ zarinpalSandbox: true }),
   );
   console.log("PASS: model mutations require single-use approval; runtime sandbox blocked");
+  const { inject } = require("light-my-request");
+  const { createApp } = require("../apps/api/src/app.ts");
+  const app = createApp();
+  for (const url of ["/auth/me", "/orders", "/tickets", "/admin/stats"]) {
+    const response = await inject(app, { method: "GET", url, remoteAddress: "203.0.113.45" });
+    assert.equal(response.statusCode, 401);
+    assert.match(response.headers["cache-control"] || "", /no-store/, `${url} must not be cached`);
+  }
+  console.log("PASS: authentication, account, order and admin responses are never cached");
+  const failure = new Error("Synthetic API key database outage");
+  const originalLookup = prisma.apiKey.findUnique;
+  prisma.apiKey.findUnique = async () => {
+    throw failure;
+  };
+  try {
+    let result;
+    await require("../apps/api/src/middleware/auth.ts").authenticate(
+      { headers: { authorization: "Bearer oosta_sk_synthetic" } },
+      {},
+      (error) => {
+        result = error;
+      },
+    );
+    assert.equal(
+      result,
+      failure,
+      "API-key infrastructure failures must not be reported as bad credentials",
+    );
+  } finally {
+    prisma.apiKey.findUnique = originalLookup;
+  }
+  console.log("PASS: API-key database outages preserve the session error contract");
   await prisma.$disconnect();
 }
 main().catch((error) => {
