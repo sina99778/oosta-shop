@@ -145,6 +145,7 @@ export function OrderDetail({
                     <div className="space-y-2">
                       {item.credentials.map((cred) => (
                         <CredentialBlock
+                          locale={locale}
                           key={cred.id}
                           cred={cred}
                           dict={dict}
@@ -255,10 +256,12 @@ export function OrderDetail({
 }
 
 function CredentialBlock({
+  locale,
   cred,
   dict,
   deliveryLabel,
 }: {
+  locale: Locale;
   cred: Credential;
   dict: Dictionary;
   deliveryLabel?: string;
@@ -286,6 +289,13 @@ function CredentialBlock({
       )}
       {cred.giftCardCode && (
         <CredentialField label={d.fields.giftCardCode} value={cred.giftCardCode} {...labels} />
+      )}
+      {cred.deliveryInstructions && (
+        <CredentialField
+          label={locale === "fa" ? "راهنمای تحویل" : "Delivery instructions"}
+          value={cred.deliveryInstructions}
+          {...labels}
+        />
       )}
     </div>
   );

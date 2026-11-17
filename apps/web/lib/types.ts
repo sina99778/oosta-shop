@@ -204,6 +204,7 @@ export type Credential = {
   accountPassword: string | null;
   licenseKey: string | null;
   giftCardCode: string | null;
+  deliveryInstructions?: string | null;
 };
 
 export type OrderItemDetail = {

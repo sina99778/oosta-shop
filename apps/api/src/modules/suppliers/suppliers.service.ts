@@ -198,6 +198,7 @@ export async function verifyMappings(
   });
 }
 export type SourcePlan = {
+  productType?: "ACCOUNT" | "LICENSE" | "GIFTCARD";
   id: string;
   source: string;
   variant: unknown;

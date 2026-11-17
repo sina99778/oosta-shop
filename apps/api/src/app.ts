@@ -24,10 +24,13 @@ import { adminRouter } from "./modules/admin/admin.routes";
 import { maintenanceGate } from "./lib/maintenance";
 import { createSupplierCheckout, supplierCheckoutRouter } from "./modules/suppliers/checkout";
 import type { SupplierRegistry } from "./modules/suppliers/fulfillment";
+import { liveSupplierRegistry } from "./modules/suppliers/live-adapters";
 
 export function createApp(options: { supplierAdapters?: SupplierRegistry } = {}) {
   const app = express();
-  const supplierCheckout = createSupplierCheckout(options.supplierAdapters);
+  const supplierCheckout = createSupplierCheckout(
+    options.supplierAdapters ?? liveSupplierRegistry(),
+  );
   app.locals.supplierCheckout = supplierCheckout;
 
   app.disable("x-powered-by");

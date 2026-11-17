@@ -8,10 +8,19 @@ import { env } from "../../config/env";
 import { readBluInvoice } from "../orders/blu-invoice";
 import { matchesBluReceipt } from "../orders/blu-events";
 import { AppError } from "../../utils/httpError";
-import { catalogs, getPricing, matchingOffers, type SourcePlan } from "./suppliers.service";
+import {
+  catalogs,
+  getPricing,
+  matchingOffers,
+  syncCatalog,
+  type SourcePlan,
+} from "./suppliers.service";
+import { supplierEndpoints } from "./catalog";
+import { readMappings } from "./variant";
 import { quotePricing } from "./fx.service";
 import { indicativePrice } from "./pricing";
 import { readVariant, variantKey } from "./variant";
+import { reserveWallet, settleWallet } from "./wallet-budget";
 
 type PurchaseInput = {
   reference: string;
@@ -20,9 +29,15 @@ type PurchaseInput = {
   quoteId: string;
   maximumCost: string;
   currency: "USD" | "USDT";
+  productType?: "ACCOUNT" | "LICENSE" | "GIFTCARD";
 };
 export type SupplierAdapter = {
-  capabilities: { priceCeiling: boolean; idempotency: boolean; lookup: boolean };
+  capabilities: {
+    priceCeiling: boolean;
+    walletExposure?: boolean;
+    idempotency: boolean;
+    lookup: boolean;
+  };
   quote(input: Omit<PurchaseInput, "reference" | "quoteId">): Promise<unknown>;
   purchase(input: PurchaseInput): Promise<unknown>;
   lookup(input: {
@@ -31,14 +46,13 @@ export type SupplierAdapter = {
     supplierOrderId?: string;
   }): Promise<unknown>;
 };
-// No current vendor contract establishes all three guarantees. Only trusted internal callers
-// may supply an adapter; no HTTP body, setting or test switch can register one.
+// Only trusted server code registers adapters. Wallet risk is separate from a vendor price ceiling.
 type Registry = ReadonlyMap<SupplierId, SupplierAdapter>;
 export type SupplierRegistry = Registry;
 const live: Registry = new Map();
-const supported = (a: SupplierAdapter | undefined): a is SupplierAdapter =>
+export const supplierSupported = (a: SupplierAdapter | undefined): a is SupplierAdapter =>
   !!a &&
-  a.capabilities.priceCeiling === true &&
+  (a.capabilities.priceCeiling === true || a.capabilities.walletExposure === true) &&
   a.capabilities.idempotency === true &&
   a.capabilities.lookup === true;
 const positive = z
@@ -62,6 +76,7 @@ const credentialSchema = z.discriminatedUnion("type", [
       type: z.literal("ACCOUNT"),
       accountEmail: z.string().min(1).max(1000),
       accountPassword: z.string().min(1).max(10000),
+      deliveryInstructions: z.string().max(10000).optional(),
     })
     .strict(),
   z.object({ type: z.literal("LICENSE"), licenseKey: z.string().min(1).max(10000) }).strict(),
@@ -186,9 +201,18 @@ export async function selectSupplierPurchase(
   if (!policy?.enabled)
     throw new AppError(503, "PRICING_UNAVAILABLE", "Fresh supplier pricing required");
   const resolved = await quotePricing(policy);
+  await Promise.allSettled(
+    [...new Set(readMappings(plan.supplierMappings).map((m) => m.supplier))]
+      .filter(
+        (id) =>
+          registry.get(id)?.capabilities.walletExposure &&
+          process.env[supplierEndpoints[id].env]?.trim(),
+      )
+      .map((id) => syncCatalog(id)),
+  );
   const candidates = matchingOffers(plan, await catalogs())
     .flatMap((candidate) => {
-      if (!supported(registry.get(candidate.offer.supplier))) return [];
+      if (!supplierSupported(registry.get(candidate.offer.supplier))) return [];
       try {
         const price = indicativePrice(
           candidate.offer.cost,
@@ -219,6 +243,7 @@ export async function selectSupplierPurchase(
           quantity: 1,
           maximumCost: offer.cost,
           currency: offer.currency,
+          productType: plan.productType,
         }),
       );
     } catch {
@@ -260,7 +285,7 @@ export async function prepareSupplierFulfillment(orderId: string, registry: Regi
   if (previous) return summary(previous);
   const initial = await eligible(prisma, orderId);
   const { offer, quote, expiry } = await selectSupplierPurchase(
-    initial.item.plan,
+    { ...initial.item.plan, productType: initial.item.product.type },
     registry,
     initial.order.totalAmount,
   );
@@ -317,6 +342,7 @@ async function applyResult(id: string, raw: unknown) {
         await tx.supplierFulfillment.update({ where: { id }, data: { state: "REVIEW" } }),
       );
     if (result.state === "NO_CHARGE") {
+      if (!job.chargedCost) await settleWallet(tx, job, "0");
       // Once an earlier response reported a debit, a later rejection cannot erase it.
       return summary(
         await tx.supplierFulfillment.update({
@@ -332,7 +358,7 @@ async function applyResult(id: string, raw: unknown) {
     };
     if (
       result.currency !== job.currency ||
-      new Prisma.Decimal(result.amount).gt(job.maximumCost) ||
+      new Prisma.Decimal(result.amount).gt(job.walletExposure ?? job.maximumCost) ||
       (job.supplierOrderId && job.supplierOrderId !== result.supplierOrderId) ||
       (job.chargedCost && !job.chargedCost.eq(result.amount))
     )
@@ -363,6 +389,7 @@ async function applyResult(id: string, raw: unknown) {
         await tx.supplierFulfillment.update({ where: { id }, data: { ...data, state: "PENDING" } }),
       );
     const { type, ...payload } = result.credential;
+    await settleWallet(tx, job, result.amount);
     await tx.inventoryItem.create({
       data: {
         type,
@@ -383,11 +410,23 @@ async function applyResult(id: string, raw: unknown) {
 
 export async function processSupplierFulfillment(id: string, registry: Registry = live) {
   const found = await prisma.supplierFulfillment.findUniqueOrThrow({ where: { id } });
+  const supplier = found.supplier as SupplierId;
+  if (
+    found.state === "READY" &&
+    registry.get(supplier)?.capabilities.walletExposure &&
+    process.env[supplierEndpoints[supplier].env]?.trim()
+  )
+    try {
+      await syncCatalog(supplier);
+    } catch (error) {
+      if (!(error instanceof AppError && error.code === "SYNC_BUSY")) throw error;
+      return summary(found);
+    }
   const reservation = await prisma.$transaction(async (tx) => {
     await lockOrder(tx, found.orderId);
-    const job = await tx.supplierFulfillment.findUniqueOrThrow({ where: { id } });
+    let job = await tx.supplierFulfillment.findUniqueOrThrow({ where: { id } });
     if (job.state !== "READY") return { job, send: false };
-    if (!supported(registry.get(job.supplier as SupplierId)))
+    if (!supplierSupported(registry.get(job.supplier as SupplierId)))
       throw new AppError(503, "SUPPLIER_PURCHASE_UNSUPPORTED", "Bounded supplier adapter required");
     let valid = job.expiresAt.getTime() > Date.now();
     try {
@@ -405,11 +444,15 @@ export async function processSupplierFulfillment(id: string, registry: Registry 
       if (!(error instanceof AppError)) throw error;
       valid = false;
     }
-    if (!valid)
+    if (!valid) {
+      await settleWallet(tx, job, "0");
       return {
         job: await tx.supplierFulfillment.update({ where: { id }, data: { state: "REVIEW" } }),
         send: false,
       };
+    }
+    if (registry.get(job.supplier as SupplierId)!.capabilities.walletExposure)
+      job = await reserveWallet(tx, job);
     return {
       job: await tx.supplierFulfillment.update({ where: { id }, data: { state: "SENDING" } }),
       send: true,
@@ -437,7 +480,7 @@ export async function reconcileSupplierFulfillment(id: string, registry: Registr
   const job = await prisma.supplierFulfillment.findUniqueOrThrow({ where: { id } });
   if (!["SENDING", "PENDING", "UNCERTAIN"].includes(job.state)) return summary(job);
   const adapter = registry.get(job.supplier as SupplierId);
-  if (!supported(adapter))
+  if (!supplierSupported(adapter))
     throw new AppError(503, "SUPPLIER_PURCHASE_UNSUPPORTED", "Supplier lookup unavailable");
   let response: unknown;
   try {

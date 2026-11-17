@@ -8,6 +8,7 @@ const run = promisify(execFile);
 (async () => {
   let privateCache = "private, no-store";
   let staticCache = "public, max-age=31536000, immutable";
+  let walletReady = false;
   const server = createServer((req, res) => {
     const asset = req.url.startsWith("/_next/");
     res.setHeader("cache-control", asset ? staticCache : privateCache);
@@ -15,15 +16,25 @@ const run = promisify(execFile);
     res.setHeader("x-frame-options", "DENY");
     res.setHeader("x-robots-tag", "noindex, nofollow");
     res.statusCode =
-      req.method === "POST"
-        ? req.url === "/api/auth/login"
-          ? 400
-          : 503
-        : ["/api/orders", "/api/tickets", "/api/admin/stats"].includes(req.url)
+      walletReady && req.method === "POST" && req.url === "/api/auth/signup"
+        ? 400
+        : walletReady &&
+            req.method === "POST" &&
+            [
+              "/api/supplier-checkout/quotes",
+              "/api/supplier-checkout/orders",
+              "/api/orders/synthetic/receipt",
+            ].includes(req.url)
           ? 401
-          : req.url === "/.env.production"
-            ? 404
-            : 200;
+          : req.method === "POST"
+            ? req.url === "/api/auth/login"
+              ? 400
+              : 503
+            : ["/api/orders", "/api/tickets", "/api/admin/stats"].includes(req.url)
+              ? 401
+              : req.url === "/.env.production"
+                ? 404
+                : 200;
     res.end(req.url === "/fa" ? '<script src="/_next/static/synthetic.js"></script>' : "{}");
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -34,6 +45,10 @@ const run = promisify(execFile);
   ];
   try {
     await run(process.execPath, args);
+    walletReady = true;
+    await run(process.execPath, [...args, "--supplier-wallet-ready"]);
+    walletReady = false;
+    await assert.rejects(run(process.execPath, [...args, "--supplier-wallet-ready"]));
     privateCache = "public, max-age=60";
     await assert.rejects(run(process.execPath, args), /no-store/);
     privateCache = "private, no-store";

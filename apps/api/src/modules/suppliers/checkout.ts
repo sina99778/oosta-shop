@@ -16,7 +16,9 @@ import {
   reconcileSupplierFulfillment,
   selectSupplierPurchase,
   type SupplierRegistry,
+  supplierSupported,
 } from "./fulfillment";
+import { reserveWallet, settleWallet } from "./wallet-budget";
 import { readVariant, supplierIds, variantKey } from "./variant";
 
 const selectionSchema = z
@@ -50,15 +52,14 @@ function quoteDTO(q: SupplierCheckoutQuote) {
 }
 
 export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
-  const available = [...registry.values()].some(
-    (a) => a.capabilities.priceCeiling && a.capabilities.idempotency && a.capabilities.lookup,
-  );
+  const available = [...registry.values()].some(supplierSupported);
   async function quote(userId: string, planId: string) {
     if (!available) throw unavailable();
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
     if (user?.role !== "USER") throw new AppError(403, "FORBIDDEN", "Customer account required");
     const plan = await prisma.productPlan.findFirst({
       where: { id: planId, isActive: true, source: "SUPPLIER", product: { isActive: true } },
+      include: { product: { select: { type: true } } },
     });
     if (!plan) throw new AppError(404, "NOT_FOUND", "Plan not found");
     const variant = readVariant(plan.variant);
@@ -68,7 +69,10 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
       !["ACCOUNT", "CODE"].includes(variant.fulfillment)
     )
       throw unavailable();
-    const selected = await selectSupplierPurchase(plan, registry);
+    const selected = await selectSupplierPurchase(
+      { ...plan, productType: plan.product.type },
+      registry,
+    );
     const gateway = await getGatewayConfig();
     const methods = {
       online:
@@ -200,12 +204,7 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
         throw expired();
       const selected = selectionSchema.parse(q.selection);
       const adapter = registry.get(selected.supplier);
-      if (
-        !adapter?.capabilities.priceCeiling ||
-        !adapter.capabilities.idempotency ||
-        !adapter.capabilities.lookup
-      )
-        throw unavailable();
+      if (!supplierSupported(adapter)) throw unavailable();
       let invoice: Awaited<ReturnType<typeof reserveBluInvoice>> | null = null;
       if (method === "card_to_card") {
         if (!gateway || !supplierCardReady(gateway) || q.expiresAt.getTime() - Date.now() < 60000)
@@ -279,6 +278,12 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
         },
       });
       await tx.supplierCheckoutQuote.update({ where: { id: q.id }, data: { orderId: order.id } });
+      if (adapter.capabilities.walletExposure) {
+        const job = await tx.supplierFulfillment.findUniqueOrThrow({
+          where: { orderId: order.id },
+        });
+        await reserveWallet(tx, job);
+      }
       return { id: order.id, created: true };
     });
     if (!reserved.created || method === "card_to_card") return response(reserved.id);
@@ -400,6 +405,41 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
   }
   async function sweep() {
     if (!available) return 0;
+    const abandoned = await prisma.supplierFulfillment.findMany({
+      where: {
+        state: "AWAITING_PAYMENT",
+        walletExposure: { not: null },
+        expiresAt: { lte: new Date() },
+      },
+      select: { id: true, orderId: true },
+      take: 20,
+    });
+    for (const row of abandoned)
+      await prisma.$transaction(async (tx) => {
+        await lockOrder(tx, row.orderId);
+        const job = await tx.supplierFulfillment.findUniqueOrThrow({ where: { id: row.id } });
+        const order = await tx.order.findUniqueOrThrow({
+          where: { id: row.orderId },
+          include: { bluBankClaim: true },
+        });
+        if (job.state !== "AWAITING_PAYMENT" || order.paidAt || order.bluBankClaim) return;
+        if (
+          order.bluInvoiceKey &&
+          (await tx.bluBankObservation.findFirst({
+            where: {
+              invoiceKey: order.bluInvoiceKey,
+              occurredAt: { gte: order.createdAt, lt: job.expiresAt },
+            },
+            select: { transactionDigest: true },
+          }))
+        )
+          return;
+        await settleWallet(tx, job, "0");
+        await tx.supplierFulfillment.update({
+          where: { id: job.id },
+          data: { state: "NO_CHARGE" },
+        });
+      });
     const jobs = await prisma.supplierFulfillment.findMany({
       where: {
         state: { in: ["READY", "SENDING", "PENDING", "UNCERTAIN"] },

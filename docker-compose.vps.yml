@@ -18,6 +18,7 @@ services:
       BLU_POLL_STATUS_FILE: /run/oosta-blu-status/last-run
       BLU_STOCK_CHECKOUT_ENABLED: ${BLU_STOCK_CHECKOUT_ENABLED:-false}
       BLU_AUTO_APPROVE_ENABLED: ${BLU_AUTO_APPROVE_ENABLED:-false}
+      OOSTA_SUPPLIER_WALLET_PURCHASES: ${OOSTA_SUPPLIER_WALLET_PURCHASES:-false}
     volumes:
       - /opt/oostaAI/shared/suppliers.env:/run/secrets/oosta-suppliers.env:ro
       - /var/lib/oosta-blu-status:/run/oosta-blu-status:ro

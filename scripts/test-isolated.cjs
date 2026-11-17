@@ -90,6 +90,19 @@ async function main() {
         env,
       ),
     );
+    if (process.argv.includes("--supplier-wallet-only")) {
+      console.log(
+        run(
+          process.execPath,
+          [
+            path.join(root, "node_modules/tsx/dist/cli.mjs"),
+            "apps/api/scripts/supplier-wallet-regressions.ts",
+          ],
+          env,
+        ),
+      );
+      return;
+    }
     console.log(
       run(
         process.execPath,
@@ -255,6 +268,16 @@ async function main() {
           "apps/api/scripts/supplier-fulfillment-regressions.ts",
         ],
         { ...env, DATABASE_URL: env.DATABASE_URL + "&connection_limit=1&pool_timeout=3" },
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/supplier-wallet-regressions.ts",
+        ],
+        env,
       ),
     );
   } finally {

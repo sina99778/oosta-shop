@@ -60,6 +60,7 @@ function credentialOf(item: FulfilledItem) {
     accountPassword: item.accountPassword,
     licenseKey: item.licenseKey,
     giftCardCode: item.giftCardCode,
+    deliveryInstructions: item.deliveryInstructions,
   };
 }
 

@@ -34,7 +34,6 @@ async function main() {
     "/api//orders",
     "/api/%6frders",
     "/api/payments/verify",
-    "/api/auth/signup",
     "/api/admin/settings",
     "/fa",
   ])
@@ -43,6 +42,23 @@ async function main() {
       headers: { "content-type": "application/json" },
       body: "{}",
     });
+  await check("/api/auth/signup", process.argv.includes("--supplier-wallet-ready") ? 400 : 503, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  if (process.argv.includes("--supplier-wallet-ready")) {
+    for (const path of [
+      "/api/supplier-checkout/quotes",
+      "/api/supplier-checkout/orders",
+      "/api/orders/synthetic/receipt",
+    ])
+      await check(path, 401, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+  }
   // Without --login-ready, expect credentials to remain blocked pending CDN origin TLS.
   await check("/api/auth/login", process.argv.includes("--login-ready") ? 400 : 503, {
     method: "POST",
