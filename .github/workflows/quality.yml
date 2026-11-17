@@ -26,6 +26,8 @@ jobs:
       GEMINI_API_KEY: ""
       OPENROUTER_API_KEY: ""
       PAYMENT_PROVIDER: mock
+      DATABASE_URL: postgresql://audit@127.0.0.1:9/unused?schema=public
+      JWT_SECRET: synthetic-ci-secret-never-for-deployment
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
