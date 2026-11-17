@@ -697,17 +697,37 @@
     max-width: calc(100% - 16px);
   }
   .productGrid .cardBody {
+    position: relative;
     padding: 16px;
+    padding-block-start: 48px;
   }
   .productGrid .productCard h3 {
     font-size: 1.125rem;
   }
   .productGrid .cardMeta {
-    gap: 8px;
     font-size: 0.8125rem;
   }
-  .productGrid .cardMeta > span:first-child {
-    width: 100%;
+  /* The 88px side visual is too narrow for the chip: pin it to the body's top instead. */
+  .productGrid .productCard {
+    position: relative;
+  }
+  .productGrid .cardVisual {
+    position: static;
+  }
+  .productGrid .stockBadge {
+    top: 12px;
+    inset-inline-start: calc(88px + 16px);
+    max-width: calc(100% - 88px - 32px);
+  }
+  .productGrid .sale {
+    top: auto;
+    bottom: 8px;
+    inset-inline-end: auto;
+    inset-inline-start: 8px;
+    max-width: 72px;
+  }
+  .productGrid .cardMark {
+    margin-block-start: 0;
   }
   .productGrid .cardAction {
     margin-top: 8px;
