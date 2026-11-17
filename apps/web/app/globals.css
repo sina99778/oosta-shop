@@ -408,3 +408,9 @@ body {
 .oosta-product-mark[aria-hidden="true"] {
   user-select: none;
 }
+
+/* Estedad's tabular figures widen the Persian thousands separator (٬) to a digit-wide gap;
+   its Persian digits already share one width, so tabular-nums is dropped in Persian. */
+:lang(fa) .tabular-nums {
+  font-variant-numeric: normal;
+}

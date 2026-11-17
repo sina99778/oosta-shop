@@ -1,14 +1,17 @@
 .shell {
-  --c-bg: #101721;
-  --c-surface: #1c2836;
-  --c-card: #17212d;
+  /* The storefront's brand pair, deepened for a long-session work surface. */
+  --c-bg: #0b1520;
+  --c-surface: #172738;
+  --c-card: #111e2d;
   --c-fg: #eaf2f6;
   --c-muted: #a8bac8;
-  --c-border: #304355;
-  --c-primary: #83e1c5;
-  --c-primary-hover: #a3efd9;
-  --c-on-primary: #102722;
-  --c-accent: #83e1c5;
+  --c-border: #263a4f;
+  --c-primary: var(--c-mint);
+  --c-primary-hover: #d3f5e8;
+  --c-on-primary: var(--c-navy);
+  --c-accent: var(--c-mint);
+  --c-mint-soft: color-mix(in srgb, var(--c-mint) 12%, var(--c-card));
+  --c-warn: #ffd18a;
   --color-background: var(--c-bg);
   --color-surface: var(--c-surface);
   --color-card: var(--c-card);
@@ -32,6 +35,11 @@
   color: var(--c-fg);
   color-scheme: dark;
 }
+/* Estedad's tabular figures widen the Persian thousands separator (٬) to a digit-wide gap
+   ("۱۵۵ , ۰۰۰"); its Persian digits are already one width, so tabular-nums is dropped in fa. */
+.shell:lang(fa) * {
+  font-variant-numeric: normal;
+}
 .shell :is(a, button, summary):focus-visible {
   outline: 2px solid var(--c-primary);
   outline-offset: 3px;
@@ -47,7 +55,9 @@
   gap: 12px;
   padding-inline: 16px;
   border-bottom: 1px solid var(--c-border);
-  background: #111a25;
+  background: color-mix(in srgb, var(--c-navy) 92%, transparent);
+  backdrop-filter: blur(10px);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--c-mint) 28%, transparent);
 }
 .brand,
 .storeLink,
@@ -101,7 +111,7 @@
 .sidebar {
   min-width: 0;
   border-bottom: 1px solid var(--c-border);
-  background: #111a25;
+  background: var(--c-navy);
 }
 .menuToggle {
   display: flex;
@@ -160,7 +170,7 @@
 }
 .navGroup a[aria-current="page"] {
   border-inline-start-color: var(--c-primary);
-  background: #1c383d;
+  background: var(--c-mint-soft);
   color: var(--c-primary);
   font-weight: 700;
 }
@@ -210,7 +220,9 @@
   color: var(--c-on-primary);
   font-size: 0.875rem;
   font-weight: 760;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 20%), 0 2px 0 rgb(7 17 26 / 26%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 20%),
+    0 2px 0 rgb(7 17 26 / 26%);
 }
 .primaryLink:not(:disabled):hover {
   background: var(--c-primary-hover);
@@ -249,7 +261,13 @@
   border-inline-start: 0;
 }
 .metric:first-child {
-  background: #1a3037;
+  background:
+    radial-gradient(
+      120% 120% at 100% 0%,
+      color-mix(in srgb, var(--c-mint) 16%, transparent),
+      transparent 70%
+    ),
+    var(--c-mint-soft);
 }
 .metric dt,
 .metric small {
@@ -301,8 +319,8 @@
   background: var(--c-card);
 }
 .queueLink[data-attention="true"] {
-  background: #2b2622;
-  border-color: #715b42;
+  background: color-mix(in srgb, var(--c-warn) 9%, var(--c-card));
+  border-color: color-mix(in srgb, var(--c-warn) 45%, var(--c-border));
 }
 .queueLink:hover {
   border-color: var(--c-primary);
@@ -327,7 +345,7 @@
   min-width: 42px;
   font-size: 2rem;
   font-variant-numeric: tabular-nums;
-  color: #ffd18a;
+  color: var(--c-warn);
 }
 .queueLink[data-attention="false"] b {
   color: var(--c-primary);
@@ -360,7 +378,7 @@
     to top,
     transparent 0,
     transparent calc(25% - 1px),
-    #304355 25%
+    var(--c-border) 25%
   );
 }
 .barSlot {
@@ -374,13 +392,13 @@
   max-width: 64px;
   min-height: 3px;
   border-radius: 4px 4px 0 0;
-  background: #559b90;
+  background: color-mix(in srgb, var(--c-mint) 55%, var(--c-card));
 }
 .bar[data-today="true"] {
   background: var(--c-primary);
 }
 .bar[data-empty="true"] {
-  background: #485c6b;
+  background: color-mix(in srgb, var(--c-muted) 35%, var(--c-card));
 }
 .axis {
   display: grid;
@@ -459,11 +477,11 @@
 }
 .statusPill[data-tone="paid"] {
   color: var(--c-primary);
-  background: #1b3534;
+  background: var(--c-mint-soft);
 }
 .statusPill[data-tone="attention"] {
-  color: #ffd18a;
-  background: #382c21;
+  color: var(--c-warn);
+  background: color-mix(in srgb, var(--c-warn) 12%, var(--c-card));
 }
 .statusPill[data-tone="failed"] {
   color: #ffc0c0;
@@ -623,7 +641,7 @@
 }
 .bluHealth[data-warning="true"] .healthDot,
 .bluHealth[data-warning="true"] p {
-  color: #ffd18a;
+  color: var(--c-warn);
 }
 .quietButton,
 .filterField select,
@@ -689,9 +707,9 @@
   gap: 8px;
 }
 .filterTabs button[aria-pressed="true"] {
-  background: #1c383d;
+  background: var(--c-mint-soft);
   color: var(--c-primary);
-  border-color: #447f76;
+  border-color: color-mix(in srgb, var(--c-mint) 45%, var(--c-border));
   font-weight: 700;
 }
 .filterTabs button span {
@@ -770,7 +788,7 @@
   font-size: 0.875rem;
 }
 .bankEvidence[data-blocked="true"] {
-  color: #ffd18a;
+  color: var(--c-warn);
 }
 .receiptActions {
   display: grid;

@@ -44,6 +44,7 @@ export function AccountFrame({
       </nav>
       <header className={styles.hero}>
         <div>
+          <p className={styles.eyebrow}>{fa ? "حساب اوستا" : "Oosta account"}</p>
           <h1>{title}</h1>
           {detail && <div className={styles.heroDetail}>{detail}</div>}
         </div>

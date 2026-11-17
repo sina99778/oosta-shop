@@ -105,7 +105,12 @@ export function TicketList({
             <p className={styles.panel}>{t.empty}</p>
           ) : (
             data.tickets.map((ticket) => (
-              <Link key={ticket.id} href={`/${locale}/support/${ticket.id}`} className={styles.row}>
+              <Link
+                key={ticket.id}
+                href={`/${locale}/support/${ticket.id}`}
+                className={styles.row}
+                data-tone={ticketTone(ticket.status)}
+              >
                 <div>
                   <p dir="auto" className={styles.rowTitle}>
                     {ticket.subject}

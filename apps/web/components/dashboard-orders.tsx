@@ -60,7 +60,12 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
       ) : error ? (
         <QueryError message={dict.common.somethingWrong} onRetry={refetch} />
       ) : !orders.length ? (
-        <p className={styles.panel}>{d.noOrders}</p>
+        <div className={`${styles.panel} ${styles.empty}`}>
+          <p>{d.noOrders}</p>
+          <Link href={`/${locale}/products`} className={styles.action}>
+            {fa ? "دیدن محصولات" : "See products"}
+          </Link>
+        </div>
       ) : (
         <div className={styles.stack}>
           <div
@@ -89,6 +94,11 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
               key={order.id}
               href={`/${locale}/dashboard/orders/${order.id}`}
               className={styles.row}
+              data-tone={
+                orderStatusTone(order.paymentStatus) === "muted"
+                  ? "pending"
+                  : orderStatusTone(order.paymentStatus)
+              }
             >
               <div>
                 <p className={styles.rowTitle}>
@@ -106,7 +116,9 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
                 <Badge tone={orderStatusTone(order.paymentStatus)}>
                   {statusMap[order.paymentStatus] ?? order.paymentStatus}
                 </Badge>
-                <span aria-hidden="true">{fa ? "←" : "→"}</span>
+                <span className={styles.rowGo} aria-hidden="true">
+                  {fa ? "←" : "→"}
+                </span>
               </div>
             </Link>
           ))}
