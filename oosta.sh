@@ -99,6 +99,15 @@ doctor() {
       if [ "$fix" = "fix" ]; then set_env JWT_SECRET "$(gen_secret 36)" && ok "generated a strong JWT_SECRET"; else issues=$((issues + 1)); fi
     else ok "JWT_SECRET is set"; fi
 
+    # CREDENTIALS_KEY is generated ONCE and must never be rotated blindly:
+    # stored credentials and backups are encrypted with it.
+    local ck
+    ck=$(get_env CREDENTIALS_KEY)
+    if [ -z "$ck" ] || [ "$ck" = "replace-with-a-long-random-secret" ]; then
+      err "CREDENTIALS_KEY is unset/placeholder"
+      if [ "$fix" = "fix" ]; then set_env CREDENTIALS_KEY "$(gen_secret 36)" && ok "generated CREDENTIALS_KEY — back it up somewhere safe outside this server!"; else issues=$((issues + 1)); fi
+    else ok "CREDENTIALS_KEY is set"; fi
+
     pg=$(get_env POSTGRES_PASSWORD)
     if [ -z "$pg" ] || [ "$pg" = "change-me-to-a-strong-password" ]; then
       err "POSTGRES_PASSWORD is unset/placeholder"
@@ -159,6 +168,7 @@ cmd_config() {
 
   # Auto-generate any placeholder secrets.
   [ "$(get_env JWT_SECRET)" = "replace-with-a-long-random-secret" ] && { set_env JWT_SECRET "$(gen_secret 36)"; ok "generated JWT_SECRET"; }
+  case "$(get_env CREDENTIALS_KEY)" in ""|replace-with-a-long-random-secret) set_env CREDENTIALS_KEY "$(gen_secret 36)"; ok "generated CREDENTIALS_KEY — back it up outside this server!";; esac
   [ "$(get_env POSTGRES_PASSWORD)" = "change-me-to-a-strong-password" ] && { set_env POSTGRES_PASSWORD "$(gen_secret 24)"; ok "generated POSTGRES_PASSWORD"; }
 
   read_tty v "Zarinpal merchant id (blank to skip / keep mock): " || true
@@ -170,8 +180,18 @@ cmd_config() {
   ok "Saved to $ENV_FILE"
 }
 
+# Older installs predate CREDENTIALS_KEY: create it once (never overwrite it).
+ensure_credentials_key() {
+  case "$(get_env CREDENTIALS_KEY)" in
+    ""|replace-with-a-long-random-secret)
+      set_env CREDENTIALS_KEY "$(gen_secret 36)"
+      warn "Generated CREDENTIALS_KEY in $ENV_FILE — copy it to a safe place outside this server (needed to read backups)." ;;
+  esac
+}
+
 cmd_up() {
   if [ ! -f "$ENV_FILE" ]; then warn "$ENV_FILE not found — run 'Configure' first."; return; fi
+  ensure_credentials_key
   info "Building and starting the stack…"
   dc up -d --build && ok "Stack is up." && dc ps
 }
@@ -179,7 +199,7 @@ cmd_down() { dc down && ok "Stack stopped."; }
 cmd_status() { dc ps; }
 cmd_logs() { dc logs --tail=120 api web; }
 cmd_seed() { dc exec api npm run db:seed; }
-cmd_update() { info "Updating…"; git pull --ff-only && dc up -d --build && ok "Updated and restarted."; }
+cmd_update() { info "Updating…"; git pull --ff-only && ensure_credentials_key && dc up -d --build && ok "Updated and restarted."; }
 
 cmd_backup() {
   mkdir -p backups

@@ -12,6 +12,7 @@ import { AppError } from "../../utils/httpError";
 import { getPaymentProvider, getPaymentProviderForOrder } from "../payments/provider";
 import { getGatewayConfig } from "../../lib/gatewayConfig";
 import { notifyAdmin } from "../../bot";
+import { decryptSecret } from "../../lib/secretBox";
 import type { CreateOrderInput } from "./orders.schemas";
 
 type OrderWithItems = Prisma.OrderGetPayload<{
@@ -34,9 +35,9 @@ function credentialOf(item: FulfilledItem) {
     id: item.id,
     type: item.type,
     accountEmail: item.accountEmail,
-    accountPassword: item.accountPassword,
-    licenseKey: item.licenseKey,
-    giftCardCode: item.giftCardCode,
+    accountPassword: decryptSecret(item.accountPassword),
+    licenseKey: decryptSecret(item.licenseKey),
+    giftCardCode: decryptSecret(item.giftCardCode),
   };
 }
 

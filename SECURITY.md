@@ -36,7 +36,7 @@ A summary of the security measures in the oostaAI platform and how they're verif
 
 When `NODE_ENV=production`, the API refuses to start if:
 
-- `JWT_SECRET` is still the development default, or
+- `JWT_SECRET` or `CREDENTIALS_KEY` is still the development default, or
 - `PAYMENT_PROVIDER=zarinpal` while `ZARINPAL_MERCHANT_ID` is the placeholder.
 
 Error responses never leak stack traces in production.
@@ -49,6 +49,21 @@ The in-process suite (`npm run smoke -w @oosta/api`) asserts these behaviours, i
 - role guard (USER → 403, anonymous → 401), auth rate-limiter trips (429)
 - concurrent **oversell prevention** (exactly one paid, one out-of-stock) and idempotent delivery
 - **cross-user order access → 404**, unknown payment authority → 404, invalid order payloads → 400
+
+## Secrets at rest
+
+- Deliverable secrets (account passwords, license keys, gift card codes) are encrypted with
+  AES-256-GCM using `CREDENTIALS_KEY`; legacy plaintext rows are encrypted at boot.
+- Telegram backups are encrypted with a key derived from `CREDENTIALS_KEY`.
+- A REVOKED inventory unit (credentials a buyer saw before a refund) can only be restocked
+  with a rotated secret.
+
+## AI agent (Telegram)
+
+- The agent can only **propose** payment-setting changes, contact-info changes and deletions;
+  they run after the admin taps ✅ on a message showing the exact arguments.
+- Tickets, reviews and orders reach the model wrapped as untrusted customer content.
+- Inventory secrets are redacted before anything is sent to the LLM provider.
 
 ## Operational notes
 

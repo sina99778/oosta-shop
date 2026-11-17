@@ -5,6 +5,7 @@
 import { PrismaClient, ProductType, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
+import { encryptSecret } from "../src/lib/secretBox";
 
 const prisma = new PrismaClient();
 const SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS ?? 12);
@@ -34,15 +35,16 @@ function buildPayload(type: ProductType): CredentialPayload {
     case ProductType.ACCOUNT:
       return {
         accountEmail: `acct.${token}@delivery.example`,
-        accountPassword: `Pass!${token.slice(0, 10)}`,
+        accountPassword: encryptSecret(`Pass!${token.slice(0, 10)}`),
       };
     case ProductType.LICENSE:
       return {
-        licenseKey:
+        licenseKey: encryptSecret(
           `${token.slice(0, 4)}-${token.slice(4, 8)}-${token.slice(8, 12)}-${token.slice(12, 16)}`.toUpperCase(),
+        ),
       };
     case ProductType.GIFTCARD:
-      return { giftCardCode: token.toUpperCase() };
+      return { giftCardCode: encryptSecret(token.toUpperCase()) };
     default:
       return {};
   }

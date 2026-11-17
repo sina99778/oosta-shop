@@ -9,6 +9,7 @@ import { deliverOrder, lowStockWarning } from "../orders/orders.service";
 import { notifyAdmin } from "../../bot";
 import { generateSeo, isAiEnabled } from "../../lib/gemini";
 import { generateApiKey } from "../../lib/apiKey";
+import { decryptSecret, encryptSecret } from "../../lib/secretBox";
 import type {
   BulkInventoryInput,
   CreateCategoryInput,
@@ -312,7 +313,11 @@ export async function bulkImportInventory(input: BulkInventoryInput) {
           `Item ${idx + 1}: accountEmail and accountPassword are required for ACCOUNT products`,
         );
       }
-      return { ...base, accountEmail: item.accountEmail, accountPassword: item.accountPassword };
+      return {
+        ...base,
+        accountEmail: item.accountEmail,
+        accountPassword: encryptSecret(item.accountPassword),
+      };
     }
     if (type === "LICENSE") {
       if (!item.licenseKey) {
@@ -322,7 +327,7 @@ export async function bulkImportInventory(input: BulkInventoryInput) {
           `Item ${idx + 1}: licenseKey is required for LICENSE products`,
         );
       }
-      return { ...base, licenseKey: item.licenseKey };
+      return { ...base, licenseKey: encryptSecret(item.licenseKey) };
     }
     if (!item.giftCardCode) {
       throw new AppError(
@@ -331,7 +336,7 @@ export async function bulkImportInventory(input: BulkInventoryInput) {
         `Item ${idx + 1}: giftCardCode is required for GIFTCARD products`,
       );
     }
-    return { ...base, giftCardCode: item.giftCardCode };
+    return { ...base, giftCardCode: encryptSecret(item.giftCardCode) };
   });
 
   const result = await prisma.inventoryItem.createMany({ data });
@@ -366,9 +371,9 @@ export async function listInventory(query: InventoryQuery) {
       product: it.product,
       plan: it.plan,
       accountEmail: it.accountEmail,
-      accountPassword: it.accountPassword,
-      licenseKey: it.licenseKey,
-      giftCardCode: it.giftCardCode,
+      accountPassword: decryptSecret(it.accountPassword),
+      licenseKey: decryptSecret(it.licenseKey),
+      giftCardCode: decryptSecret(it.giftCardCode),
       soldAt: it.soldAt,
       createdAt: it.createdAt,
     })),
@@ -640,21 +645,21 @@ export async function restockRevokedItem(id: string, input: RestockInventoryInpu
     soldAt: null,
   };
   if (item.type === "ACCOUNT") {
-    if (!input.accountPassword || input.accountPassword === item.accountPassword) {
+    if (!input.accountPassword || input.accountPassword === decryptSecret(item.accountPassword)) {
       throw new AppError(400, "SECRET_NOT_ROTATED", "Set a NEW account password before restocking");
     }
-    data.accountPassword = input.accountPassword;
+    data.accountPassword = encryptSecret(input.accountPassword);
     if (input.accountEmail) data.accountEmail = input.accountEmail;
   } else if (item.type === "LICENSE") {
-    if (!input.licenseKey || input.licenseKey === item.licenseKey) {
+    if (!input.licenseKey || input.licenseKey === decryptSecret(item.licenseKey)) {
       throw new AppError(400, "SECRET_NOT_ROTATED", "Set a NEW license key before restocking");
     }
-    data.licenseKey = input.licenseKey;
+    data.licenseKey = encryptSecret(input.licenseKey);
   } else {
-    if (!input.giftCardCode || input.giftCardCode === item.giftCardCode) {
+    if (!input.giftCardCode || input.giftCardCode === decryptSecret(item.giftCardCode)) {
       throw new AppError(400, "SECRET_NOT_ROTATED", "Set a NEW gift card code before restocking");
     }
-    data.giftCardCode = input.giftCardCode;
+    data.giftCardCode = encryptSecret(input.giftCardCode);
   }
   await prisma.inventoryItem.update({ where: { id }, data });
   return { id, status: "AVAILABLE" as const };

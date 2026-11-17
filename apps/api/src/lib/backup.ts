@@ -6,6 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { env } from "../config/env";
+import { decryptFile, encryptFile, isEncryptedBackup } from "./secretBox";
 
 // pg_dump/psql use libpq, which rejects Prisma-only query params like
 // `?schema=public` with "invalid URI query parameter". Strip them before
@@ -48,26 +49,50 @@ function run(command: string, extraEnv: Record<string, string>): Promise<void> {
   });
 }
 
-// Creates a gzipped SQL snapshot and returns { file, cleanup }. The caller sends
-// `file` then awaits `cleanup()` to remove the whole temp directory.
+// Creates an ENCRYPTED gzipped SQL snapshot (AES-256-GCM, key derived from
+// CREDENTIALS_KEY) and returns { file, cleanup }. The backup leaves the server
+// (Telegram), so it must be unreadable without the key. The caller sends `file`
+// then awaits `cleanup()` to remove the whole temp directory.
+// Offline decryption: npm run backup:decrypt -w @oosta/api -- <in.enc> <out.sql.gz>
 export async function createBackup(): Promise<{ file: string; cleanup: () => Promise<void> }> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "oosta-backup-"));
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const file = path.join(dir, `oosta-${stamp}.sql.gz`);
+  const plain = path.join(dir, `oosta-${stamp}.sql.gz`);
+  const file = `${plain}.enc`;
   await run(
     `pg_dump --clean --if-exists --no-owner --no-privileges "$DATABASE_URL" | gzip -9 > "$OUT"`,
-    { DATABASE_URL: libpqUrl(env.DATABASE_URL), OUT: file },
+    { DATABASE_URL: libpqUrl(env.DATABASE_URL), OUT: plain },
   );
+  await encryptFile(plain, file);
+  await rm(plain, { force: true });
   return {
     file,
     cleanup: () => rm(dir, { recursive: true, force: true }).catch(() => {}),
   };
 }
 
-// Restores a .sql or .sql.gz dump, replacing current data with the snapshot.
-export async function restoreFromFile(file: string): Promise<void> {
-  const command = file.endsWith(".gz")
-    ? `gunzip -c "$IN" | psql --set ON_ERROR_STOP=on "$DATABASE_URL"`
-    : `psql --set ON_ERROR_STOP=on -f "$IN" "$DATABASE_URL"`;
+// Restores an encrypted backup (.sql.gz.enc) or a plain .sql / .sql.gz dump,
+// replacing current data with the snapshot. Encryption is detected from the file
+// header, not the name.
+export async function restoreFromFile(input: string): Promise<void> {
+  let file = input;
+  let decrypted: string | null = null;
+  if (await isEncryptedBackup(input)) {
+    decrypted = `${input}.dec.sql.gz`;
+    await decryptFile(input, decrypted);
+    file = decrypted;
+  }
+  try {
+    await restorePlain(file, decrypted !== null);
+  } finally {
+    if (decrypted) await rm(decrypted, { force: true });
+  }
+}
+
+async function restorePlain(file: string, forceGzip: boolean): Promise<void> {
+  const command =
+    forceGzip || file.endsWith(".gz")
+      ? `gunzip -c "$IN" | psql --set ON_ERROR_STOP=on "$DATABASE_URL"`
+      : `psql --set ON_ERROR_STOP=on -f "$IN" "$DATABASE_URL"`;
   await run(command, { DATABASE_URL: libpqUrl(env.DATABASE_URL), IN: file });
 }

@@ -19,7 +19,7 @@ Internet → nginx (80/443) ─┬─ /        → web  (Next.js, :3000)
 ```bash
 git clone <repo> && cd oostaAI
 cp .env.production.example .env.production
-# Edit .env.production: PUBLIC_ORIGIN, POSTGRES_PASSWORD, JWT_SECRET,
+# Edit .env.production: PUBLIC_ORIGIN, POSTGRES_PASSWORD, JWT_SECRET, CREDENTIALS_KEY,
 # and the Zarinpal settings (or PAYMENT_PROVIDER=mock to start without a gateway).
 ```
 
@@ -67,5 +67,9 @@ This creates the demo catalog and an admin (`admin@oosta.local` / `Admin@12345`)
 - After paying, Zarinpal returns the browser to `${PUBLIC_ORIGIN}/<locale>/checkout/callback`;
   the frontend then calls `POST /api/payments/verify`, which verifies the transaction with
   Zarinpal and runs instant delivery.
-- The API refuses to boot in production if `JWT_SECRET` is the dev default or the Zarinpal
-  merchant id is the placeholder (see `SECURITY.md`).
+- The API refuses to boot in production if `JWT_SECRET` / `CREDENTIALS_KEY` are the dev
+  defaults or the Zarinpal merchant id is the placeholder (see `SECURITY.md`).
+- **Back up `CREDENTIALS_KEY` outside the server.** Stored credentials and Telegram backups are
+  encrypted with it; without it they cannot be read. Never change it on a running store.
+  Decrypt a Telegram backup offline with
+  `docker compose -f docker-compose.prod.yml exec api node dist/cli/decrypt-backup.js in.enc out.sql.gz`.

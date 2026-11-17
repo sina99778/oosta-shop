@@ -13,6 +13,13 @@ const EnvSchema = z.object({
     .min(8, "JWT_SECRET must be at least 8 characters")
     .default("dev-only-secret-change-me"),
   JWT_EXPIRES_IN: z.string().default("7d"),
+  // Encrypts deliverable secrets (account passwords, license keys, gift codes)
+  // at rest and the Telegram backups. Generate with: openssl rand -base64 36
+  // LOSING IT MAKES STORED CREDENTIALS AND BACKUPS UNREADABLE — keep a copy offline.
+  CREDENTIALS_KEY: z
+    .string()
+    .min(32, "CREDENTIALS_KEY must be at least 32 characters")
+    .default("dev-only-credentials-key-change-me-0000"),
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(4).max(15).default(12),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
 
@@ -94,6 +101,11 @@ function loadEnv() {
     const problems: string[] = [];
     if (data.JWT_SECRET === "dev-only-secret-change-me") {
       problems.push("JWT_SECRET must be set to a strong, unique value in production");
+    }
+    if (data.CREDENTIALS_KEY === "dev-only-credentials-key-change-me-0000") {
+      problems.push(
+        "CREDENTIALS_KEY must be set in production (openssl rand -base64 36) — it encrypts stored credentials and backups",
+      );
     }
     if (data.PAYMENT_PROVIDER === "mock" && !data.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION) {
       problems.push(

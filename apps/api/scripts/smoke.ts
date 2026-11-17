@@ -13,6 +13,14 @@ import { requireRole } from "../src/middleware/auth";
 import { AppError } from "../src/utils/httpError";
 import { signAccessToken } from "../src/lib/jwt";
 import { getPaymentProviderForOrder } from "../src/modules/payments/provider";
+import { agentInternals, resolvePendingAction, type PendingAction } from "../src/lib/agent";
+import { getGatewayConfig } from "../src/lib/gatewayConfig";
+import { decryptFile, decryptSecret, encryptFile, encryptSecret } from "../src/lib/secretBox";
+import { encryptLegacyInventory } from "../src/lib/credentialMigration";
+import { bulkImportInventory } from "../src/modules/admin/admin.service";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import {
   approveReceipt,
   rejectReceipt,
@@ -1811,6 +1819,151 @@ async function testPaymentIntegrity(): Promise<void> {
   await prisma.user.delete({ where: { id: userId } });
 }
 
+// The AI agent can only PROPOSE sensitive changes; secrets never reach the LLM.
+async function testAgentSafety(): Promise<void> {
+  const before = await getGatewayConfig();
+  const proposed: PendingAction[] = [];
+  const res = await agentInternals.runTool(
+    "update_payment_settings",
+    { cardNumber: "6037991234567890" },
+    { proposed },
+  );
+  const after = await getGatewayConfig();
+  record(
+    "agent: update_payment_settings is parked, not executed",
+    JSON.stringify(res).includes("awaiting_admin_confirmation") &&
+      after.cardNumber === before.cardNumber &&
+      proposed.length === 1,
+    JSON.stringify(res).slice(0, 120),
+  );
+  const rejected = await resolvePendingAction(proposed[0].id, false);
+  const again = await resolvePendingAction(proposed[0].id, true);
+  record(
+    "agent: rejected proposal cannot be replayed",
+    rejected.ok && !again.ok && (await getGatewayConfig()).cardNumber === before.cardNumber,
+    again.message,
+  );
+
+  const theme = await agentInternals.runTool(
+    "update_site_settings",
+    { themeAccent: "#123456" },
+    {
+      proposed: [],
+    },
+  );
+  const contact = await agentInternals.runTool(
+    "update_site_settings",
+    { contactTelegram: "@attacker" },
+    { proposed: [] },
+  );
+  record(
+    "agent: theme edits run directly, contact edits need confirmation",
+    !JSON.stringify(theme).includes("awaiting") &&
+      JSON.stringify(contact).includes("awaiting_admin_confirmation"),
+    "",
+  );
+  await agentInternals.runTool("update_site_settings", { themeAccent: "" }, { proposed: [] });
+
+  const inv = await agentInternals.runTool("list_inventory", { status: "AVAILABLE" }, {});
+  const invText = JSON.stringify(inv);
+  const anyPw = await prisma.inventoryItem.findFirst({
+    where: { status: "AVAILABLE", accountPassword: { not: null } },
+  });
+  record(
+    "agent: list_inventory redacts passwords",
+    !anyPw || (!invText.includes(`"${anyPw.accountPassword}"`) && invText.includes("[redacted]")),
+    "",
+  );
+
+  const tickets = await agentInternals.runTool("list_tickets", {}, {});
+  record(
+    "agent: customer content is wrapped as untrusted",
+    "untrusted_customer_content" in tickets && typeof tickets.warning === "string",
+    Object.keys(tickets).join(","),
+  );
+}
+
+// Credentials are encrypted at rest; buyers still get plaintext; backups encrypt.
+async function testEncryption(): Promise<void> {
+  const category = await prisma.category.findUnique({ where: { slug: "ai-accounts" } });
+  const suffix = Date.now().toString();
+  const product = await prisma.product.create({
+    data: {
+      name: `Enc ${suffix}`,
+      slug: `enc-${suffix}`,
+      description: "Encryption test.",
+      type: "ACCOUNT",
+      categoryId: category!.id,
+    },
+  });
+  const plan = await prisma.productPlan.create({
+    data: { productId: product.id, label: "E", durationDays: 30, price: 1000 },
+  });
+  await bulkImportInventory({
+    planId: plan.id,
+    items: [{ accountEmail: "e@x.io", accountPassword: "S3cret-Plain!" }],
+  });
+  const row = await prisma.inventoryItem.findFirst({ where: { planId: plan.id } });
+  record(
+    "inventory password stored encrypted",
+    !!row?.accountPassword?.startsWith("enc:v1:") && !row.accountPassword.includes("S3cret"),
+    String(row?.accountPassword).slice(0, 20),
+  );
+  record(
+    "encrypted password decrypts back",
+    decryptSecret(row!.accountPassword) === "S3cret-Plain!",
+    "",
+  );
+
+  const legacy = await prisma.inventoryItem.create({
+    data: {
+      productId: product.id,
+      planId: plan.id,
+      type: "ACCOUNT",
+      accountEmail: "legacy@x.io",
+      accountPassword: "legacy-plain",
+    },
+  });
+  await encryptLegacyInventory();
+  const upgraded = await prisma.inventoryItem.findUnique({ where: { id: legacy.id } });
+  record(
+    "boot migration encrypts legacy plaintext (idempotent)",
+    !!upgraded?.accountPassword?.startsWith("enc:v1:") &&
+      decryptSecret(upgraded.accountPassword) === "legacy-plain" &&
+      encryptSecret(upgraded.accountPassword) === upgraded.accountPassword,
+    "",
+  );
+
+  const dir = await mkdtemp(path.join(os.tmpdir(), "oosta-enc-test-"));
+  try {
+    const plain = path.join(dir, "a.sql.gz");
+    const payload = Buffer.from("INSERT INTO secrets VALUES ('top-secret');".repeat(500));
+    await writeFile(plain, payload);
+    await encryptFile(plain, `${plain}.enc`);
+    const enc = await readFile(`${plain}.enc`);
+    await decryptFile(`${plain}.enc`, path.join(dir, "b.sql.gz"));
+    const back = await readFile(path.join(dir, "b.sql.gz"));
+    record(
+      "backup encrypt/decrypt round-trip",
+      !enc.includes(Buffer.from("top-secret")) && back.equals(payload),
+      `${enc.length} bytes`,
+    );
+    enc[enc.length - 20] ^= 0xff;
+    await writeFile(`${plain}.enc`, enc);
+    const tampered = await decryptFile(`${plain}.enc`, path.join(dir, "c.sql.gz")).then(
+      () => "accepted",
+      () => "rejected",
+    );
+    record("tampered backup is rejected", tampered === "rejected", tampered);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+
+  await prisma.inventoryItem.deleteMany({ where: { productId: product.id } });
+  await prisma.productPlan.deleteMany({ where: { productId: product.id } });
+  await prisma.product.delete({ where: { id: product.id } });
+}
+
 async function main(): Promise<void> {
   await testFoundation();
   await testCatalog();
@@ -1825,6 +1978,8 @@ async function main(): Promise<void> {
   await testPagesAndSettings();
   await testTickets();
   await testSecurity();
+  await testAgentSafety();
+  await testEncryption();
   testRoleGuard();
 
   let allPass = true;

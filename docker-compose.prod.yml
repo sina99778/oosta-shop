@@ -31,6 +31,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-oosta}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-oosta}?schema=public
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.production}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      CREDENTIALS_KEY: ${CREDENTIALS_KEY:?set CREDENTIALS_KEY in .env.production (openssl rand -base64 36)}
       BCRYPT_SALT_ROUNDS: ${BCRYPT_SALT_ROUNDS:-12}
       CORS_ORIGIN: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN in .env.production}
       WEB_BASE_URL: ${PUBLIC_ORIGIN}

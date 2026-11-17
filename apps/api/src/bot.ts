@@ -5,13 +5,14 @@
 
 import { Telegraf, Markup } from "telegraf";
 import { message } from "telegraf/filters";
+import { randomUUID } from "node:crypto";
 import { unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { env } from "./config/env";
 import { prisma } from "./lib/prisma";
 import { createBackup, restoreFromFile } from "./lib/backup";
-import { isAgentEnabled, runAgent } from "./lib/agent";
+import { isAgentEnabled, resolvePendingAction, runAgent } from "./lib/agent";
 import { isOpenRouterEnabled } from "./lib/openrouter";
 import { getVisitStats } from "./modules/analytics/analytics.service";
 import {
@@ -315,7 +316,7 @@ async function sendBackup(chatId: number): Promise<void> {
     await bot.telegram.sendDocument(
       chatId,
       { source: file, filename: path.basename(file) },
-      { caption: "🗄️ oostaAI database backup" },
+      { caption: "🗄️ oostaAI database backup (encrypted with CREDENTIALS_KEY)" },
     );
   } finally {
     await cleanup();
@@ -387,7 +388,7 @@ export function startBot(): void {
   bot.action("restore", async (ctx) => {
     await ctx.answerCbQuery();
     await ctx.reply(
-      "♻️ To restore, send me a backup file (.sql or .sql.gz) with the caption: restore",
+      "♻️ To restore, send me a backup file (.sql.gz.enc, .sql.gz or .sql) with the caption: restore",
       mainMenu(),
     );
   });
@@ -564,11 +565,24 @@ export function startBot(): void {
       const link = await ctx.telegram.getFileLink(ctx.message.document.file_id);
       const response = await fetch(link.href);
       const buffer = Buffer.from(await response.arrayBuffer());
-      const name = ctx.message.document.file_name ?? "restore.sql.gz";
-      const tmp = path.join(os.tmpdir(), `oosta-restore-${name}`);
+      // Never build a path from the user-supplied file name (path traversal):
+      // only its extension is kept, and only from an allow-list.
+      const name = ctx.message.document.file_name ?? "";
+      const ext = /\.sql\.gz\.enc$/i.test(name)
+        ? ".sql.gz.enc"
+        : /\.sql\.gz$/i.test(name)
+          ? ".sql.gz"
+          : /\.sql$/i.test(name)
+            ? ".sql"
+            : null;
+      if (!ext) throw new Error("Unsupported file — send a .sql.gz.enc, .sql.gz or .sql backup");
+      const tmp = path.join(os.tmpdir(), `oosta-restore-${randomUUID()}${ext}`);
       await writeFile(tmp, buffer);
-      await restoreFromFile(tmp);
-      await unlink(tmp).catch(() => {});
+      try {
+        await restoreFromFile(tmp);
+      } finally {
+        await unlink(tmp).catch(() => {});
+      }
       await ctx.reply("✅ Restore complete.");
     } catch (error) {
       await ctx.reply(
@@ -603,7 +617,19 @@ export function startBot(): void {
         },
       });
       if (thinking) await bot.telegram.deleteMessage(chatId, thinking.message_id).catch(() => {});
-      await bot.telegram.sendMessage(chatId, result.slice(0, 3800), mainMenu());
+      await bot.telegram.sendMessage(chatId, result.text.slice(0, 3800), mainMenu());
+      // Sensitive proposals: show the exact tool + arguments and require a tap.
+      for (const action of result.proposed) {
+        const args = JSON.stringify(action.args, null, 2).slice(0, 3000);
+        await bot.telegram.sendMessage(
+          chatId,
+          `⚠️ تأیید لازم است\n\nعملیات: ${action.tool}\nمقادیر:\n${args}\n\nفقط اگر خودتان این را خواسته‌اید تأیید کنید.`,
+          Markup.inlineKeyboard([
+            Markup.button.callback("✅ تأیید و اجرا", `agc_ok_${action.id}`),
+            Markup.button.callback("❌ لغو", `agc_no_${action.id}`),
+          ]),
+        );
+      }
     } catch (error) {
       await bot.telegram.sendMessage(
         chatId,
@@ -612,6 +638,15 @@ export function startBot(): void {
       );
     }
   }
+
+  // Admin decision on a sensitive agent proposal.
+  bot.action(/^agc_(ok|no)_([a-f0-9]+)$/, async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    const [, decision, id] = ctx.match;
+    const outcome = await resolvePendingAction(id, decision === "ok");
+    await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+    await ctx.reply(outcome.message, mainMenu());
+  });
 
   // AI agent: any plain text message (not a command) is treated as an instruction.
   bot.on(message("text"), async (ctx) => {
