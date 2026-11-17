@@ -82,6 +82,10 @@
   - **اصلاح:** همهٔ صفحه‌های استاتیک، صفحه‌های خصوصی یا ورود هستند. پس `PRIVATE_PAGE_METADATA` و `AUTH_PAGE_METADATA` حالا `openGraph: null` دارند.
   - **رگرسیون:** assertion جدید در `seo-metadata-contracts.cjs` قبل از اصلاح شکست خورد و بعد از آن پاس شد. `verify`، lint و build دوباره پاس شدند.
   - این اصلاح با release `20261117-seo-technical-2` مستقر شد.
+  - پیش از آن، ایمیج وب tag شد: `oosta-web:pre-seo-technical-2-20261117`. کد `apps/api` با release قبلی یکسان بود.
+  - **بررسی پس از اصلاح:** روی سایت زنده، این صفحه‌ها `200` دادند و هیچ تگ OG یا آدرس `localhost` نداشتند. robots آن‌ها درست بود:
+    - `/fa/login` و `/en/signup`: `noindex, follow`
+    - `/fa/dashboard`، `/fa/admin` و `/fa/checkout/cancel`: `noindex, nofollow`
 - **بررسی‌های زنده** روی `https://oostaai.store`:
   - `preview-http-check --login-ready` پاس شد.
   - `/fa/products` و `/en/blog` canonical خودشان و hreflang درست را دارند.
