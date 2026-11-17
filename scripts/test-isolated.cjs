@@ -23,8 +23,14 @@ function run(command, args, env) {
     timeout: 180000,
     maxBuffer: 3000000,
   });
-  if (result.status !== 0)
-    throw new Error(`${path.basename(command)} failed\n${result.stdout}\n${result.stderr}`);
+  if (result.status !== 0) {
+    const log = path.join(dir, "server.log");
+    const daemonLog =
+      daemonControl && fs.existsSync(log) ? fs.readFileSync(log, "utf8").slice(-8000) : "";
+    throw new Error(
+      `${path.basename(command)} failed\n${result.stdout}\n${result.stderr}\n${daemonLog}`,
+    );
+  }
   return result.stdout;
 }
 async function main() {
@@ -63,7 +69,8 @@ async function main() {
         "-l",
         path.join(dir, "server.log"),
         "-o",
-        `-h 127.0.0.1 -p ${port}`,
+        // Ubuntu's shared socket directory is not writable by the CI runner; use TCP only.
+        `-h 127.0.0.1 -p ${port}${process.platform === "win32" ? "" : " -c unix_socket_directories=''"}`,
         "-w",
         "start",
       ],
