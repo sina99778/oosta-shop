@@ -17,6 +17,7 @@ import { agentInternals, resolvePendingAction, type PendingAction } from "../src
 import { getGatewayConfig } from "../src/lib/gatewayConfig";
 import { decryptFile, decryptSecret, encryptFile, encryptSecret } from "../src/lib/secretBox";
 import { encryptLegacyInventory } from "../src/lib/credentialMigration";
+import { expireStaleOrders } from "../src/lib/jobs";
 import { bulkImportInventory } from "../src/modules/admin/admin.service";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -1964,6 +1965,67 @@ async function testEncryption(): Promise<void> {
   await prisma.product.delete({ where: { id: product.id } });
 }
 
+// Login brute force is limited per ACCOUNT (IP rotation does not help), and
+// abandoned orders expire.
+async function testHardening(): Promise<void> {
+  const target = `victim_${Date.now()}@example.com`;
+  const codes: number[] = [];
+  for (let i = 0; i < 12; i++) {
+    ip = `10.77.${Math.floor(i / 200)}.${(i % 200) + 1}`; // a new IP every attempt
+    const res = await post("/auth/login", { identifier: target, password: `wrong-${i}` });
+    codes.push(res.statusCode);
+  }
+  record(
+    "login limited per account even when the IP changes",
+    codes.slice(0, 10).every((c) => c === 401) && codes.slice(10).every((c) => c === 429),
+    codes.join(","),
+  );
+
+  ip = "10.10.0.60";
+  const signup = await post("/auth/signup", {
+    name: "Expiry Tester",
+    email: `exp_${Date.now()}@example.com`,
+    password: "Expiry@12345",
+  });
+  const userId = String(obj(body(signup).user).id);
+  const old = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+  const mk = (
+    provider: "MANUAL" | "CARD_TO_CARD",
+    createdAt: Date,
+    status: "PENDING" | "PENDING_REVIEW",
+  ) =>
+    prisma.order.create({
+      data: {
+        userId,
+        totalAmount: 1,
+        currency: "IRR",
+        paymentStatus: status,
+        paymentProvider: provider,
+        createdAt,
+      },
+    });
+  const staleOnline = await mk("MANUAL", old, "PENDING");
+  const freshOnline = await mk("MANUAL", new Date(), "PENDING");
+  const staleCard = await mk("CARD_TO_CARD", old, "PENDING");
+  const reviewCard = await mk("CARD_TO_CARD", old, "PENDING_REVIEW");
+  await expireStaleOrders();
+  const st = async (id: string) =>
+    (await prisma.order.findUnique({ where: { id } }))?.paymentStatus;
+  const result = [
+    await st(staleOnline.id),
+    await st(freshOnline.id),
+    await st(staleCard.id),
+    await st(reviewCard.id),
+  ];
+  record(
+    "stale PENDING orders expire; fresh and in-review orders are untouched",
+    result.join(",") === "EXPIRED,PENDING,EXPIRED,PENDING_REVIEW",
+    result.join(","),
+  );
+  await prisma.order.deleteMany({ where: { userId } });
+  await prisma.user.delete({ where: { id: userId } });
+}
+
 async function main(): Promise<void> {
   await testFoundation();
   await testCatalog();
@@ -1980,6 +2042,7 @@ async function main(): Promise<void> {
   await testSecurity();
   await testAgentSafety();
   await testEncryption();
+  await testHardening();
   testRoleGuard();
 
   let allPass = true;

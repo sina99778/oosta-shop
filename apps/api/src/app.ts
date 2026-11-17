@@ -27,7 +27,11 @@ export function createApp() {
   // Production chain is client -> ArvanCloud edge -> nginx -> Express (2 trusted
   // hops), so req.ip resolves to the real visitor. With only 1, every visitor
   // behind the same CDN edge shared one rate-limit bucket (site-wide 429s).
-  app.set("trust proxy", env.isProduction ? 2 : 1);
+  // NOTE: with 2 hops, a client that reaches nginx DIRECTLY (bypassing the CDN)
+  // can choose its own req.ip via X-Forwarded-For — firewall the origin to the
+  // CDN's IP ranges (DEPLOYMENT.md). Login is additionally limited per account,
+  // which IP spoofing cannot bypass.
+  app.set("trust proxy", env.TRUST_PROXY ?? (env.isProduction ? 2 : 1));
 
   // Security + parsing
   app.use(helmet());

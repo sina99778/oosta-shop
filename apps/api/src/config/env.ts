@@ -22,6 +22,13 @@ const EnvSchema = z.object({
     .default("dev-only-credentials-key-change-me-0000"),
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(4).max(15).default(12),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
+  // Number of reverse proxies in front of the API whose X-Forwarded-For entry is
+  // trusted (client -> CDN -> nginx -> API = 2; no CDN = 1). Too high a value lets
+  // clients spoof their IP. Default: 2 in production, 1 otherwise.
+  TRUST_PROXY: z.preprocess(
+    (value) => (value === "" || value === undefined ? undefined : value),
+    z.coerce.number().int().min(0).max(5).optional(),
+  ),
 
   PAYMENT_PROVIDER: z.enum(["mock", "zarinpal"]).default("mock"),
   ALLOW_MOCK_PAYMENTS_IN_PRODUCTION: z
@@ -35,6 +42,9 @@ const EnvSchema = z.object({
     .transform((v) => v.toLowerCase() === "true"),
   ZARINPAL_CURRENCY: z.enum(["IRR", "IRT"]).default("IRR"),
   WEB_BASE_URL: z.string().default("http://localhost:3000"),
+  // Abandoned checkouts become EXPIRED after these delays (see lib/jobs.ts).
+  ORDER_EXPIRY_MINUTES: z.coerce.number().int().min(5).default(60),
+  CARD_ORDER_EXPIRY_HOURS: z.coerce.number().int().min(1).default(24),
 
   // Manual card-to-card payment (buyer transfers, uploads a receipt, admin approves).
   // When enabled, the storefront offers it as a payment option and shows the card below.
@@ -101,6 +111,11 @@ function loadEnv() {
     const problems: string[] = [];
     if (data.JWT_SECRET === "dev-only-secret-change-me") {
       problems.push("JWT_SECRET must be set to a strong, unique value in production");
+    }
+    if (data.JWT_SECRET.length < 32) {
+      problems.push(
+        "JWT_SECRET must be at least 32 characters in production (openssl rand -base64 36)",
+      );
     }
     if (data.CREDENTIALS_KEY === "dev-only-credentials-key-change-me-0000") {
       problems.push(

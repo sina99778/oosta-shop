@@ -42,6 +42,10 @@ This creates the demo catalog and an admin (`admin@oosta.local` / `Admin@12345`)
 
 ## 4. Enable TLS (Let's Encrypt)
 
+The easy path is `./oosta.sh ssl` (direct DNS) or `./oosta.sh ssl-dns` (behind ArvanCloud).
+It writes an HTTPS nginx config (TLS 1.2/1.3, HSTS, HTTP→HTTPS redirect) that
+`./oosta.sh update` regenerates automatically. Manual steps:
+
 1. Obtain certificates (e.g. with `certbot`) for your domain.
 2. Copy `fullchain.pem` and `privkey.pem` into `deploy/nginx/certs/`.
 3. Uncomment the `listen 443 ssl` server block in `deploy/nginx/default.conf` and set `server_name`.
@@ -50,6 +54,24 @@ This creates the demo catalog and an admin (`admin@oosta.local` / `Admin@12345`)
    docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build web
    docker compose -f docker-compose.prod.yml restart nginx
    ```
+
+## 5. Lock the origin to the CDN (important behind ArvanCloud)
+
+The API trusts two proxy hops (`TRUST_PROXY=2`: CDN → nginx) to learn each visitor's real IP
+for rate limiting. Anyone who reaches the server's IP **directly** could then fake their IP
+with an `X-Forwarded-For` header. Allow ports 80/443 only from the CDN's published IP ranges
+(ArvanCloud panel → CDN → "IP ranges"), for example with `ufw`:
+
+```bash
+sudo ufw default deny incoming
+sudo ufw allow OpenSSH
+# repeat for every ArvanCloud range:
+sudo ufw allow from <arvan-range> to any port 80,443 proto tcp
+sudo ufw enable
+```
+
+Without a CDN, set `TRUST_PROXY=1` in `.env.production`. Login is additionally limited per
+account (10 failed attempts / 15 min), which IP spoofing cannot bypass.
 
 ## Operations
 

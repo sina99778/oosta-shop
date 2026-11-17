@@ -7,6 +7,7 @@ import { createApp } from "./app";
 import { prisma } from "./lib/prisma";
 import { startBot } from "./bot";
 import { encryptLegacyInventory } from "./lib/credentialMigration";
+import { startJobs } from "./lib/jobs";
 
 const app = createApp();
 
@@ -21,11 +22,15 @@ encryptLegacyInventory()
   })
   .catch((error) => console.error("[oosta-api] credential encryption migration failed", error));
 
+// Housekeeping (abandoned-order expiry).
+const stopJobs = startJobs();
+
 // Start the Telegram admin bot (no-op unless TELEGRAM_BOT_TOKEN + TELEGRAM_ADMIN_ID are set).
 startBot();
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`\n[oosta-api] ${signal} received — shutting down...`);
+  stopJobs();
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await prisma.$disconnect();
   console.log("[oosta-api] shutdown complete");

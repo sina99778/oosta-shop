@@ -26,6 +26,9 @@ COPY --from=build /app/apps/api/package.json ./package.json
 COPY --from=build /app/apps/api/prisma ./prisma
 # Sources are needed by `npm run db:seed` (tsx), which shares the encryption helper.
 COPY --from=build /app/apps/api/src ./src
+# Run as the unprivileged "node" user (shipped with the image), not root.
+RUN chown -R node:node /app/apps/api
+USER node
 EXPOSE 4000
 # Apply pending migrations, then start the server. `exec` makes node PID 1 so it
 # receives SIGTERM directly (graceful shutdown) instead of being SIGKILLed.
