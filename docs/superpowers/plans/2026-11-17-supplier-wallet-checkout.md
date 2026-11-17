@@ -20,11 +20,11 @@
 
 ## Tasks
 
-- [ ] Add a regression for wallet-based capability without falsely asserting priceCeiling; watch RED. Add budget table and job exposure; reserve/settle under DB locks, block double-reservation and top-ups, preserve uncertain exposure.
-- [ ] Build real fixed-origin Canboso and Vente adapters, strict normalized results and read-only recovery. Synthetic HTTP fixtures cover identity, currency, quantities, price drift, no-charge, malformed/timeout, credentials and no purchase on failure. Default registry remains empty unless server-owned rollout flag is set.
-- [ ] Connect reservations to quote/order/worker expiry, then real registry to app. Quote/checkout denial paths remain private/no-store and owner-scoped. Refresh stale mapped catalogs before firm quotes.
-- [ ] Run verify, affected lint, builds sequentially, both audits. Independent review and fix findings with regression. Record results/limits.
-- [ ] Deploy with encrypted off-server backup, initialize budgets no higher than the approved snapshots/current balances, expose only the needed supplier/card paths, verify read-only public/private behavior and timers. No real purchase or bank payment for automated rollout tests.
+- [x] Add a regression for wallet-based capability without falsely asserting priceCeiling; watch RED. Add budget table and job exposure; reserve/settle under DB locks, block double-reservation and top-ups, preserve uncertain exposure.
+- [x] Build real fixed-origin Canboso and Vente adapters, strict normalized results and read-only recovery. Synthetic HTTP fixtures cover identity, currency, quantities, price drift, no-charge, malformed/timeout, credentials and no purchase on failure. Default registry remains empty unless server-owned rollout flag is set.
+- [x] Connect reservations to quote/order/worker expiry, then real registry to app. Quote/checkout denial paths remain private/no-store and owner-scoped. Refresh stale mapped catalogs before firm quotes.
+- [x] Run verify, affected lint, builds sequentially, both audits. Independent review and fix findings with regression. Record results/limits. Full audit reports14 high dev advisories; production audit0. CI's full-audit failure remains visible.
+- [x] Deploy with encrypted off-server backup, initialize budgets no higher than the approved snapshots/current balances, expose only the needed supplier/card paths, verify read-only public/private behavior and timers. No real purchase or bank payment for automated rollout tests.
 
 ## Review focus
 

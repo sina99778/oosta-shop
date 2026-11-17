@@ -40,4 +40,12 @@
 
 ## استقرار
 
-در زمان ثبت اولیهٔ این گزارش، استقرار نسخهٔ wallet هنوز انجام نشده است. نتیجهٔ مشاهده‌شده پس از انتشار جدا افزوده می‌شود.
+- کد اولیهٔ `7f0a61d` و اصلاح نهایی `63aa0b2` روی برنچ `codex/oosta-redesign-security-checkpoint` push شدند. release نهایی فعال `/opt/oostaAI/releases/20261117-supplier-wallet-final` با revision63aa0b2 است. migration افزایشی wallet اعمال و پنج budget ساخته شد؛ مقدار موجودی تأییدشده برای هیچ‌کدام افزایش نیافت.
+- سه budget Canboso/PremiKey/Vente فعال شدند؛ AItoolify و ToolsMarket خاموش ماندند. flag سروری فعال است. مقصد کارت از تنظیمات خصوصی موجود گرفته و شماره/دارنده در خروجی چاپ نشد؛ `supplierCardReady` و عمومی‌بودن صرفاً کارت‌به‌کارت تأیید شدند. درگاه mock برای خرید مشتری قابل‌انتخاب نیست.
+- smoke کامل HTTPS دامنه با گزینه‌های wallet/content-indexed موفق شد: cache خصوصی، منابع static، private401، signup400 برای بدنهٔ نامعتبر، quote/order/receipt401 بدون احراز، legacy purchase/payment503. این smoke کاربر/سفارش/پرداخت واقعی نساخت.
+- پس از اصلاح نهایی، استعلام عمومی احراز‌شده برای Microsoft365 با USER مخصوص QA موجود، 201/FIRM، IRR، مهلت899ثانیه، online=false وcardToCard=true برگشت. هیچ order یا purchase ساخته نشد؛ تنها quote تازهٔ همان smoke و فقط در حالت مصرف‌نشده پاک شد. تعداد quote/job نهایی هر دو صفر و همهٔ authorizationها بدون مصرف و بدون hold ماندند. ledger قدیمی پنج attempt و USD1.38 باقی ماند.
+- برای patch آخر، مسیر checkout موقتاً بسته شد و نبود هرگونه job فعال تأیید شد؛ API پس از health gate عوض شد و مسیرها دوباره باز شدند. وبِ انتشار هم‌زمان مقالات/RTL و includeهای ایندکس حفظ شدند؛ image کانتینر web قبل و بعد همین patch یکسان بود. یک تلاش اولیهٔ tag کردن image از شناسهٔ manifest کانتینر پیش از بستن مسیرها ناموفق شد؛ image بازگشت از source نسخهٔ7f0a61d با cache ساخته شد، سپس انتشار انجام شد. image بازگشت `oosta-api:pre-wallet-fingerprint-20261117` نگه داشته شد.
+- timerهای backup و Blu پس از انتشار active مشاهده شدند. فایل‌های tar موقت این دو انتشار از shared پاک شدند؛ بکاپ پیش از انتشار خارج از سرور باقی است. هیچ انتقال بانکی، خرید واقعی یا اعلان آزمایشی Telegram تازه برای این انتشار انجام نشد.
+- [CI نسخهٔ نهایی63aa0b2](https://github.com/sina99778/oosta-shop/actions/runs/44175474461) verify/lint/build/آزمون backup و audit تولید را گذراند؛ **نتیجهٔ کلی failure است** چون Full dependency audit همان۱۴ advisory highِ picomatch را گزارش کرد. این خطا مخفی یا bypass نشد. CI نسخهٔ7f0a61d هم فقط همین مرحلهٔ audit کامل را ناموفق داشت.
+
+این شواهد فعال‌بودن checkout و استعلام واقعی را نشان می‌دهند؛ فروش/برداشت/کیفیت اشتراک تجاری تازه‌ای در این مرحله آزمایش نشده است و ادعای بی‌باگ‌بودن یا امنیت کامل سیستم نمی‌شود.
