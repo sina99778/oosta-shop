@@ -918,17 +918,94 @@ async function main() {
     await prisma.order.update({ where: { id }, data: { paymentStatus: "EXPIRED" } });
     await prisma.supplierFulfillment.update({ where: { orderId: id }, data: { state: "REVIEW" } });
   }
-  const reviewed = await createCard();assert.equal(reviewed.opened.statusCode,201);
-  const reviewedOrder=await prisma.order.findUniqueOrThrow({where:{id:reviewed.opened.json().order.id}});
-  const reviewedReceipt=await uploadReceipt(card.user.id,reviewedOrder.id,{buffer:Buffer.from("synthetic"),mimetype:"image/png"},"001234");
-  const reviewClaim=await prisma.bluBankObservation.create({data:{transactionDigest:createHash("sha256").update(reviewedOrder.id).digest("hex"),invoiceKey:reviewedOrder.bluInvoiceKey!,trackingDigest:event.trackingDigest,occurredAt:new Date(),matchedOrderId:reviewedOrder.id}});
-  const approved = await inject(cardApp,{method:"POST",url:"/admin/receipts/"+reviewedReceipt.receiptId+"/approve",headers:{...headers,authorization:"Bearer "+signAccessToken({sub:admin.id,role:"ADMIN",sv:admin.sessionVersion})},payload:"{}"});
-  assert.equal(approved.statusCode,200);
-  await prisma.bluBankObservation.update({where:{transactionDigest:reviewClaim.transactionDigest},data:{reviewRequired:true}});
-  const beforeReview=buys;await cardApp.locals.supplierCheckout.sweep();
-  assert.equal(buys,beforeReview,"Bank evidence becoming ambiguous before dispatch must stop procurement");
-  assert.equal((await prisma.supplierFulfillment.findUniqueOrThrow({where:{orderId:reviewedOrder.id}})).state,"REVIEW");
-  console.log("PASS: customer HTTP quote binding/expiry, one payment session, verified-only purchase, callback/replay denial, vault delivery, restart lookup recovery, fair worker scheduling and signed Blu card settlement; empty production registry closed");
+  const reviewed = await createCard();
+  assert.equal(reviewed.opened.statusCode, 201);
+  const reviewedOrder = await prisma.order.findUniqueOrThrow({
+    where: { id: reviewed.opened.json().order.id },
+  });
+  const reviewedReceipt = await uploadReceipt(
+    card.user.id,
+    reviewedOrder.id,
+    { buffer: Buffer.from("synthetic"), mimetype: "image/png" },
+    "001234",
+  );
+  const reviewClaim = await prisma.bluBankObservation.create({
+    data: {
+      transactionDigest: createHash("sha256").update(reviewedOrder.id).digest("hex"),
+      invoiceKey: reviewedOrder.bluInvoiceKey!,
+      trackingDigest: event.trackingDigest,
+      occurredAt: new Date(),
+      matchedOrderId: reviewedOrder.id,
+    },
+  });
+  const approved = await inject(cardApp, {
+    method: "POST",
+    url: "/admin/receipts/" + reviewedReceipt.receiptId + "/approve",
+    headers: {
+      ...headers,
+      authorization:
+        "Bearer " + signAccessToken({ sub: admin.id, role: "ADMIN", sv: admin.sessionVersion }),
+    },
+    payload: "{}",
+  });
+  assert.equal(approved.statusCode, 200);
+  await prisma.bluBankObservation.update({
+    where: { transactionDigest: reviewClaim.transactionDigest },
+    data: { reviewRequired: true },
+  });
+  const beforeReview = buys;
+  await cardApp.locals.supplierCheckout.sweep();
+  assert.equal(
+    buys,
+    beforeReview,
+    "Bank evidence becoming ambiguous before dispatch must stop procurement",
+  );
+  assert.equal(
+    (await prisma.supplierFulfillment.findUniqueOrThrow({ where: { orderId: reviewedOrder.id } }))
+      .state,
+    "REVIEW",
+  );
+  console.log(
+    "PASS: customer HTTP quote binding/expiry, one payment session, verified-only purchase, callback/replay denial, vault delivery, restart lookup recovery, fair worker scheduling and signed Blu card settlement; empty production registry closed",
+  );
+  const manual = await fixture(),
+    manualVariant = { ...variant, delivery: "MANUAL" as const };
+  await prisma.productPlan.update({
+    where: { id: manual.product.plans[0].id },
+    data: {
+      variant: manualVariant,
+      supplierMappings: [
+        {
+          supplier: "canboso2",
+          externalId: "synthetic-sku",
+          fingerprint: "b".repeat(64),
+          variantKey: variantKey(manualVariant, 30),
+        },
+      ],
+    },
+  });
+  const manualCatalog = catalog("canboso2", "8", "b".repeat(64));
+  manualCatalog.offers[0].delivery = "MANUAL";
+  await prisma.siteSetting.update({
+    where: { key: "suppliers.catalog.canboso2" },
+    data: { value: JSON.stringify(manualCatalog) },
+  });
+  const manualQuote = await inject(createApp({ supplierAdapters: manual.registry }), {
+    method: "POST",
+    url: "/supplier-quotes",
+    headers: {
+      ...headers,
+      authorization: "Bearer " + signAccessToken({ sub: manual.user.id, role: "USER", sv: 0 }),
+    },
+    payload: JSON.stringify({ planId: manual.product.plans[0].id }),
+  });
+  assert.equal(
+    manualQuote.statusCode,
+    200,
+    "Unsupported automatic checkout must preserve indicative quotes for manual variants",
+  );
+  assert.equal(manualQuote.json().quote.kind, "INDICATIVE");
+  assert.equal(buys, 0);
   assert.equal(new Prisma.Decimal("8").toString(), "8");
   console.log(
     "PASS: supplier paid-only gate, exact variants, price ceiling capability, cheapest selection, single dispatch/delivery, expiry, price/identity/credential denial, refund race, no-charge, pending/timeout/crash lookup recovery and empty live registry",

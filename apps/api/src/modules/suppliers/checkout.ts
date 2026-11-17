@@ -61,6 +61,13 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
       where: { id: planId, isActive: true, source: "SUPPLIER", product: { isActive: true } },
     });
     if (!plan) throw new AppError(404, "NOT_FOUND", "Plan not found");
+    const variant = readVariant(plan.variant);
+    if (
+      !variant ||
+      variant.delivery !== "AUTOMATIC" ||
+      !["ACCOUNT", "CODE"].includes(variant.fulfillment)
+    )
+      throw unavailable();
     const selected = await selectSupplierPurchase(plan, registry);
     const gateway = await getGatewayConfig();
     const methods = {
@@ -70,7 +77,6 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
     };
     if (!methods.online && !methods.cardToCard)
       throw new AppError(503, "METHOD_UNAVAILABLE", "No safe payment method is available");
-    const variant = readVariant(plan.variant)!;
     const saved = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
       if (
