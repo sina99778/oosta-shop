@@ -2,7 +2,7 @@
 Description=Daily Oosta encrypted backup
 
 [Timer]
-OnCalendar=*-*-* 03:15:00 UTC
+OnCalendar=*-*-* 04:15:00 Europe/Berlin
 RandomizedDelaySec=15m
 Persistent=true
 Unit=oosta-backup.service
