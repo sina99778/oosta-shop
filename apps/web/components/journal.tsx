@@ -7,6 +7,13 @@ import type { BlogPostDetail, BlogPostSummary } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 import styles from "./journal.module.css";
 
+// Any Persian/Arabic letter makes the text RTL. dir="auto" alone takes the
+// direction from the first strong letter, so "ChatGPT، Claude یا Gemini؟"
+// would render LTR and scramble the punctuation.
+function textDir(text: string): "rtl" | "auto" {
+  return /[\u0600-\u06FF]/.test(text) ? "rtl" : "auto";
+}
+
 export function JournalDate({ iso, locale }: { iso: string; locale: Locale }) {
   const date = new Intl.DateTimeFormat(locale === "fa" ? "fa-IR" : "en-US", {
     dateStyle: "long", timeZone: "Asia/Tehran",
@@ -24,8 +31,8 @@ function Story({ post, locale, readMore, featured = false }: { post: BlogPostSum
         )}
         <div className={styles.storyCopy}>
           {post.publishedAt && <div className={styles.date}><JournalDate iso={post.publishedAt} locale={locale} /></div>}
-          <h3 dir="auto">{post.title}</h3>
-          {post.excerpt && <p dir="auto">{post.excerpt}</p>}
+          <h3 dir={textDir(post.title)}>{post.title}</h3>
+          {post.excerpt && <p dir={textDir(post.excerpt)}>{post.excerpt}</p>}
           <span className={styles.read}>{readMore} <span aria-hidden="true" dir="ltr">↗</span></span>
         </div>
       </Link>
@@ -76,8 +83,8 @@ export function JournalArticle({ post, locale, back }: { post: BlogPostDetail; l
     <article className={styles.articlePage}>
       <header className={styles.articleHeader}>
         <Link href={`/${locale}/blog`} className={styles.read}>{back}</Link>
-        <h1 dir="auto">{post.title}</h1>
-        {post.excerpt && <p dir="auto">{post.excerpt}</p>}
+        <h1 dir={textDir(post.title)}>{post.title}</h1>
+        {post.excerpt && <p dir={textDir(post.excerpt)}>{post.excerpt}</p>}
         <div className={styles.articleMeta}>
           {post.publishedAt && <JournalDate iso={post.publishedAt} locale={locale} />}
           <span>{fa ? `حدود ${time} دقیقه مطالعه` : `About ${time} min read`}</span>

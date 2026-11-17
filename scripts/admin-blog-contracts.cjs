@@ -130,6 +130,16 @@ assert(article.includes("راهنمای آزمایشی"));
 // outline is h1 > h2 > h3 for readers and search engines.
 assert.match(article, /<h2[^>]*>شروع<\/h2>/);
 assert(!/<h[456][^>]*>شروع</.test(article));
+// A Persian title that starts with a Latin product name must stay RTL;
+// dir="auto" would pick LTR from the first letter and scramble the line.
+const latinFirst = { ...live, title: "ChatGPT، Claude یا Gemini؟", excerpt: "Claude و Gemini" };
+assert.match(screen(JournalArticle, { post: latinFirst, back: fa.blog.back }), /<h1 dir="rtl">/);
+assert.match(screen(JournalArticle, { post: latinFirst, back: fa.blog.back }), /<p dir="rtl">Claude/);
+assert.match(screen(Journal, { posts: [latinFirst], unavailable: false }), /<h3 dir="rtl">ChatGPT/);
+assert.match(
+  screen(JournalArticle, { post: { ...live, title: "Plain English title", excerpt: null }, back: fa.blog.back }),
+  /<h1 dir="auto">Plain English title/,
+);
 assert(article.includes('href="/fa/blog"'));
 async function checkPublication() {
   const params = Promise.resolve({ locale: "fa", slug: live.slug });
