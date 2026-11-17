@@ -14,4 +14,4 @@ For each implementation phase:
 
 The historical `security-review*.cjs` scripts assert some old vulnerable behavior; they are investigation evidence, not the green regression suite. Current tests are the scripts called by `npm run verify`.
 
-Open dependency findings and tested scope are documented in `docs/security/2026-11-05/review-fa.md`.
+Historical dependency findings and tested scope are documented in `docs/security/2026-11-05/review-fa.md`. The subsequent dependency fixes, audit results and compatibility limits are in `docs/security/2026-11-05/dependency-remediation-fa.md`.

@@ -146,7 +146,7 @@ export function AdminProductNew({ locale, dict }: { locale: Locale; dict: Dictio
 
   return (
     <Container className="max-w-3xl space-y-6 py-8">
-      <Link href={`/${locale}/admin`} className="text-sm text-muted hover:text-foreground">
+      <Link href={`/${locale}/admin/products`} className="text-sm text-muted hover:text-foreground">
         ← {t.back}
       </Link>
       <h1 className="text-2xl font-bold">{t.newProduct}</h1>

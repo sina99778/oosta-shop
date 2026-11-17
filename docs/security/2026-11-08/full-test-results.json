@@ -1,0 +1,33 @@
+{
+  "release": "/opt/oostaAI/releases/20261108-full-tests",
+  "verifyExitCode": 0,
+  "lintExitCode": 0,
+  "productionBuildExitCode": 0,
+  "audits": {
+    "all": 0,
+    "production": 0
+  },
+  "migrations": 17,
+  "smokeChecks": 152,
+  "live": {
+    "profileLogin": 200,
+    "ownerVault": 200,
+    "otherOwner": 404,
+    "ordinaryUserAdmin": 403,
+    "disabledSpend": 403,
+    "qaEnabled": false,
+    "campaignSpentUsd": "0.01",
+    "attempts": 1,
+    "inventoryUnits": 1,
+    "configuredSuppliers": 5,
+    "markupPercent": "30",
+    "fxAttemptsPreserved": 2,
+    "stockMigrationApplied": true,
+    "previewHttpCheck": "PASS"
+  },
+  "limits": [
+    "Stock purchase blocked: no upstream enforceable price lock",
+    "Real account activation not executed",
+    "Public gateway sales remain disabled"
+  ]
+}

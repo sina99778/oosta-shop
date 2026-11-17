@@ -1,3 +1,4 @@
+import { supplierQuoteRouter } from "./modules/suppliers/suppliers.routes";
 // Assembles the Express application: security middleware, parsers, logging,
 // rate limiting, route mounting, and the centralized error handlers (last).
 
@@ -11,6 +12,7 @@ import { errorHandler, notFoundHandler } from "./middleware/error";
 import { healthRouter } from "./routes/health";
 import { authRouter } from "./modules/auth/auth.routes";
 import { catalogRouter } from "./modules/catalog/catalog.routes";
+import { bluEventRouter } from "./modules/orders/blu-events";
 import { ordersRouter } from "./modules/orders/orders.routes";
 import { paymentsRouter } from "./modules/payments/payments.routes";
 import { ticketsRouter } from "./modules/tickets/tickets.routes";
@@ -25,6 +27,23 @@ export function createApp() {
   const app = express();
 
   app.disable("x-powered-by");
+  // Account data, credentials and payment results must not enter browser/proxy caches.
+  app.use(
+    [
+      "/auth",
+      "/orders",
+      "/tickets",
+      "/admin",
+      "/payments/verify",
+      "/supplier-quotes",
+      "/internal/blu-events",
+    ],
+    (_req, res, next) => {
+      res.setHeader("Cache-Control", "private, no-store");
+      next();
+    },
+  );
+
   app.use(maintenanceGate);
   // Nginx sanitizes forwarding headers; only explicit proxy subnets are trusted.
   app.set(
@@ -38,17 +57,12 @@ export function createApp() {
   app.use(helmet());
   app.use(cors({ origin: env.corsOrigins, credentials: true }));
   app.use(globalRateLimiter);
+  app.use("/internal/blu-events", bluEventRouter);
   app.use(express.json({ limit: "1mb", inflate: false }));
   app.use(express.urlencoded({ extended: false, limit: "64kb", inflate: false }));
 
   // Logging
   app.use(morgan(env.isProduction ? "combined" : "dev"));
-
-  // Account data, credentials and payment results must not enter browser/proxy caches.
-  app.use(["/auth", "/orders", "/tickets", "/admin", "/payments/verify"], (_req, res, next) => {
-    res.setHeader("Cache-Control", "private, no-store");
-    next();
-  });
 
   // Global rate limiting
 
@@ -57,6 +71,7 @@ export function createApp() {
   app.use("/auth", authRouter);
   app.use(catalogRouter);
   app.use("/orders", ordersRouter);
+  app.use("/supplier-quotes", supplierQuoteRouter);
   app.use("/payments", paymentsRouter);
   app.use("/tickets", ticketsRouter);
   app.use(blogRouter); // public blog

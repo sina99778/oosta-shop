@@ -1,7 +1,8 @@
 import "../globals.css";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Geist, Geist_Mono, Vazirmatn } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { notFound } from "next/navigation";
 import Script from "next/script";
 import { getDictionary } from "./dictionaries";
@@ -13,9 +14,14 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { Track } from "@/components/track";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
-const vazirmatn = Vazirmatn({ variable: "--font-vazirmatn", subsets: ["arabic"] });
+const geistSans = Geist({ variable: "--font-geist-sans", preload: false });
+const geistMono = Geist_Mono({ variable: "--font-geist-mono", preload: false });
+const estedad = localFont({
+  src: "../fonts/Estedad-storefront.woff2",
+  variable: "--font-estedad",
+  weight: "100 900",
+  preload: false,
+});
 
 export async function generateMetadata({
   params,
@@ -70,10 +76,11 @@ export default async function LocaleLayout({
 
   return (
     <html
+      id="oosta-page-top"
       lang={locale}
       dir={dirFor(locale)}
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${vazirmatn.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${estedad.variable} h-full antialiased`}
     >
       <body className={`flex min-h-full flex-col bg-background text-foreground ${fontClass}`}>
         {/* Apply the saved preference before paint; the storefront defaults to light. */}
@@ -91,7 +98,7 @@ export default async function LocaleLayout({
           </a>
           <Track />
           {announcement ? (
-            <div className="bg-brand-gradient px-4 py-2 text-center text-sm font-medium text-white">
+            <div className="oosta-announcement bg-brand-gradient px-4 py-2 text-center text-sm font-medium text-white">
               {announcement}
             </div>
           ) : null}

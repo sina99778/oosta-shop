@@ -13,21 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { SeoAssistant } from "@/components/admin/seo-assistant";
-import { PlanRow } from "@/components/admin/plan-row";
+import { PlanRow, type EditablePlan } from "@/components/admin/plan-row";
+import { QueryError } from "@/components/query-error";
 import type { Locale } from "@/lib/i18n";
 import type { Category, ProductType, SpecRow } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 
-type AdminPlan = {
-  id: string;
-  label: string;
-  durationDays: number | null;
-  price: number;
-  salePrice: number | null;
-  currency: string;
-  isActive: boolean;
-  availableStock: number;
-};
 type AdminProductDetailDto = {
   id: string;
   name: string;
@@ -44,7 +35,7 @@ type AdminProductDetailDto = {
   type: ProductType;
   isActive: boolean;
   category: { id: string; name: string; slug: string };
-  plans: AdminPlan[];
+  plans: EditablePlan[];
 };
 
 const selectClass = "h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm";
@@ -61,8 +52,9 @@ export function AdminProductDetail({
 }) {
   const { token } = useAuth();
   const t = dict.admin;
+  const fa = locale === "fa";
   const [reload, setReload] = useState(0);
-  const { data, loading } = useApi<{ product: AdminProductDetailDto }>(
+  const { data, loading, refetch } = useApi<{ product: AdminProductDetailDto }>(
     token ? `/admin/products/${productId}?_r=${reload}` : null,
     token ?? undefined,
   );
@@ -130,10 +122,18 @@ export function AdminProductDetail({
   }
   if (!data) {
     return (
-      <Container className="py-20 text-center text-muted">{dict.common.somethingWrong}</Container>
+      <Container className="py-20">
+        <QueryError message={dict.common.somethingWrong} onRetry={refetch} />
+      </Container>
     );
   }
   const product = data.product;
+  const internalPlans = product.plans.filter((plan) => plan.source !== "SUPPLIER");
+  const selectedBulkPlan = internalPlans.some((plan) => plan.id === bulkPlan)
+    ? bulkPlan
+    : !bulkPlan && internalPlans.length === 1
+      ? internalPlans[0].id
+      : "";
   const imageUrl = product.hasImage
     ? `${assetUrl(`/products/${product.id}/image`)}?v=${reload}`
     : null;
@@ -267,12 +267,13 @@ export function AdminProductDetail({
 
   async function importBulk(event: FormEvent) {
     event.preventDefault();
+    if (!selectedBulkPlan || bulkBusy || !token) return;
     setBulkBusy(true);
     setBulkMsg(null);
     try {
       const res = await api.post<{ created: number }>(
         "/admin/inventory/bulk",
-        { planId: bulkPlan, items: parseBulk() },
+        { planId: selectedBulkPlan, items: parseBulk() },
         token ?? undefined,
       );
       setBulkMsg(`${t.imported}: ${res.created}`);
@@ -294,12 +295,12 @@ export function AdminProductDetail({
 
   return (
     <Container className="space-y-6 py-8">
-      <Link href={`/${locale}/admin`} className="text-sm text-muted hover:text-foreground">
+      <Link href={`/${locale}/admin/products`} className="text-sm text-muted hover:text-foreground">
         ← {t.back}
       </Link>
 
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">{product.name}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="min-w-0 break-words text-2xl font-bold">{product.name}</h1>
         <div className="flex items-center gap-2">
           {product.isFeatured && <Badge tone="primary">{t.featured}</Badge>}
           <Badge tone={product.isActive ? "success" : "muted"}>
@@ -307,6 +308,22 @@ export function AdminProductDetail({
           </Badge>
         </div>
       </div>
+      <nav aria-label={fa ? "بخش‌های محصول" : "Product sections"} className="flex flex-wrap gap-2">
+        <a
+          href="#product-plans"
+          className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 text-sm"
+        >
+          {t.plans}
+        </a>
+        {internalPlans.length > 0 && (
+          <a
+            href="#product-inventory"
+            className="inline-flex min-h-11 items-center rounded-lg border border-border px-3 text-sm"
+          >
+            {fa ? "افزودن موجودی داخلی" : "Add internal stock"}
+          </a>
+        )}
+      </nav>
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Images: primary + gallery */}
@@ -581,7 +598,7 @@ export function AdminProductDetail({
       />
 
       {/* Plans with sale price */}
-      <Card>
+      <Card id="product-plans" className="scroll-mt-24">
         <h2 className="mb-3 font-semibold">{t.plans}</h2>
         <div className="space-y-2">
           {product.plans.map((pl) => (
@@ -624,37 +641,57 @@ export function AdminProductDetail({
         {plErr && <p className="mt-2 text-sm text-danger">{plErr}</p>}
       </Card>
 
-      <Card>
+      <Card id="product-inventory" className="scroll-mt-24">
         <h2 className="font-semibold">{t.bulkImport}</h2>
-        <p className="mb-3 mt-1 text-xs text-muted">{bulkHelp}</p>
-        <form onSubmit={importBulk} className="space-y-2">
-          <select
-            value={bulkPlan}
-            onChange={(e) => setBulkPlan(e.target.value)}
-            required
-            className={selectClass}
-          >
-            <option value="" disabled>
-              {t.selectPlan}
-            </option>
-            {product.plans.map((pl) => (
-              <option key={pl.id} value={pl.id}>
-                {pl.label}
-              </option>
-            ))}
-          </select>
-          <textarea
-            value={bulkText}
-            onChange={(e) => setBulkText(e.target.value)}
-            rows={5}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 font-mono text-sm outline-none focus:border-primary"
-            dir="ltr"
-          />
-          {bulkMsg && <p className="text-sm text-muted">{bulkMsg}</p>}
-          <Button type="submit" disabled={bulkBusy || !bulkPlan}>
-            {bulkBusy ? t.saving : t.import}
-          </Button>
-        </form>
+        {internalPlans.length === 0 ? (
+          <p className="mt-2 text-sm text-muted">
+            {fa
+              ? "برای افزودن موجودی، ابتدا یک پلن با منبع داخلی بساز."
+              : "Create an internal plan before adding stock."}
+          </p>
+        ) : (
+          <>
+            <p className="mb-3 mt-1 text-xs text-muted">{bulkHelp}</p>
+            <form onSubmit={importBulk} className="space-y-2">
+              <select
+                value={selectedBulkPlan}
+                onChange={(e) => setBulkPlan(e.target.value)}
+                required
+                aria-label={t.selectPlan}
+                className={selectClass}
+              >
+                <option value="" disabled>
+                  {t.selectPlan}
+                </option>
+                {internalPlans.map((pl) => (
+                  <option key={pl.id} value={pl.id}>
+                    {pl.label}
+                    {!pl.isActive ? ` · ${t.inactive}` : ""}
+                  </option>
+                ))}
+              </select>
+              <textarea
+                value={bulkText}
+                onChange={(e) => {
+                  if (e.target.value.trim() && selectedBulkPlan && !bulkPlan)
+                    setBulkPlan(selectedBulkPlan);
+                  setBulkText(e.target.value);
+                }}
+                rows={5}
+                required
+                aria-label={t.bulkImport}
+                spellCheck={false}
+                autoComplete="off"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 font-mono text-sm outline-none focus:border-primary"
+                dir="ltr"
+              />
+              {bulkMsg && <p className="text-sm text-muted">{bulkMsg}</p>}
+              <Button type="submit" disabled={bulkBusy || !selectedBulkPlan || !bulkText.trim()}>
+                {bulkBusy ? t.saving : t.import}
+              </Button>
+            </form>
+          </>
+        )}
       </Card>
     </Container>
   );

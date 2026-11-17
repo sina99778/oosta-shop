@@ -61,5 +61,11 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required").max(1000),
 });
 
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required").max(1000),
+  newPassword: passwordField,
+});
+
 export type SignupInput = z.infer<typeof signupSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

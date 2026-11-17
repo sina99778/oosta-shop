@@ -1,3 +1,4 @@
+import { readVariant } from "../suppliers/variant";
 // Orders + the instant-delivery engine.
 //
 // Overselling is prevented by claiming inventory atomically at delivery time inside
@@ -6,6 +7,7 @@
 // PAID order is a no-op).
 
 import { Prisma } from "@prisma/client";
+import { createPublicKey } from "node:crypto";
 import { prisma } from "../../lib/prisma";
 import { env } from "../../config/env";
 import { AppError } from "../../utils/httpError";
@@ -14,6 +16,26 @@ import { getGatewayConfig, isOnlinePaymentBlocked } from "../../lib/gatewayConfi
 import { lockOrder } from "../../lib/orderLock";
 import { notifyAdmin } from "../../bot";
 import type { CreateOrderInput } from "./orders.schemas";
+import { readBluInvoice, reserveBluInvoice } from "./blu-invoice";
+import { claimAvailableStock, releaseExpiredBluStock } from "./blu-stock";
+import { matchesBluReceipt } from "./blu-events";
+import { qaSelectionSchema } from "../suppliers/vente-purchase";
+
+function bluStockVerifierReady() {
+  try {
+    const key = createPublicKey({
+      key: Buffer.from(env.BLU_EVENT_PUBLIC_KEY ?? "", "base64"),
+      format: "der",
+      type: "spki",
+    });
+    return (
+      key.asymmetricKeyType === "ed25519" &&
+      Buffer.from(env.BLU_TRACKING_HMAC_KEY ?? "", "base64").length === 32
+    );
+  } catch {
+    return false;
+  }
+}
 
 type OrderWithItems = Prisma.OrderGetPayload<{
   include: {
@@ -43,8 +65,37 @@ function credentialOf(item: FulfilledItem) {
 
 async function serializeOrderDetail(order: OrderWithItems) {
   const paid = order.paymentStatus === "PAID";
+  const invoice = order.bluInvoiceKey ? readBluInvoice(order.paymentMetadata) : null;
+  const remainingMs = invoice ? Math.max(0, Date.parse(invoice.expiresAt) - Date.now()) : 0;
+  const expired = !!invoice && remainingMs === 0;
   return {
+    bluInvoice: invoice
+      ? {
+          baseAmount: invoice.baseAmount,
+          discount: invoice.discount,
+          expiresAt: invoice.expiresAt,
+          expired,
+          remainingMs,
+          qaOnly: !!invoice.qaCampaign,
+          stockHeld: !!invoice.stockHeld,
+          privateStockQa: !!invoice.privateStockQa,
+        }
+      : null,
     id: order.id,
+    isSupplierQa:
+      !!order.paymentMetadata &&
+      typeof order.paymentMetadata === "object" &&
+      !Array.isArray(order.paymentMetadata) &&
+      order.paymentMetadata.purpose === "SUPPLIER_QA",
+    supplierQaKind:
+      order.paymentMetadata &&
+      typeof order.paymentMetadata === "object" &&
+      !Array.isArray(order.paymentMetadata) &&
+      order.paymentMetadata.purpose === "SUPPLIER_QA"
+        ? order.paymentMetadata.qaProductKind === "REAL_STOCK"
+          ? "REAL_STOCK"
+          : "API_TEST"
+        : null,
     totalAmount: Number(order.totalAmount),
     currency: order.currency,
     paymentStatus: order.paymentStatus,
@@ -60,7 +111,14 @@ async function serializeOrderDetail(order: OrderWithItems) {
         slug: item.product.slug,
         type: item.product.type,
       },
-      plan: { id: item.plan.id, label: item.plan.label },
+      plan: {
+        id: item.plan.id,
+        ...(savedPlan(item.planSnapshot) ?? {
+          label: item.plan.label,
+          variant: readVariant(item.plan.variant),
+          durationDays: item.plan.durationDays,
+        }),
+      },
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
       lineTotal: Number(item.lineTotal),
@@ -80,12 +138,43 @@ async function serializeOrderDetail(order: OrderWithItems) {
     cardToCard:
       order.paymentProvider === "CARD_TO_CARD" &&
       ["PENDING", "PENDING_REVIEW", "REJECTED"].includes(order.paymentStatus)
-        ? await cardToCardInfo()
+        ? order.bluInvoiceKey
+          ? invoice && !expired
+            ? { number: invoice.number, holder: invoice.holder, bank: invoice.bank }
+            : null
+          : await cardToCardInfo()
         : null,
   };
 }
 
+function savedPlan(value: Prisma.JsonValue | null) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    typeof value.label !== "string"
+  )
+    return null;
+  return {
+    label: value.label,
+    variant: readVariant(value.variant),
+    durationDays: typeof value.durationDays === "number" ? value.durationDays : null,
+  };
+}
+
 export async function createOrder(userId: string, input: CreateOrderInput) {
+  const holdBluStock = env.BLU_STOCK_CHECKOUT_ENABLED && input.method === "card_to_card";
+  if (holdBluStock) {
+    if (!bluStockVerifierReady())
+      throw new AppError(
+        503,
+        "BLU_VERIFICATION_UNAVAILABLE",
+        "Blu payment verification is unavailable",
+      );
+    if (input.items.length !== 1 || input.items[0].quantity !== 1)
+      throw new AppError(400, "BLU_SINGLE_ITEM_REQUIRED", "Use one item per Blu checkout");
+    await releaseExpiredBluStock();
+  }
   const planIds = [...new Set(input.items.map((i) => i.planId))];
   const plans = await prisma.productPlan.findMany({
     where: { id: { in: planIds }, isActive: true },
@@ -95,6 +184,12 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
 
   for (const item of input.items) {
     const plan = planMap.get(item.planId);
+    if (plan?.source === "SUPPLIER")
+      throw new AppError(
+        503,
+        "SUPPLIER_CHECKOUT_DISABLED",
+        "Supplier orders are not enabled; no payment has been created",
+      );
     if (!plan || !plan.product.isActive) {
       throw new AppError(404, "NOT_FOUND", `Plan not found: ${item.planId}`);
     }
@@ -143,6 +238,12 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
       quantity: item.quantity,
       unitPrice,
       lineTotal,
+      planSnapshot: {
+        label: plan.label,
+        durationDays: plan.durationDays,
+        variant: readVariant(plan.variant),
+        source: plan.source,
+      },
     };
   });
 
@@ -153,24 +254,59 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
     if (!gw.cardEnabled) {
       throw new AppError(400, "METHOD_UNAVAILABLE", "Card-to-card payment is not available");
     }
-    const order = await prisma.order.create({
-      data: {
-        userId,
-        totalAmount: total,
-        currency,
-        paymentStatus: "PENDING",
-        paymentProvider: "CARD_TO_CARD",
-        items: { create: itemsData },
-      },
-    });
+    const data = {
+      userId,
+      totalAmount: total,
+      currency,
+      paymentStatus: "PENDING" as const,
+      paymentProvider: "CARD_TO_CARD" as const,
+      items: { create: itemsData },
+    };
+    const order =
+      holdBluStock || userId === env.BLU_INVOICE_QA_USER_ID
+        ? await prisma.$transaction(async (tx) => {
+            if (holdBluStock) {
+              await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+              const open = await tx.order.count({
+                where: {
+                  userId,
+                  paymentStatus: { in: ["PENDING", "REJECTED", "PENDING_REVIEW"] },
+                  items: { some: { fulfilledItems: { some: { status: "RESERVED" } } } },
+                },
+              });
+              if (open > 0)
+                throw new AppError(
+                  409,
+                  "BLU_STOCK_ORDER_OPEN",
+                  "An existing order is holding stock",
+                );
+            }
+            const invoice = await reserveBluInvoice(tx, gw, total, currency);
+            const created = await tx.order.create({
+              data: {
+                ...data,
+                ...invoice,
+                paymentMetadata: holdBluStock
+                  ? { ...invoice.paymentMetadata, stockHeld: true }
+                  : invoice.paymentMetadata,
+              },
+              include: { items: true },
+            });
+            if (holdBluStock)
+              for (const item of created.items) await claimAvailableStock(tx, item, "RESERVED");
+            return created;
+          })
+        : await prisma.order.create({ data });
+    const amount = Number(order.totalAmount);
     return {
-      order: {
-        id: order.id,
-        totalAmount: Number(total),
+      order: { id: order.id, totalAmount: amount, currency, paymentStatus: order.paymentStatus },
+      cardToCard: {
+        number: gw.cardNumber,
+        holder: gw.cardHolder,
+        bank: gw.cardBank,
+        amount,
         currency,
-        paymentStatus: order.paymentStatus,
       },
-      cardToCard: { ...(await cardToCardInfo()), amount: Number(total), currency },
     };
   }
 
@@ -236,31 +372,71 @@ export async function deliverOrderInTransaction(
   const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
   if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
   if (order.paymentStatus === "PAID") return; // idempotent
+  let privateStockQa = false;
+  const invoice = readBluInvoice(order.paymentMetadata);
+  if (
+    invoice?.privateStockQa &&
+    invoice.stockHeld &&
+    invoice.qaCampaign === env.BLU_QA_INVOICE_CAMPAIGN?.toLowerCase() &&
+    order.userId === env.BLU_INVOICE_QA_USER_ID &&
+    order.items.length === 1
+  ) {
+    const attempt = await tx.supplierQaAttempt.findUnique({ where: { orderId } });
+    const selection = qaSelectionSchema.safeParse(attempt?.selection);
+    const claim = await tx.bluBankObservation.findUnique({ where: { matchedOrderId: orderId } });
+    const receipts = await tx.receipt.findMany({
+      where: { orderId, status: "PENDING" },
+      select: { reference: true },
+    });
+    const profile = await tx.user.findUnique({
+      where: { id: order.userId },
+      select: { role: true },
+    });
+    privateStockQa =
+      !!attempt &&
+      attempt.userId === order.userId &&
+      attempt.state === "AWAITING_PAYMENT" &&
+      selection.success &&
+      selection.data.holdForCheckout === true &&
+      order.items[0].planId === "internal-held-qa-plan-" + attempt.id &&
+      order.items[0].quantity === 1 &&
+      profile?.role === "USER" &&
+      receipts.some((r) => matchesBluReceipt(r.reference, claim));
+  }
+  if (
+    order.bluInvoiceKey &&
+    (order.items.length === 0 || (invoice?.qaCampaign && !privateStockQa))
+  ) {
+    throw new AppError(
+      409,
+      "BLU_QA_NO_FULFILLMENT",
+      "Blu payment-only QA invoices do not deliver products",
+    );
+  }
   if (order.paymentStatus === "REFUNDED" || order.paymentStatus === "EXPIRED") {
     throw new AppError(409, "ORDER_CLOSED", "This order can no longer be fulfilled");
   }
 
   for (const item of order.items) {
-    // Lock and claim available units; SKIP LOCKED makes concurrent claims race-safe.
-    const rows = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM inventory_items
-        WHERE "planId" = ${item.planId} AND status = 'AVAILABLE'
-        ORDER BY "createdAt" ASC
-        LIMIT ${item.quantity}
-        FOR UPDATE SKIP LOCKED`;
-    if (rows.length < item.quantity) {
-      throw new AppError(409, "OUT_OF_STOCK", "Items went out of stock during fulfillment");
-    }
-    await tx.inventoryItem.updateMany({
-      where: { id: { in: rows.map((r) => r.id) } },
-      data: { status: "SOLD", orderItemId: item.id, soldAt: new Date() },
+    const held = await tx.inventoryItem.updateMany({
+      where: { orderItemId: item.id, status: "RESERVED" },
+      data: { status: "SOLD", soldAt: new Date() },
     });
+    if (held.count > item.quantity)
+      throw new AppError(409, "INVALID_STOCK_HOLD", "The reserved stock requires review");
+    if (held.count < item.quantity)
+      await claimAvailableStock(tx, { ...item, quantity: item.quantity - held.count }, "SOLD");
   }
 
   await tx.order.update({
     where: { id: orderId },
     data: { paymentStatus: "PAID", paidAt: new Date(), paymentRefId: refId },
   });
+  if (privateStockQa)
+    await tx.supplierQaAttempt.updateMany({
+      where: { orderId, state: "AWAITING_PAYMENT" },
+      data: { state: "DELIVERED" },
+    });
 }
 
 async function recordVerificationFailure(orderId: string) {
@@ -448,6 +624,15 @@ export async function uploadReceipt(
     if (!["PENDING", "PENDING_REVIEW", "REJECTED"].includes(order.paymentStatus)) {
       throw new AppError(400, "ALREADY_PAID", "This order is already paid");
     }
+    const normalized = reference
+      ?.trim()
+      .replace(/[۰-۹٠-٩]/g, (digit) => String(digit.charCodeAt(0) % 16));
+    if (readBluInvoice(order.paymentMetadata)?.stockHeld && !/^\d{4,30}$/.test(normalized ?? ""))
+      throw new AppError(
+        400,
+        "BLU_REFERENCE_REQUIRED",
+        "Enter the bank tracking or reference number",
+      );
 
     const count = await tx.receipt.count({ where: { orderId } });
     const recent = await tx.receipt.count({
@@ -482,7 +667,7 @@ export async function uploadReceipt(
 export async function getPaymentConfig() {
   const gw = await getGatewayConfig();
   return {
-    online: !isOnlinePaymentBlocked(gw),
+    online: !(env.isProduction && gw.provider === "mock") && !isOnlinePaymentBlocked(gw),
     cardToCard: gw.cardEnabled,
     card: gw.cardEnabled ? await cardToCardInfo() : null,
   };

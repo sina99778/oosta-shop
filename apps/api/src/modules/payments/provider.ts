@@ -206,7 +206,10 @@ export function getPaymentProviderForOrder(
 ): PaymentProviderAdapter {
   if (provider === "ZARINPAL") return zarinpalProvider;
   if (provider === "MANUAL") {
-    if (env.isProduction && !env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION) {
+    if (
+      env.isProduction &&
+      (!env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION || env.BLU_STOCK_CHECKOUT_ENABLED)
+    ) {
       throw new AppError(409, "MOCK_DISABLED", "Mock payments cannot fulfill production orders");
     }
     return mockProvider;

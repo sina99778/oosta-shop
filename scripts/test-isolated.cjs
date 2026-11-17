@@ -103,6 +103,143 @@ async function main() {
         env,
       ),
     );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/auth-session-regressions.ts",
+        ],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/catalog-sorting-regressions.ts",
+        ],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/product-content-regressions.ts",
+        ],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/supplier-regressions.ts",
+        ],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [path.join(root, "node_modules/tsx/dist/cli.mjs"), "apps/api/scripts/fx-regressions.ts"],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/supplier-purchase-regressions.ts",
+        ],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/supplier-stock-regressions.ts",
+        ],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/capcut-purchase-regressions.ts",
+        ],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/blu-invoice-regressions.ts",
+        ],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/blu-event-regressions.ts",
+        ],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/blu-private-invoice-regressions.ts",
+        ],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/private-stock-checkout-regressions.ts",
+        ],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/blu-auto-approval-regressions.ts",
+        ],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/telegram-admin-regressions.ts",
+        ],
+        env,
+      ),
+    );
   } finally {
     if (started)
       run(executable("pg_ctl"), ["-D", path.join(dir, "data"), "-m", "fast", "-w", "stop"], env);

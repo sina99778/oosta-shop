@@ -86,7 +86,8 @@ async function loadGatewayConfig(): Promise<GatewayConfig> {
 export function isOnlinePaymentBlocked(config: GatewayConfig): boolean {
   return (
     env.isProduction &&
-    ((config.provider === "mock" && !env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION) ||
+    ((config.provider === "mock" &&
+      (!env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION || env.BLU_STOCK_CHECKOUT_ENABLED)) ||
       (config.provider === "zarinpal" && config.zarinpalSandbox))
   );
 }

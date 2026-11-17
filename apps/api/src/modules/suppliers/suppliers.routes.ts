@@ -1,0 +1,50 @@
+import * as qa from "./supplier-qa.service";
+import { Router } from "express";
+import { z } from "zod";
+import { authenticate } from "../../middleware/auth";
+import { validate } from "../../middleware/validate";
+import { supplierIds } from "./variant";
+import { pricingInput } from "./pricing";
+import * as service from "./suppliers.service";
+export const supplierAdminRouter = Router();
+supplierAdminRouter.get("/qa", async (_req, res) => res.json(await qa.qaStatus()));
+supplierAdminRouter.post(
+  "/qa/attempts",
+  validate({ body: z.object({ requestKey: z.string().uuid() }).strict() }),
+  async (req, res) =>
+    res.json({ attempt: await qa.beginQaPurchase(req.user!.id, req.body.requestKey) }),
+);
+supplierAdminRouter.post(
+  "/qa/attempts/:id/reconcile",
+  validate({ params: z.object({ id: z.string().min(1).max(100) }), body: z.object({}).strict() }),
+  async (req, res) =>
+    res.json({ attempt: await qa.reconcileQaPurchase(req.user!.id, req.params.id as string) }),
+);
+supplierAdminRouter.get("/", async (_req, res) => {
+  res.json(await service.supplierOverview());
+});
+supplierAdminRouter.post(
+  "/:supplier/sync",
+  validate({ params: z.object({ supplier: z.enum(supplierIds) }), body: z.object({}).strict() }),
+  async (req, res) => {
+    res.json({
+      catalog: await service.syncCatalog(req.params.supplier as (typeof supplierIds)[number]),
+    });
+  },
+);
+supplierAdminRouter.patch("/pricing", validate({ body: pricingInput }), async (req, res) => {
+  res.json({ pricing: await service.setPricing(req.body) });
+});
+export const supplierQuoteRouter = Router();
+supplierQuoteRouter.use(authenticate);
+supplierQuoteRouter.post(
+  "/",
+  validate({
+    body: z
+      .object({ planId: z.string().min(1).max(100), quantity: z.literal(1).optional() })
+      .strict(),
+  }),
+  async (req, res) => {
+    res.json({ quote: await service.quote(req.body.planId) });
+  },
+);

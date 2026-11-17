@@ -1,5 +1,9 @@
 "use client";
 
+import { useParams } from "next/navigation";
+import { VariantFields } from "./variant-fields";
+import { SupplierMappingFields } from "./supplier-mapping-fields";
+import type { ProductVariant, SupplierMapping } from "@/lib/product-variant";
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -15,7 +19,16 @@ export type EditablePlan = {
   salePrice: number | null;
   isActive: boolean;
   availableStock: number;
+  inventory: { available: number; reserved: number; sold: number };
+  supplierAvailability:
+    | { kind: "confirmed"; count: number }
+    | { kind: "onRequest" | "unconfirmed" }
+    | null;
   currency: string;
+  durationDays?: number | null;
+  source?: "INTERNAL" | "SUPPLIER";
+  variant?: ProductVariant | null;
+  supplierMappings?: SupplierMapping[];
 };
 
 export function PlanRow({
@@ -30,6 +43,14 @@ export function PlanRow({
   onChanged: () => void;
 }) {
   const t = dict.admin;
+  const fa = useParams().locale === "fa";
+  const number = new Intl.NumberFormat(fa ? "fa-IR" : "en-US");
+  const [variant, setVariant] = useState<ProductVariant | null>(plan.variant ?? null);
+  const [source, setSource] = useState(plan.source ?? "INTERNAL");
+  const [duration, setDuration] = useState(
+    plan.durationDays != null ? String(plan.durationDays) : "",
+  );
+  const [mappings, setMappings] = useState<SupplierMapping[]>(plan.supplierMappings ?? []);
   const [label, setLabel] = useState(plan.label);
   const [price, setPrice] = useState(String(plan.price));
   const [sale, setSale] = useState(plan.salePrice != null ? String(plan.salePrice) : "");
@@ -49,6 +70,17 @@ export function PlanRow({
           price: Number(price),
           salePrice: sale.trim() ? Number(sale) : null,
           isActive: active,
+          variant,
+          source,
+          durationDays: duration.trim() ? Number(duration) : null,
+          supplierMappings: mappings.map(
+            ({ supplier, externalId, fingerprint, automaticVerified }) => ({
+              supplier,
+              externalId,
+              fingerprint,
+              automaticVerified,
+            }),
+          ),
         },
         token,
       );
@@ -93,10 +125,41 @@ export function PlanRow({
             <Input type="number" value={sale} onChange={(e) => setSale(e.target.value)} />
           </label>
         </div>
-        <Badge tone={plan.availableStock > 0 ? "success" : "muted"}>
-          {plan.availableStock} {t.available}
-        </Badge>
       </div>
+      {plan.source === "SUPPLIER" ? (
+        <Badge tone="primary">
+          {plan.supplierAvailability?.kind === "confirmed"
+            ? fa
+              ? `${number.format(plan.supplierAvailability.count)} نزد تأمین‌کننده`
+              : `${number.format(plan.supplierAvailability.count)} at supplier`
+            : plan.supplierAvailability?.kind === "onRequest"
+              ? fa
+                ? "تأمین‌کننده · با استعلام"
+                : "Supplier · on request"
+              : fa
+                ? "تأمین‌کننده · موجودی تأیید نشده"
+                : "Supplier · stock unconfirmed"}
+        </Badge>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Badge tone={plan.isActive && plan.inventory.available > 0 ? "primary" : "muted"}>
+            {number.format(plan.inventory.available)}{" "}
+            {fa
+              ? plan.isActive
+                ? "آزاد"
+                : "آزاد در پلن غیرفعال"
+              : plan.isActive
+                ? "available"
+                : "available on inactive plan"}
+          </Badge>
+          <Badge tone="muted">
+            {number.format(plan.inventory.reserved)} {fa ? "رزرو" : "reserved"}
+          </Badge>
+          <Badge tone="muted">
+            {number.format(plan.inventory.sold)} {fa ? "فروخته‌شده" : "sold"}
+          </Badge>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -115,6 +178,67 @@ export function PlanRow({
         </Button>
         {err && <span className="text-sm text-danger">{err}</span>}
       </div>
+      <details className="rounded-lg border border-border p-3">
+        <summary className="cursor-pointer py-2 text-sm font-medium">
+          {fa ? "مشخصات تنوع و منابع" : "Configuration and sources"}
+        </summary>
+        <div className="mt-4 space-y-4">
+          <label className="block text-sm">
+            {fa
+              ? "مدت اشتراک — روز؛ خالی یعنی بدون انقضا"
+              : "Subscription duration — days; blank is perpetual"}
+            <Input
+              type="number"
+              min={1}
+              value={duration}
+              onChange={(e) => {
+                setDuration(e.target.value);
+                setMappings([]);
+              }}
+            />
+          </label>
+          <label className="block text-sm">
+            {fa ? "منبع تأمین" : "Inventory source"}
+            <select
+              value={source}
+              onChange={(e) => {
+                setSource(e.target.value as "INTERNAL" | "SUPPLIER");
+                setMappings([]);
+              }}
+              className="h-11 w-full rounded-xl border border-border bg-card px-3"
+            >
+              <option value="INTERNAL">{fa ? "موجودی داخلی" : "Internal inventory"}</option>
+              <option value="SUPPLIER">
+                {fa ? "تأمین‌کنندهٔ API — فعلاً فقط استعلام" : "Supplier API — inquiry only"}
+              </option>
+            </select>
+          </label>
+          <VariantFields
+            value={variant}
+            onChange={(v) => {
+              setVariant(v);
+              setMappings([]);
+            }}
+            fa={fa}
+          />
+          {source === "SUPPLIER" && variant && (
+            <SupplierMappingFields
+              mappings={mappings}
+              onChange={setMappings}
+              token={token}
+              fa={fa}
+            />
+          )}
+          <Button onClick={save} disabled={busy}>
+            {t.save}
+          </Button>
+          {err && (
+            <p role="alert" className="text-sm text-danger">
+              {err}
+            </p>
+          )}
+        </div>
+      </details>
     </div>
   );
 }

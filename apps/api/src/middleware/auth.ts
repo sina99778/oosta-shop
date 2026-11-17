@@ -7,6 +7,7 @@ import type { Role } from "@prisma/client";
 import { verifyAccessToken } from "../lib/jwt";
 import { looksLikeApiKey, resolveApiKey } from "../lib/apiKey";
 import { prisma } from "../lib/prisma";
+import { isTrustedCookieWrite, readSessionCookie } from "../lib/sessionCookie";
 import { AppError } from "../utils/httpError";
 
 // Accepts either a user JWT (Authorization: Bearer <jwt>) OR an API key
@@ -35,6 +36,7 @@ export async function authenticate(
         return;
       }
       req.user = { id: resolved.userId, role: resolved.role };
+      req.authMethod = "api-key";
       next();
     } catch (error) {
       next(error);
@@ -42,7 +44,10 @@ export async function authenticate(
     return;
   }
 
-  if (!bearer) {
+  // An explicit Authorization header wins; browsers use the httpOnly session cookie.
+  const cookieToken = bearer ? undefined : readSessionCookie(req);
+  const token = bearer ?? cookieToken;
+  if (!token) {
     next(new AppError(401, "UNAUTHORIZED", "Missing or invalid Authorization header"));
     return;
   }
@@ -51,23 +56,33 @@ export async function authenticate(
   // that makes clients drop a valid session during a transient outage.
   let payload;
   try {
-    payload = verifyAccessToken(bearer);
+    payload = verifyAccessToken(token);
   } catch {
     next(new AppError(401, "UNAUTHORIZED", "Invalid or expired token"));
     return;
   }
+  if (cookieToken && !isTrustedCookieWrite(req)) {
+    next(new AppError(403, "CSRF_REJECTED", "Request origin is not allowed"));
+    return;
+  }
   try {
     // The JWT proves identity, but authorization comes from current DB state so
-    // deleting or demoting an admin revokes access immediately instead of after 7d.
+    // deleting or demoting an admin revokes access immediately instead of after 7d,
+    // and a password change / logout-all revokes every older token.
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, role: true },
+      select: { id: true, role: true, sessionVersion: true },
     });
     if (!user) {
       next(new AppError(401, "UNAUTHORIZED", "User no longer exists"));
       return;
     }
-    req.user = user;
+    if (user.sessionVersion !== payload.sv) {
+      next(new AppError(401, "UNAUTHORIZED", "Session has been revoked"));
+      return;
+    }
+    req.user = { id: user.id, role: user.role };
+    req.authMethod = cookieToken ? "cookie" : "bearer";
     next();
   } catch (error) {
     next(error);

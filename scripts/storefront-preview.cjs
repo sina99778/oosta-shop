@@ -5,6 +5,7 @@ const http = require("node:http");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const root = path.resolve(__dirname, "..");
+const supplierVariants = process.argv.includes("--supplier-variants");
 const categories = [
   { id: "preview-ai", slug: "ai-accounts", name: "هوش مصنوعی", productCount: 2 },
   {
@@ -125,6 +126,50 @@ const server = http.createServer((req, res) => {
       .end(
         JSON.stringify({ error: { code: "NOT_FOUND", message: "Preview endpoint unavailable" } }),
       );
+  if (supplierVariants && body.product) {
+    body.product.quoteRequired = true;
+    body.product.priceFrom = 0;
+    body.product.plans = [
+      [
+        "personal-none",
+        "PERSONAL",
+        "ACCOUNT",
+        "AUTOMATIC",
+        { kind: "NONE", days: 0, coverage: "NONE" },
+      ],
+      [
+        "personal-warranty",
+        "PERSONAL",
+        "ACCOUNT",
+        "AUTOMATIC",
+        { kind: "WARRANTED", days: 30, coverage: "FULL" },
+      ],
+      ["invite", "TEAM", "INVITE", "MANUAL", { kind: "NONE", days: 0, coverage: "NONE" }],
+    ].map(([id, access, fulfillment, delivery, warranty]) => ({
+      id,
+      label: "Plus · 30 days",
+      durationDays: 30,
+      source: "SUPPLIER",
+      quoteRequired: true,
+      price: 0,
+      effectivePrice: 0,
+      salePrice: null,
+      onSale: false,
+      discountPercent: 0,
+      currency: "IRR",
+      inStock: true,
+      availableStock: 5,
+      variant: {
+        plan: "PLUS",
+        access,
+        fulfillment,
+        delivery,
+        warranty,
+        region: "GLOBAL",
+        quota: "STANDARD",
+      },
+    }));
+  }
   res.end(JSON.stringify(body));
 });
 server.listen(4401, "127.0.0.1", () => console.log("Read-only preview API: http://127.0.0.1:4401"));

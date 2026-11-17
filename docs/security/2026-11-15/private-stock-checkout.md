@@ -1,0 +1,39 @@
+# Private stock checkout pilot
+
+The owner authorized a new USD/USDT 2 test budget. CapCut consumed USD 0.46 from it; earlier tests consumed USD 0.41 from the previous budget. This phase permits exactly one VenteBot Office 365 E3 stock purchase (product 39, quoted price at most USD 0.50, quantity one, wallet exposure at most USD 1.17). Its full wallet exposure plus CapCut is USD 1.63, below the new USD 2 grant. A private operator setting may explicitly raise the historical cumulative ceiling from its unchanged USD 1.58 default to USD 2.41. The new ceiling is not accepted from a customer DTO.
+
+The supplier stock is retained as one AVAILABLE unit under an inactive internal product and plan. No account data is returned in the purchase summary. A trusted operator function issues a single idempotent private CARD_TO_CARD order and reserves that unit. Its small IRR test payment is separate from the operator-funded supplier cost. No public product or general sales switch is enabled.
+
+The invoice DTO adds a private-test flag, consumed by the payment banner. It uses the same unique receiving-account/amount reservation, immutable destination, 30-minute payment window, owner-only no-store order API, receipt validation and signed Blu observation collector. The customer cannot request the operator function or choose a test amount. Current database roles are checked for both procurement and private profile issuance. The internal category and inactive inventory remain absent from the public catalog.
+
+Delivery requires the linked attempt, exact private plan, single unit, current ordinary QA profile and a pending receipt matching a non-review bank observation. Existing administrator receipt approval remains required and marks receipt, order, stock and attempt in one transaction. Signing a bank observation alone does not deliver. Earlier payment-only QA invoices retain their no-fulfillment guard. This pilot is not fully automatic public payment settlement.
+
+The first disposable regression reproduced a missing database state constraint update: procurement could not commit STOCK_READY. A new additive migration admits STOCK_READY and AWAITING_PAYMENT without rewriting existing rows or history. No real purchase occurred during that failing test.
+
+The isolated regression exercises denied roles, the old cumulative cap, exact product constraints, wallet-change denial before dispatch, concurrent/replayed purchase (one debit), hidden inactive stock, concurrent invoice issuance (one order/unit), private no-store DTO and other-user/anonymous denial. It checks denial before bank proof, review-required and receipt-reference mismatch blocks, concurrent approval (one success), owner vault delivery and replay without additional stock or spending. External supplier calls and bank observations are synthetic; no real notifications or payment calls occur in this suite.
+
+Local checks: npm run verify (including disposable commerce/restore tests), full ESLint and production API/web build. Both npm audits report zero advisories. The initial audit transport failed certificate verification; retry used Node's system CA store, preserving TLS verification.
+
+Operational deployment, actual supplier debit, bank transfer and delivery results are recorded separately below after they are observed. Local tests do not establish the security of every deployed flow or guarantee supplier account quality.
+
+## Observed deployment and real procurement
+
+Release `20261115-private-stock-checkout` built both production containers successfully and applied migration 20. Loopback API health and the web page returned success; Prisma reported the schema up to date. Pre-release and post-procurement database archives were captured and their supplier ledger table listings verified. Earlier images were tagged for rollback; reverting to older application code while new ledger states exist requires reviewing that compatibility first.
+
+One authenticated HTTPS administrative request through host Nginx bought Office product 39 for USD 0.50. Attempt `cmwhrash90001s601wbg30iyf` reached STOCK_READY. The financial grant was immediately disabled. New-budget spending is USD 0.96; cumulative historical charges are USD 1.37. No second supplier order was sent.
+
+The trusted issuer created order `cmwhrbfbx0001s65fjdi03e69` for IRR 10,040 (toman 1,004), expiring at 2026-11-15 12:04:12 UTC. Exactly one unit is RESERVED, the attempt is AWAITING_PAYMENT and no credential has been disclosed. Owner API access returned 200 with private/no-store and zero credentials; a different existing authenticated profile returned 404. An empty owner receipt returned 400 without creating a receipt. The production database contains only one ordinary user, so another ordinary user's denial is covered in the isolated regression; the live different-profile check used the existing administrator.
+
+An exact HTTPS POST exception for this order's receipt was added to `/etc/nginx/oosta-blu-qa-preview.conf`; no general order creation or receipt-write route was opened. Nginx syntax passed, the private checkout page returned 200, anonymous receipt access returned 401, other receipt paths and public order creation returned 503. Public payment configuration still returns both methods disabled. The Blu collector timer is active and its latest status is idle.
+
+The local Desktop file `Oosta-Card-Checkout-Test.txt` contains the dedicated login, exact order link, receiving card, amount, Tehran expiry and manual transfer/upload instructions. Secrets stayed out of response logs and this repository. A real bank transfer, bank match and final receipt approval/delivery remain pending owner action. Browser visual QA was not retried following the earlier tool-policy rejection. No new Office login or entitlement verification has been performed.
+
+## Real bank match and completed delivery
+
+After the owner reported submission, the order was PENDING_REVIEW with one pending receipt, a reference present and one RESERVED unit. The collector timer was active. Running its normal polling service retrieved a signed Blu observation and reported matched. The persisted claim matched the receiving account, IRR 10,040 amount, payment window and pending receipt reference, with reviewRequired false. Neither the bank reference nor account credentials were printed in operational output.
+
+At 2026-11-15 11:50:13 UTC the authenticated existing administrator receipt-approval API returned 200. The same transaction marked the receipt APPROVED, the order PAID, the one inventory unit SOLD and the supplier attempt DELIVERED. The owner vault returned 200 with private/no-store and exactly one credential; a different authenticated profile returned 404. Repeated approval returned 409 and did not create additional delivery. No new supplier purchase or additional wallet debit occurred.
+
+This confirms the real supplier procurement → held stock → owner transfer → receipt upload → signed bank match → administrator approval → private vault delivery flow. The approval step was performed by the operator after evidence verification; public autonomous approval is still not enabled. Office application login, account quality and subscription entitlement have not been independently verified. No application-source change or dependency update was made during this operational phase; the release checks documented above preceded deployment.
+
+The temporary receipt exception was removed by restoring the validated prior include, Nginx syntax passed and HTTPS POST to this receipt now returns 503. General public payment methods remain disabled and the financial grant remains off. A post-delivery database archive was captured and its supplier-ledger listing checked. The collector returned idle afterward. The local Desktop instructions were marked paid/delivered with a do-not-pay-again notice.

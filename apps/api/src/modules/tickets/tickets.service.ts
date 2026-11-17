@@ -1,6 +1,7 @@
 // Customer-facing support tickets.
 
 import { prisma } from "../../lib/prisma";
+import { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/httpError";
 import { notifyAdmin } from "../../bot";
 
@@ -16,9 +17,8 @@ export async function createTicket(userId: string, subject: string, body: string
       status: "OPEN",
       messages: { create: { authorId: userId, body, isStaff: false } },
     },
-    include: { user: { select: { name: true } } },
   });
-  void notifyAdmin(`🆕 New ticket #${shortId(ticket.id)} from ${ticket.user.name}\n${subject}`);
+  void notifyAdmin(`🆕 تیکت جدید #${shortId(ticket.id)}`);
   return { id: ticket.id, status: ticket.status };
 }
 
@@ -51,14 +51,26 @@ export async function getMyTicket(userId: string, id: string) {
 }
 
 export async function addMyMessage(userId: string, id: string, body: string) {
-  const ticket = await prisma.ticket.findFirst({ where: { id, userId } });
-  if (!ticket) throw new AppError(404, "NOT_FOUND", "Ticket not found");
-  await prisma.ticketMessage.create({
-    data: { ticketId: id, authorId: userId, body, isStaff: false },
-  });
-  await prisma.ticket.update({ where: { id }, data: { status: "OPEN", updatedAt: new Date() } });
-  void notifyAdmin(`💬 New reply on ticket #${shortId(id)}\n${body.slice(0, 200)}`);
-  return getMyTicket(userId, id);
+  const ticket = await prisma.ticket
+    .update({
+      where: { id, userId },
+      data: {
+        status: "OPEN",
+        updatedAt: new Date(),
+        messages: { create: { authorId: userId, body, isStaff: false } },
+      },
+      include: { messages: { orderBy: { createdAt: "asc" } } },
+    })
+    .catch(ticketWriteError);
+  void notifyAdmin(`💬 پاسخ جدید در تیکت #${shortId(id)}`);
+  return serializeTicket(ticket);
+}
+
+export function ticketWriteError(error: unknown): never {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+    throw new AppError(404, "NOT_FOUND", "Ticket not found");
+  }
+  throw error;
 }
 
 type TicketWithMessages = {

@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import type { Locale } from "@/lib/i18n";
 import styles from "./storefront.module.css";
 // Adapted from the study prompt in the owner's exported channel post 164.
@@ -47,14 +48,6 @@ export function PromptLab({ locale }: { locale: Locale }) {
             ? "این بار یک مقاله را با سؤال‌های بهتر بخوان. پرامپت را کپی کن و همراه متن مقاله به ابزار دلخواهت بده."
             : "Read a paper with better questions. Copy this prompt and use it with your article in the tool of your choice."}
         </p>
-        <a
-          href="https://t.me/oostaAi/164"
-          target="_blank"
-          rel="noopener noreferrer"
-          className={styles.textLink}
-        >
-          {fa ? "ایده از آرشیو اوستا" : "Inspired by the Oosta archive"} ↗
-        </a>
       </div>
       <div className={styles.promptPaper}>
         <div className={styles.promptTop}>
@@ -69,7 +62,7 @@ export function PromptLab({ locale }: { locale: Locale }) {
           <small>
             {fa ? "خروجی را با متن اصلی بررسی کن." : "Check the output against the original."}
           </small>
-          <button type="button" onClick={copy}>
+          <Button type="button" onClick={copy}>
             {status === "copied"
               ? fa
                 ? "کپی شد ✓"
@@ -77,7 +70,7 @@ export function PromptLab({ locale }: { locale: Locale }) {
               : fa
                 ? "کپی پرامپت ⧉"
                 : "Copy prompt ⧉"}
-          </button>
+          </Button>
         </div>
         <p role="status" className={styles.copyStatus}>
           {status === "copied"

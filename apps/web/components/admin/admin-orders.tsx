@@ -1,141 +1,161 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { QueryError } from "@/components/query-error";
 import { useApi } from "@/lib/use-api";
-import { Container } from "@/components/ui/container";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { QueryError } from "@/components/query-error";
 import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/cn";
-import { formatDate, formatPrice } from "@/lib/format";
+import { Input } from "@/components/ui/input";
+import { PaginationControls } from "@/components/pagination-controls";
 import type { Locale } from "@/lib/i18n";
+import type { AdminStats, Paginated } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
+import { AdminOrderList } from "./admin-order-list";
+import styles from "./admin.module.css";
 
-type AdminOrder = {
-  id: string;
-  totalAmount: number;
-  currency: string;
-  paymentStatus: string;
-  itemCount: number;
-  createdAt: string;
-  user: { name: string; email: string | null; phone: string | null };
-};
-type Pagination = { page: number; pageSize: number; total: number; totalPages: number };
-
-const STATUSES = [
-  "",
+const statuses = [
   "PAID",
   "PENDING_REVIEW",
   "PENDING",
+  "PAID_PENDING_FULFILLMENT",
   "FAILED",
   "REJECTED",
   "REFUNDED",
   "EXPIRED",
-  "PAID_PENDING_FULFILLMENT",
-] as const;
-
-function statusTone(status: string): "success" | "muted" | "danger" {
-  if (status === "PAID") return "success";
-  if (status === "PENDING" || status === "PENDING_REVIEW") return "muted";
-  return "danger";
-}
+];
 
 export function AdminOrders({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const { token } = useAuth();
-  const t = dict.admin;
+  const fa = locale === "fa";
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
-
+  const [input, setInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [invalid, setInvalid] = useState(false);
   const query = new URLSearchParams({ page: String(page), pageSize: "50" });
   if (status) query.set("status", status);
-  const { data, loading, error, refetch } = useApi<{ items: AdminOrder[]; pagination: Pagination }>(
+  if (search) query.set("q", search);
+  const { data, loading, error, refetch } = useApi<Paginated<AdminStats["recentOrders"][number]>>(
     token ? `/admin/orders?${query.toString()}` : null,
     token ?? undefined,
   );
-  const statusMap = dict.dashboard.status as Record<string, string>;
-  const totalPages = data?.pagination.totalPages ?? 1;
+  const copy = dict.dashboard.status as Record<string, string>;
+  const number = new Intl.NumberFormat(locale);
 
   return (
-    <Container className="py-8">
-      <div className="mb-4 flex flex-wrap gap-2">
-        {STATUSES.map((s) => (
-          <button
-            key={s || "all"}
-            type="button"
-            onClick={() => {
-              setStatus(s);
-              setPage(1);
-            }}
-            className={cn(
-              "rounded-full border px-3 py-1 text-sm transition-colors",
-              status === s
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border text-muted hover:text-foreground",
-            )}
-          >
-            {s === "" ? dict.common.all : (statusMap[s] ?? s)}
+    <div className={styles.dashboard}>
+      <header className={styles.dashboardHeader}>
+        <h1>{dict.admin.orders}</h1>
+        <Link href={`/${locale}/admin/receipts`} className={styles.storeLink}>
+          {fa ? "صف رسیدها" : "Receipt queue"} <span aria-hidden="true">↗</span>
+        </Link>
+      </header>
+      <section className={styles.panel}>
+        <form
+          className={styles.toolbar}
+          role="search"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const value = input.trim().replace(/^#/, "");
+            if (value && !/^[a-z0-9]{8,100}$/i.test(value)) {
+              setInvalid(true);
+              return;
+            }
+            setInvalid(false);
+            setSearch(value.toLowerCase());
+            setPage(1);
+          }}
+        >
+          <label className={styles.filterField}>
+            <span>{fa ? "شماره سفارش" : "Order number"}</span>
+            <Input
+              type="search"
+              dir="ltr"
+              maxLength={101}
+              value={input}
+              placeholder={fa ? "کد کامل یا ۸ نویسهٔ پایانی" : "Full ID or last 8 characters"}
+              aria-invalid={invalid}
+              aria-describedby={invalid ? "order-search-error" : undefined}
+              onChange={(event) => {
+                setInput(event.target.value);
+                setInvalid(false);
+                if (!event.target.value) {
+                  setSearch("");
+                  setPage(1);
+                }
+              }}
+            />
+          </label>
+          <button type="submit" className={styles.quietButton}>
+            {fa ? "جست‌وجو" : "Search"}
           </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <Spinner className="size-6" />
-      ) : error ? (
-        <QueryError message={dict.common.somethingWrong} onRetry={refetch} />
-      ) : !data || data.items.length === 0 ? (
-        <p className="text-muted">{t.noOrders}</p>
-      ) : (
-        <>
-          <div className="space-y-2">
-            {data.items.map((order) => (
-              <Card key={order.id} className="flex items-center justify-between gap-4 text-sm">
-                <div>
-                  <p className="font-medium">#{order.id.slice(-8)}</p>
-                  <p className="text-muted">
-                    {order.user.name} · {order.user.email ?? order.user.phone ?? "—"}
-                  </p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-muted">{formatDate(order.createdAt, locale)}</span>
-                  <span className="font-semibold">
-                    {formatPrice(order.totalAmount, order.currency, locale)}
-                  </span>
-                  <Badge tone={statusTone(order.paymentStatus)}>
-                    {statusMap[order.paymentStatus] ?? order.paymentStatus}
-                  </Badge>
-                </div>
-              </Card>
-            ))}
-          </div>
-
-          {totalPages > 1 && (
-            <div className="mt-6 flex items-center justify-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                {dict.common.previous}
-              </Button>
-              <span className="text-sm text-muted">
-                {page} / {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                {dict.common.next}
-              </Button>
-            </div>
+          <label className={styles.filterField}>
+            <span>{fa ? "وضعیت سفارش" : "Order status"}</span>
+            <select
+              value={status}
+              onChange={(event) => {
+                setStatus(event.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">{dict.common.all}</option>
+              {statuses.map((value) => (
+                <option key={value} value={value}>
+                  {copy[value] ?? value}
+                </option>
+              ))}
+            </select>
+          </label>
+          {data && (
+            <p className={styles.resultCount} aria-live="polite">
+              {number.format(data.pagination.total)} {fa ? "سفارش" : "orders"}
+            </p>
           )}
-        </>
-      )}
-    </Container>
+        </form>
+        {invalid && (
+          <p id="order-search-error" role="alert" className="mt-2 text-sm text-danger">
+            {fa
+              ? "شمارهٔ کامل یا ۸ نویسهٔ پایانی آن را وارد کن."
+              : "Enter the full ID or the last eight letters and digits."}
+          </p>
+        )}
+        {loading ? (
+          <div role="status" className={styles.empty}>
+            <Spinner className="size-5" />
+            <span className="sr-only">{dict.common.loading}</span>
+          </div>
+        ) : error ? (
+          <QueryError message={dict.common.somethingWrong} onRetry={refetch} />
+        ) : !data?.items.length ? (
+          data && data.pagination.page > 1 ? (
+            <button
+              type="button"
+              className={`${styles.quietButton} mt-4`}
+              onClick={() => setPage(1)}
+            >
+              {fa ? "بازگشت به صفحهٔ اول" : "Return to first page"}
+            </button>
+          ) : (
+            <p className={styles.empty}>
+              {search
+                ? fa
+                  ? "سفارشی با این شماره پیدا نشد."
+                  : "No matching orders."
+                : dict.admin.noOrders}
+            </p>
+          )
+        ) : (
+          <>
+            <AdminOrderList orders={data.items} locale={locale} statuses={copy} contacts />
+            <PaginationControls
+              pagination={data.pagination}
+              onPage={setPage}
+              labels={dict.common}
+            />
+          </>
+        )}
+      </section>
+    </div>
   );
 }

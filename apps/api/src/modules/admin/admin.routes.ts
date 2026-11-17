@@ -1,6 +1,11 @@
+import { supplierAdminRouter } from "../suppliers/suppliers.routes";
 // Admin routes — all require a valid JWT AND the ADMIN role.
 
 import { Router } from "express";
+import { z } from "zod";
+import { AppError } from "../../utils/httpError";
+import { issuePrivateBluInvoice } from "../orders/blu-invoice";
+import { readBluPollStatus } from "../orders/blu-poll-status";
 import { authenticate, requireRole } from "../../middleware/auth";
 import { validate } from "../../middleware/validate";
 import { uploadProductImage } from "../../middleware/upload";
@@ -10,6 +15,17 @@ import * as ctrl from "./admin.controller";
 export const adminRouter = Router();
 
 adminRouter.use(authenticate, requireRole("ADMIN"));
+adminRouter.use("/suppliers", supplierAdminRouter);
+adminRouter.get("/blu/status", async (_req, res) => {
+  res.json(await readBluPollStatus());
+});
+adminRouter.post("/blu/qa-invoice", validate({ body: z.object({}).strict() }), async (req, res) => {
+  const address = req.socket.remoteAddress;
+  if (address !== "127.0.0.1" && address !== "::1" && address !== "::ffff:127.0.0.1") {
+    throw new AppError(404, "NOT_FOUND", "Route not found");
+  }
+  res.json({ invoice: await issuePrivateBluInvoice() });
+});
 
 // Dashboard
 adminRouter.get("/stats", ctrl.stats);

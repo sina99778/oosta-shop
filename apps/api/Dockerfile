@@ -19,6 +19,7 @@ ENV NODE_ENV=production
 RUN apk add --no-cache postgresql16-client \
   || apk add --no-cache postgresql17-client \
   || apk add --no-cache postgresql-client
+RUN apk add --no-cache age
 # Full node_modules (incl. Prisma CLI for migrate deploy) hoisted at the repo root.
 COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/apps/api/dist ./dist

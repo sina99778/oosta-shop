@@ -1,19 +1,14 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDictionary } from "../../dictionaries";
 import { isLocale } from "@/lib/i18n";
-import { Container } from "@/components/ui/container";
-import { Markdown } from "@/components/markdown";
+import { JournalArticle } from "@/components/journal";
 import { fetchJson, siteUrl } from "@/lib/seo";
 import { assetUrl } from "@/lib/api";
-import { formatDate } from "@/lib/format";
 import type { BlogPostDetail } from "@/lib/types";
 
-export const revalidate = 300;
-
 async function load(slug: string): Promise<BlogPostDetail | null> {
-  const data = await fetchJson<{ post: BlogPostDetail }>(`/blog/${slug}`);
+  const data = await fetchJson<{ post: BlogPostDetail }>(`/blog/${encodeURIComponent(slug)}`, 0);
   return data?.post ?? null;
 }
 
@@ -30,7 +25,7 @@ export async function generateMetadata({
   const post = await load(slug);
   if (!post) return { title: "Not found" };
   const description = post.excerpt || post.content.replace(/[#*!]/g, "").slice(0, 160);
-  const image = post.hasCover ? assetUrl(`/blog-cover/${post.id}`) : undefined;
+  const image = post.hasCover ? new URL(assetUrl(`/blog-cover/${post.id}`), siteUrl()).href : undefined;
   const url = `${siteUrl()}/${locale}/blog/${slug}`;
   return {
     title: post.title,
@@ -57,7 +52,7 @@ export default async function BlogPostPage({
   const post = await load(slug);
   if (!post) notFound();
 
-  const cover = post.hasCover ? assetUrl(`/blog-cover/${post.id}`) : null;
+  const cover = post.hasCover ? new URL(assetUrl(`/blog-cover/${post.id}`), siteUrl()).href : null;
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Article",
@@ -68,29 +63,9 @@ export default async function BlogPostPage({
   };
 
   return (
-    <Container className="max-w-3xl py-10">
+    <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }} />
-      <Link href={`/${locale}/blog`} className="text-sm text-muted hover:text-foreground">
-        ← {dict.blog.back}
-      </Link>
-
-      <h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">{post.title}</h1>
-      {post.publishedAt && (
-        <p className="mt-2 text-sm text-muted">{formatDate(post.publishedAt, locale)}</p>
-      )}
-
-      {cover && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={cover}
-          alt={post.title}
-          className="mt-6 aspect-[16/9] w-full rounded-2xl border border-border object-cover"
-        />
-      )}
-
-      <article className="mt-6 text-foreground/90">
-        <Markdown text={post.content} />
-      </article>
-    </Container>
+      <JournalArticle post={post} locale={locale} back={dict.blog.back} />
+    </>
   );
 }

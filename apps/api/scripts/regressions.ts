@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { inject } from "light-my-request";
 import { prisma } from "../src/lib/prisma";
 import { createApp } from "../src/app";
@@ -8,15 +12,50 @@ import {
   uploadReceipt,
   verifyAndDeliver,
   getOrderDetail,
+  getPaymentConfig,
 } from "../src/modules/orders/orders.service";
-import { getStats, approveReceipt, rejectReceipt } from "../src/modules/admin/admin.service";
+import {
+  getStats,
+  approveReceipt,
+  rejectReceipt,
+  deletePlan,
+} from "../src/modules/admin/admin.service";
 import { signupSchema } from "../src/modules/auth/auth.schemas";
 import { api, ApiError } from "../../web/lib/api";
 import { safeReturnPath } from "../../web/lib/navigation";
-import { createBackup, restoreFromFile } from "../src/lib/backup";
+import { createBackup, createEncryptedBackup, restoreFromFile } from "../src/lib/backup";
+import { env } from "../src/config/env";
 
 async function main() {
   assert.equal(process.env.ISOLATED_REGRESSION_DB, "1", "Use the isolated test runner");
+  const priorProduction = env.isProduction;
+  const priorMockAllowed = env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION;
+  const priorProvider = await prisma.siteSetting.findUnique({ where: { key: "pay.provider" } });
+  try {
+    await prisma.siteSetting.upsert({
+      where: { key: "pay.provider" },
+      create: { key: "pay.provider", value: "mock" },
+      update: { value: "mock" },
+    });
+    env.isProduction = true;
+    env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION = true;
+    assert.equal(
+      (await getPaymentConfig()).online,
+      false,
+      "Controlled production mock is not a customer payment method",
+    );
+    env.isProduction = false;
+    assert.equal((await getPaymentConfig()).online, true, "Preserve development mock checkout");
+  } finally {
+    env.isProduction = priorProduction;
+    env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION = priorMockAllowed;
+    if (priorProvider)
+      await prisma.siteSetting.update({
+        where: { key: "pay.provider" },
+        data: { value: priorProvider.value },
+      });
+    else await prisma.siteSetting.delete({ where: { key: "pay.provider" } });
+  }
   const app = createApp();
   const user = await prisma.user.create({
     data: { name: "Regression buyer", passwordHash: "unused" },
@@ -124,6 +163,119 @@ async function main() {
     headers: { authorization: `Bearer ${forgedAdminRole}` },
   });
   assert.equal(forbidden.statusCode, 403, "Current database role must override a stale admin JWT");
+  const inventoryAdmin = await prisma.user.create({
+    data: { name: "Inventory admin fixture", passwordHash: "unused", role: "ADMIN" },
+  });
+  const tracked = await prisma.product.create({
+    data: {
+      categoryId: category.id,
+      name: "Inventory fixture",
+      slug: "stock-dashboard-fixture",
+      type: "LICENSE",
+      description: "Synthetic",
+    },
+  });
+  const activePlan = await prisma.productPlan.create({
+    data: { productId: tracked.id, label: "Internal", price: 10 },
+  });
+  const supplierPlan = await prisma.productPlan.create({
+    data: { productId: tracked.id, label: "Supplier", price: 10, source: "SUPPLIER" },
+  });
+  const inactivePlan = await prisma.productPlan.create({
+    data: { productId: tracked.id, label: "Paused", price: 10, isActive: false },
+  });
+  await prisma.inventoryItem.createMany({
+    data: [
+      { planId: activePlan.id, status: "AVAILABLE" },
+      { planId: activePlan.id, status: "RESERVED" },
+      { planId: activePlan.id, status: "SOLD" },
+      { planId: inactivePlan.id, status: "AVAILABLE" },
+    ].map((unit) => ({
+      ...unit,
+      productId: tracked.id,
+      type: "LICENSE",
+      licenseKey: "INVENTORY-PREVIEW-SECRET",
+    })),
+  });
+  const staffToken = signAccessToken({ sub: inventoryAdmin.id, role: "ADMIN" });
+  const stockRead = (url: string, token = staffToken) =>
+    inject(app, { method: "GET", url, headers: { authorization: `Bearer ${token}` } });
+  assert.equal((await stockRead("/admin/products", forgedAdminRole)).statusCode, 403);
+  const listing = await stockRead("/admin/products");
+  assert.equal(listing.statusCode, 200);
+  assert.match(String(listing.headers["cache-control"]), /private.*no-store/);
+  const stock = listing.json().products.find((p: { id: string }) => p.id === tracked.id);
+  assert.deepEqual(stock.inventory, { available: 1, reserved: 1, sold: 1, paused: 1 });
+  assert.deepEqual(stock.sources, { internal: 1, supplier: 1 });
+  const detail = await stockRead(`/admin/products/${tracked.id}`);
+  const plans = detail.json().product.plans;
+  assert.deepEqual(plans.find((p: { id: string }) => p.id === activePlan.id).inventory, {
+    available: 1,
+    reserved: 1,
+    sold: 1,
+  });
+  assert.deepEqual(
+    plans.find((p: { id: string }) => p.id === supplierPlan.id).supplierAvailability,
+    { kind: "unconfirmed" },
+  );
+  assert(
+    !listing.body.includes("INVENTORY-PREVIEW-SECRET") &&
+      !detail.body.includes("INVENTORY-PREVIEW-SECRET"),
+  );
+  const importing = await prisma.productPlan.create({
+    data: { productId: tracked.id, label: "Concurrent import", price: 10 },
+  });
+  let unlock!: () => void;
+  let inserted!: () => void;
+  const commit = new Promise<void>((resolve) => {
+    unlock = resolve;
+  });
+  const ready = new Promise<void>((resolve) => {
+    inserted = resolve;
+  });
+  const importingUnit = prisma.$transaction(
+    async (tx) => {
+      await tx.$queryRaw`SELECT id FROM product_plans WHERE id=${importing.id} FOR UPDATE`;
+      const unit = await tx.inventoryItem.create({
+        data: {
+          productId: tracked.id,
+          planId: importing.id,
+          status: "AVAILABLE",
+          type: "LICENSE",
+          licenseKey: "CONCURRENT-INVENTORY-FIXTURE",
+        },
+      });
+      inserted();
+      await commit;
+      return unit.id;
+    },
+    { timeout: 10000 },
+  );
+  await ready;
+  const deletion = deletePlan(importing.id).then(
+    () => "deleted",
+    (err: { code?: string }) => err.code,
+  );
+  let blocked = false;
+  try {
+    for (let i = 0; i < 45 && !blocked; i++) {
+      const [state] = await prisma.$queryRaw<
+        { waiting: boolean }[]
+      >`SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND wait_event_type='Lock' AND query LIKE '%product_plans%') AS waiting`;
+      blocked = state.waiting;
+      if (!blocked) await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  } finally {
+    unlock();
+  }
+  const unitId = await importingUnit;
+  assert(blocked, "Plan deletion entered the planned concurrent lock wait");
+  assert.equal(await deletion, "CONFLICT");
+  assert.equal(
+    (await prisma.inventoryItem.findUniqueOrThrow({ where: { id: unitId } })).planId,
+    importing.id,
+  );
+  console.log("PASS: product stock summary and concurrent import protected from plan deletion");
   console.log(
     "PASS: refunded orders hide payment details and credentials; stale admin claims cannot elevate access",
   );
@@ -229,9 +381,48 @@ async function main() {
   assert.equal(stats.currency, "IRR");
   assert.equal(stats.revenueTotal, previousRevenue + 100);
   console.log("PASS: dashboard normalizes Toman revenue to Rial before summing");
-  const snapshot = await createBackup();
+  await assert.rejects(createEncryptedBackup(undefined), /public recipient is required/);
+  await assert.rejects(createEncryptedBackup("age1invalid"), /public recipient is required/);
+  const encryption = process.env.OOSTA_TEST_AGE === "1";
+  const dir = await mkdtemp(path.join(os.tmpdir(), "oosta-backup-regression-"));
   try {
-    await restoreFromFile(snapshot.file);
+    if (encryption) {
+      const identity = path.join(dir, "fixture.key");
+      const wrongIdentity = path.join(dir, "wrong.key");
+      for (const key of [identity, wrongIdentity])
+        execFileSync("age-keygen", ["-o", key], { stdio: "ignore" });
+      const recipient = execFileSync("age-keygen", ["-y", identity], { encoding: "utf8" }).trim();
+      const sealed = await createEncryptedBackup(recipient);
+      try {
+        assert.match(sealed.file, /\.sql\.gz\.age$/);
+        assert.deepEqual(await readdir(path.dirname(sealed.file)), [path.basename(sealed.file)]);
+        const bytes = await readFile(sealed.file);
+        assert.match(bytes.subarray(0, 40).toString(), /^age-encryption.org\/v1/);
+        assert.notEqual(spawnSync("age", ["-d", "-i", wrongIdentity, sealed.file]).status, 0);
+        const tampered = path.join(dir, "tampered.age");
+        bytes[bytes.length - 1] ^= 1;
+        await writeFile(tampered, bytes);
+        assert.notEqual(spawnSync("age", ["-d", "-i", identity, tampered]).status, 0);
+        const decrypted = path.join(dir, "decrypted.sql.gz");
+        execFileSync("age", ["-d", "-i", identity, "-o", decrypted, sealed.file], {
+          stdio: "ignore",
+        });
+        await prisma.order.update({ where: { id: online.id }, data: { paymentStatus: "PENDING" } });
+        await restoreFromFile(decrypted);
+      } finally {
+        await sealed.cleanup();
+      }
+      console.log(
+        "PASS: encrypted backup rejects wrong key and altered ciphertext, restores the synthetic DB",
+      );
+    } else {
+      const snapshot = await createBackup();
+      try {
+        await restoreFromFile(snapshot.file);
+      } finally {
+        await snapshot.cleanup();
+      }
+    }
     assert.equal(
       (await prisma.order.findUniqueOrThrow({ where: { id: online.id } })).paymentStatus,
       "PAID",
@@ -243,7 +434,7 @@ async function main() {
       1,
     );
   } finally {
-    await snapshot.cleanup();
+    await rm(dir, { recursive: true, force: true });
   }
   console.log("PASS: compressed backup restores transactionally and preserves fulfillment history");
 }

@@ -16,7 +16,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Page through the whole catalog (the API caps pageSize at 50) so products
   // beyond the first page still appear in the sitemap.
-  type ProductsPage = { items: { slug: string }[]; pagination: { totalPages: number } };
+  type ProductsPage = {
+    items: { slug: string; updatedAt?: string }[];
+    pagination: { totalPages: number };
+  };
   const first = await fetchJson<ProductsPage>("/products?pageSize=50&page=1", 0);
   const productSlugs = [...(first?.items ?? [])];
   const totalPages = Math.min(first?.pagination?.totalPages ?? 1, 50); // hard cap, safety
@@ -25,9 +28,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     productSlugs.push(...(next?.items ?? []));
   }
   for (const product of productSlugs) {
+    const updatedAt = product.updatedAt ? new Date(product.updatedAt) : undefined;
     for (const locale of locales) {
       entries.push({
         url: `${site}/${locale}/products/${product.slug}`,
+        lastModified: updatedAt && Number.isFinite(updatedAt.getTime()) ? updatedAt : undefined,
         changeFrequency: "weekly",
         priority: 0.7,
       });

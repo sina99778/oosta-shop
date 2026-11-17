@@ -12,6 +12,7 @@ Object.assign(process.env, {
   TELEGRAM_ADMIN_ID: "12345",
   TELEGRAM_BOT_TOKEN: "12345:SYNTHETIC",
   BACKUP_INTERVAL_HOURS: "0",
+  BACKUP_AGE_RECIPIENT: "",
   OPENROUTER_API_KEY: "synthetic-not-a-key",
 });
 require("tsx/cjs");
@@ -83,8 +84,38 @@ async function main() {
     });
   }
   assert(!calls.some((c) => c.method === "getFile"));
-  assert(calls.some((c) => c.payload.text?.includes("Confirm within")));
-  console.log("PASS: production guards, private chat and restore confirmation");
+  assert(
+    !calls.some((c) =>
+      c.payload.reply_markup?.inline_keyboard
+        ?.flat()
+        .some((button) => button.callback_data?.startsWith("restore_confirm_")),
+    ),
+  );
+  const clicked = async (data, updateId) =>
+    bot.handleUpdate({
+      update_id: updateId,
+      callback_query: {
+        id: String(updateId),
+        chat_instance: "test",
+        from,
+        data,
+        message: { message_id: updateId, date: 1, chat: { id: 12345, type: "private" } },
+      },
+    });
+  await clicked("restore", 4);
+  assert(calls.some((c) => c.payload.text?.includes("بازیابی از تلگرام غیرفعال است")));
+  await clicked("restore_confirm_abcdefabcdefabcdefabcdef", 6);
+  assert(
+    calls.some(
+      (c) =>
+        c.method === "answerCallbackQuery" &&
+        c.payload.text?.includes("بازیابی از تلگرام غیرفعال است"),
+    ),
+  );
+  await clicked("backup", 5);
+  assert(calls.some((c) => c.payload.text?.includes("کلید عمومی بکاپ تنظیم نشده")));
+  assert(!calls.some((c) => ["getFile", "sendDocument"].includes(c.method)));
+  console.log("PASS: production guards, private chat and backup fails closed without encryption");
   const settings = new Map();
   prisma.siteSetting.findMany = async () => [...settings].map(([key, value]) => ({ key, value }));
   prisma.siteSetting.upsert = async ({ create }) => {
@@ -137,11 +168,24 @@ async function main() {
   const { inject } = require("light-my-request");
   const { createApp } = require("../apps/api/src/app.ts");
   const app = createApp();
-  for (const url of ["/auth/me", "/orders", "/tickets", "/admin/stats"]) {
+  for (const url of ["/auth/me", "/orders", "/tickets", "/admin/stats", "/admin/suppliers"]) {
     const response = await inject(app, { method: "GET", url, remoteAddress: "203.0.113.45" });
     assert.equal(response.statusCode, 401);
     assert.match(response.headers["cache-control"] || "", /no-store/, `${url} must not be cached`);
   }
+  const malformedQuote = await inject(app, {
+    method: "POST",
+    url: "/supplier-quotes",
+    remoteAddress: "203.0.113.46",
+    headers: { "content-type": "application/json" },
+    payload: "{",
+  });
+  assert.equal(malformedQuote.statusCode, 400);
+  assert.match(
+    malformedQuote.headers["cache-control"] || "",
+    /no-store/,
+    "Private quote parser errors must never be cached",
+  );
   console.log("PASS: authentication, account, order and admin responses are never cached");
   const failure = new Error("Synthetic API key database outage");
   const originalLookup = prisma.apiKey.findUnique;

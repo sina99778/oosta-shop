@@ -1,6 +1,7 @@
 // Zod schemas for admin (role-guarded) endpoints.
 
 import { z } from "zod";
+import { mappingSchema, variantSchema } from "../suppliers/variant";
 
 const slug = z
   .string()
@@ -54,6 +55,9 @@ export const createPlanSchema = z.object({
     .optional(),
   currency: z.enum(["IRR", "IRT"]).optional(),
   isActive: z.boolean().optional(),
+  source: z.enum(["INTERNAL", "SUPPLIER"]).optional(),
+  variant: variantSchema.nullable().optional(),
+  supplierMappings: z.array(mappingSchema).max(20).optional(),
 });
 export const updatePlanSchema = createPlanSchema
   .partial()
@@ -83,6 +87,8 @@ export const inventoryQuerySchema = z.object({
 });
 
 export const ordersQuerySchema = z.object({
+  q: z.string().trim().toLowerCase().transform((q) => q.replace(/^#/, ""))
+    .pipe(z.string().regex(/^[a-z0-9]{8,100}$/)).optional(),
   status: z
     .enum([
       "PENDING",
@@ -101,6 +107,7 @@ export const ordersQuerySchema = z.object({
 
 // Card-to-card receipts (review queue + full history).
 export const receiptsQuerySchema = z.object({
+  orderId: z.string().regex(/^[a-z0-9]{1,100}$/).optional(),
   status: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(50),

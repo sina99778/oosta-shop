@@ -1,0 +1,634 @@
+{
+  "categories": {
+    "ai": [
+      "ai-tools",
+      "هوش مصنوعی",
+      "AI tools"
+    ],
+    "creative": [
+      "design-and-media",
+      "طراحی و تولید محتوا",
+      "Design & media"
+    ],
+    "learning": [
+      "learning",
+      "آموزش و زبان",
+      "Learning"
+    ],
+    "entertainment": [
+      "entertainment",
+      "سرگرمی و رسانه",
+      "Entertainment"
+    ],
+    "office": [
+      "office-and-productivity",
+      "کار و بهره‌وری",
+      "Productivity"
+    ],
+    "development": [
+      "developer-tools",
+      "توسعه و اتوماسیون",
+      "Developer tools"
+    ],
+    "gaming": [
+      "gaming-and-connectivity",
+      "گیمینگ و اتصال",
+      "Gaming & connectivity"
+    ],
+    "security": [
+      "digital-security",
+      "امنیت و حریم خصوصی",
+      "Security"
+    ]
+  },
+  "families": [
+    {
+      "category": "ai",
+      "slug": "chatgpt",
+      "name": "ChatGPT",
+      "pattern": "chat\\s*gpt|\\bgpt (?:plus|pro|business)\\b"
+    },
+    {
+      "category": "ai",
+      "slug": "gemini",
+      "name": "Gemini Pro",
+      "pattern": "gemini\\s*pro|google ai pro"
+    },
+    {
+      "category": "ai",
+      "slug": "claude",
+      "name": "Claude",
+      "pattern": "\\bclaude\\b"
+    },
+    {
+      "category": "ai",
+      "slug": "grok",
+      "name": "Grok",
+      "pattern": "\\bgrok\\b"
+    },
+    {
+      "category": "ai",
+      "slug": "perplexity",
+      "name": "Perplexity",
+      "pattern": "perplexity"
+    },
+    {
+      "category": "ai",
+      "slug": "minimax",
+      "name": "MiniMax",
+      "pattern": "minimax"
+    },
+    {
+      "category": "ai",
+      "slug": "deepseek",
+      "name": "DeepSeek",
+      "pattern": "deepseek"
+    },
+    {
+      "category": "ai",
+      "slug": "qwen",
+      "name": "Qwen",
+      "pattern": "\\bqwen\\b"
+    },
+    {
+      "category": "ai",
+      "slug": "muse-ai",
+      "name": "Muse AI",
+      "pattern": "\\bmuse\\b"
+    },
+    {
+      "category": "ai",
+      "slug": "fin",
+      "name": "Fin",
+      "pattern": "\\bfin (?:ia|ai|advanced)\\b"
+    },
+    {
+      "category": "creative",
+      "slug": "capcut",
+      "name": "CapCut",
+      "pattern": "cap\\s*cut"
+    },
+    {
+      "category": "creative",
+      "slug": "canva",
+      "name": "Canva",
+      "pattern": "\\bcanva\\b"
+    },
+    {
+      "category": "creative",
+      "slug": "adobe-express",
+      "name": "Adobe Express",
+      "pattern": "adobe express"
+    },
+    {
+      "category": "creative",
+      "slug": "adobe-creative-cloud",
+      "name": "Adobe Creative Cloud",
+      "pattern": "adobe (?:all apps?|full apps?|creative cloud)"
+    },
+    {
+      "category": "creative",
+      "slug": "figma",
+      "name": "Figma",
+      "pattern": "figma"
+    },
+    {
+      "category": "creative",
+      "slug": "elevenlabs",
+      "name": "ElevenLabs",
+      "pattern": "eleven\\s*(?:s\\s*)?labs"
+    },
+    {
+      "category": "creative",
+      "slug": "kling",
+      "name": "Kling AI",
+      "pattern": "kling|king stand"
+    },
+    {
+      "category": "creative",
+      "slug": "veo",
+      "name": "Veo",
+      "pattern": "\\bveo\\s*[34]\\b|\\bveo[34]\\b|pre - slot ultra"
+    },
+    {
+      "category": "creative",
+      "slug": "runway",
+      "name": "Runway",
+      "pattern": "runway"
+    },
+    {
+      "category": "creative",
+      "slug": "freepik",
+      "name": "Freepik",
+      "pattern": "freepik|magnific"
+    },
+    {
+      "category": "creative",
+      "slug": "openart",
+      "name": "OpenArt",
+      "pattern": "open\\s*art"
+    },
+    {
+      "category": "creative",
+      "slug": "dreamina",
+      "name": "Dreamina",
+      "pattern": "dreamina"
+    },
+    {
+      "category": "creative",
+      "slug": "meitu",
+      "name": "Meitu",
+      "pattern": "meitu"
+    },
+    {
+      "category": "creative",
+      "slug": "xingtu",
+      "name": "Xingtu",
+      "pattern": "xingtu"
+    },
+    {
+      "category": "creative",
+      "slug": "picsart",
+      "name": "Picsart",
+      "pattern": "picsart"
+    },
+    {
+      "category": "creative",
+      "slug": "higgsfield",
+      "name": "Higgsfield",
+      "pattern": "higgsfield"
+    },
+    {
+      "category": "creative",
+      "slug": "heygen",
+      "name": "HeyGen",
+      "pattern": "heygen"
+    },
+    {
+      "category": "creative",
+      "slug": "suno",
+      "name": "Suno",
+      "pattern": "\\bsuno\\b"
+    },
+    {
+      "category": "creative",
+      "slug": "autodesk",
+      "name": "Autodesk",
+      "pattern": "autodesk"
+    },
+    {
+      "category": "creative",
+      "slug": "framer",
+      "name": "Framer",
+      "pattern": "\\bframer\\b"
+    },
+    {
+      "category": "creative",
+      "slug": "mobbin",
+      "name": "Mobbin",
+      "pattern": "\\bmobbin\\b"
+    },
+    {
+      "category": "creative",
+      "slug": "supercut",
+      "name": "Supercut",
+      "pattern": "supercut"
+    },
+    {
+      "category": "creative",
+      "slug": "magic-patterns",
+      "name": "Magic Patterns",
+      "pattern": "magic patterns"
+    },
+    {
+      "category": "creative",
+      "slug": "gamma",
+      "name": "Gamma",
+      "pattern": "\\bgamma\\b"
+    },
+    {
+      "category": "learning",
+      "slug": "duolingo",
+      "name": "Duolingo",
+      "pattern": "duolingo"
+    },
+    {
+      "category": "learning",
+      "slug": "coursera",
+      "name": "Coursera",
+      "pattern": "coursera"
+    },
+    {
+      "category": "learning",
+      "slug": "udemy",
+      "name": "Udemy",
+      "pattern": "udemy"
+    },
+    {
+      "category": "learning",
+      "slug": "quizlet",
+      "name": "Quizlet",
+      "pattern": "quizlet"
+    },
+    {
+      "category": "learning",
+      "slug": "wordwall",
+      "name": "Wordwall",
+      "pattern": "wordwall"
+    },
+    {
+      "category": "learning",
+      "slug": "memrise",
+      "name": "Memrise",
+      "pattern": "memrise"
+    },
+    {
+      "category": "learning",
+      "slug": "scribd",
+      "name": "Scribd",
+      "pattern": "scribd"
+    },
+    {
+      "category": "learning",
+      "slug": "elevenreader",
+      "name": "ElevenReader",
+      "pattern": "eleven\\s*reader"
+    },
+    {
+      "category": "learning",
+      "slug": "readwise",
+      "name": "Readwise",
+      "pattern": "readwise"
+    },
+    {
+      "category": "learning",
+      "slug": "waking-up",
+      "name": "Waking Up",
+      "pattern": "waking up"
+    },
+    {
+      "category": "entertainment",
+      "slug": "spotify",
+      "name": "Spotify",
+      "pattern": "spotify"
+    },
+    {
+      "category": "entertainment",
+      "slug": "apple-music",
+      "name": "Apple Music",
+      "pattern": "apple music"
+    },
+    {
+      "category": "entertainment",
+      "slug": "crunchyroll",
+      "name": "Crunchyroll",
+      "pattern": "crunchyroll|ᴄʀᴜɴᴄʜʏʀᴏʟʟ"
+    },
+    {
+      "category": "entertainment",
+      "slug": "max",
+      "name": "HBO Max",
+      "pattern": "hbo\\s*max"
+    },
+    {
+      "category": "entertainment",
+      "slug": "prime-video",
+      "name": "Prime Video",
+      "pattern": "prime video"
+    },
+    {
+      "category": "entertainment",
+      "slug": "netflix",
+      "name": "Netflix",
+      "pattern": "netflix"
+    },
+    {
+      "category": "entertainment",
+      "slug": "youtube-premium",
+      "name": "YouTube Premium",
+      "pattern": "youtube premium"
+    },
+    {
+      "category": "entertainment",
+      "slug": "shahid",
+      "name": "Shahid",
+      "pattern": "shahid"
+    },
+    {
+      "category": "entertainment",
+      "slug": "iqiyi",
+      "name": "iQIYI",
+      "pattern": "iqiyi"
+    },
+    {
+      "category": "entertainment",
+      "slug": "vieon",
+      "name": "VieON",
+      "pattern": "vieon"
+    },
+    {
+      "category": "entertainment",
+      "slug": "locket",
+      "name": "Locket Gold",
+      "pattern": "locket"
+    },
+    {
+      "category": "office",
+      "slug": "microsoft-365",
+      "name": "Microsoft 365",
+      "pattern": "(?:office|microsoft|ms)\\s*365"
+    },
+    {
+      "category": "office",
+      "slug": "microsoft-office",
+      "name": "Microsoft Office",
+      "pattern": "\\boffice\\s*20(?:16|19|21|24)"
+    },
+    {
+      "category": "office",
+      "slug": "windows",
+      "name": "Windows",
+      "pattern": "\\bwindows\\s*(?:10|11)"
+    },
+    {
+      "category": "office",
+      "slug": "copilot",
+      "name": "Microsoft Copilot",
+      "pattern": "microsoft copilot"
+    },
+    {
+      "category": "office",
+      "slug": "notion",
+      "name": "Notion",
+      "pattern": "\\bnotion\\b"
+    },
+    {
+      "category": "office",
+      "slug": "ilovepdf",
+      "name": "iLovePDF",
+      "pattern": "ilovepdf"
+    },
+    {
+      "category": "office",
+      "slug": "zoom",
+      "name": "Zoom",
+      "pattern": "\\bzoom\\b"
+    },
+    {
+      "category": "office",
+      "slug": "linkedin",
+      "name": "LinkedIn",
+      "pattern": "linke?d[iı]n"
+    },
+    {
+      "category": "office",
+      "slug": "granola",
+      "name": "Granola",
+      "pattern": "\\bgranola\\b"
+    },
+    {
+      "category": "office",
+      "slug": "grammarly",
+      "name": "Grammarly",
+      "pattern": "grammarly"
+    },
+    {
+      "category": "office",
+      "slug": "wispr-flow",
+      "name": "Wispr Flow",
+      "pattern": "wispr flow"
+    },
+    {
+      "category": "office",
+      "slug": "icloud",
+      "name": "iCloud",
+      "pattern": "icloud"
+    },
+    {
+      "category": "office",
+      "slug": "airtable",
+      "name": "Airtable",
+      "pattern": "airtable"
+    },
+    {
+      "category": "office",
+      "slug": "chatprd",
+      "name": "ChatPRD",
+      "pattern": "chatprd"
+    },
+    {
+      "category": "office",
+      "slug": "tradingview",
+      "name": "TradingView",
+      "pattern": "tradingview"
+    },
+    {
+      "category": "development",
+      "slug": "lovable",
+      "name": "Lovable",
+      "pattern": "\\blovable\\b"
+    },
+    {
+      "category": "development",
+      "slug": "replit",
+      "name": "Replit",
+      "pattern": "replit"
+    },
+    {
+      "category": "development",
+      "slug": "linear",
+      "name": "Linear",
+      "pattern": "\\blinear\\b"
+    },
+    {
+      "category": "development",
+      "slug": "posthog",
+      "name": "PostHog",
+      "pattern": "posthog"
+    },
+    {
+      "category": "development",
+      "slug": "warp-terminal",
+      "name": "Warp",
+      "pattern": "\\bwarp build"
+    },
+    {
+      "category": "development",
+      "slug": "n8n",
+      "name": "n8n",
+      "pattern": "\\bn8n\\b"
+    },
+    {
+      "category": "development",
+      "slug": "arize",
+      "name": "Arize",
+      "pattern": "\\barize\\b"
+    },
+    {
+      "category": "development",
+      "slug": "jam",
+      "name": "Jam",
+      "pattern": "\\bjam team"
+    },
+    {
+      "category": "development",
+      "slug": "pangram",
+      "name": "Pangram",
+      "pattern": "pangram"
+    },
+    {
+      "category": "development",
+      "slug": "jetbrains",
+      "name": "JetBrains",
+      "pattern": "jetbrains"
+    },
+    {
+      "category": "development",
+      "slug": "railway",
+      "name": "Railway",
+      "pattern": "railway"
+    },
+    {
+      "category": "development",
+      "slug": "resend",
+      "name": "Resend",
+      "pattern": "resend"
+    },
+    {
+      "category": "development",
+      "slug": "cursor",
+      "name": "Cursor",
+      "pattern": "\\bcursor\\b"
+    },
+    {
+      "category": "development",
+      "slug": "codex-api",
+      "name": "Codex API",
+      "pattern": "api.*codex|codex.*api"
+    },
+    {
+      "category": "development",
+      "slug": "youtube-automation",
+      "name": "YouTube Automation Pro",
+      "pattern": "youtube automation"
+    },
+    {
+      "category": "gaming",
+      "slug": "nord",
+      "name": "Nord · اتصال بازی",
+      "pattern": "\\bnord\\s*(?:vpn)\\b"
+    },
+    {
+      "category": "gaming",
+      "slug": "express",
+      "name": "Express · اتصال بازی",
+      "pattern": "express\\s*vpn"
+    },
+    {
+      "category": "gaming",
+      "slug": "hma",
+      "name": "HMA · اتصال بازی",
+      "pattern": "\\bhma\\b"
+    },
+    {
+      "category": "gaming",
+      "slug": "surfshark",
+      "name": "Surfshark · اتصال بازی",
+      "pattern": "surf\\s*shark"
+    },
+    {
+      "category": "gaming",
+      "slug": "proton",
+      "name": "Proton · اتصال بازی",
+      "pattern": "proton\\s*vpn"
+    },
+    {
+      "category": "gaming",
+      "slug": "warp-network",
+      "name": "Cloudflare WARP · اتصال بازی",
+      "pattern": "\\bwarp\\b(?! build)"
+    },
+    {
+      "category": "gaming",
+      "slug": "discord",
+      "name": "Discord Nitro",
+      "pattern": "discord nitro"
+    },
+    {
+      "category": "security",
+      "slug": "kaspersky",
+      "name": "Kaspersky",
+      "pattern": "kaspersky"
+    },
+    {
+      "category": "security",
+      "slug": "avira",
+      "name": "Avira",
+      "pattern": "avira"
+    },
+    {
+      "category": "security",
+      "slug": "proton-unlimited",
+      "name": "Proton Unlimited",
+      "pattern": "proton unlimited"
+    },
+    {
+      "category": "development",
+      "slug": "antigravity",
+      "name": "Google Antigravity",
+      "pattern": "antigravity"
+    },
+    {
+      "category": "development",
+      "slug": "github-education",
+      "name": "GitHub Education",
+      "pattern": "github student"
+    },
+    {
+      "category": "office",
+      "slug": "stripe-atlas",
+      "name": "Stripe Atlas",
+      "pattern": "stripe atlas"
+    }
+  ]
+}
