@@ -12,6 +12,7 @@ const run = promisify(execFile);
   // Mirrors deploy/nginx/oosta-content-indexing.conf; `leak` marks a private page as indexable.
   let contentIndexed = false;
   let leak = null;
+  let ownershipFile = true;
   const content = /^\/(?:fa|en)(?:\/products|\/blog(?:\/[a-z0-9][a-z0-9-]{0,119})?)?$/;
   const server = createServer((req, res) => {
     const asset = req.url.startsWith("/_next/");
@@ -50,7 +51,9 @@ const run = promisify(execFile);
         ? '<script src="/_next/static/synthetic.js"></script>'
         : req.url === "/fa/blog"
           ? '<a href="/fa/blog/synthetic-post">post</a>'
-          : "{}",
+          : req.url === "/googlecc8e43ab596ea33a.html" && ownershipFile
+            ? "google-site-verification: googlecc8e43ab596ea33a.html"
+            : "{}",
     );
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -76,6 +79,12 @@ const run = promisify(execFile);
       /\/fa\/dashboard robots/,
     );
     leak = null;
+    ownershipFile = false;
+    await assert.rejects(
+      run(process.execPath, [...args, "--content-indexed"]),
+      /googlecc8e43ab596ea33a\.html content/,
+    );
+    ownershipFile = true;
     contentIndexed = false;
     privateCache = "public, max-age=60";
     await assert.rejects(run(process.execPath, args), /no-store/);

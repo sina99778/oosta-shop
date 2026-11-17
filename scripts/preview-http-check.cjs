@@ -41,6 +41,14 @@ async function main() {
       "/api/products",
     ])
       assert.match(robots(await check(path, 200)), /noindex/, `${path} robots`);
+    // Search Console re-checks this file; removing it drops the verified property
+    // (oosta-search-console.conf).
+    const ownership = "/googlecc8e43ab596ea33a.html";
+    assert.match(
+      await (await check(ownership, 200)).text(),
+      /^google-site-verification: googlecc8e43ab596ea33a\.html$/,
+      `${ownership} content`,
+    );
   }
   const html = await home.text();
   const asset = html.match(/(?:src|href)="(\/_next\/[^"]+)"/);
