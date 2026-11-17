@@ -163,7 +163,8 @@
       "FAILED": "Failed",
       "REJECTED": "Rejected",
       "REFUNDED": "Refunded",
-      "EXPIRED": "Expired"
+      "EXPIRED": "Expired",
+      "NEEDS_REFUND": "Awaiting refund"
     }
   },
   "blog": {

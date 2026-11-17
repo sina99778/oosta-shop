@@ -13,6 +13,11 @@ import { requireRole } from "../src/middleware/auth";
 import { AppError } from "../src/utils/httpError";
 import { signAccessToken } from "../src/lib/jwt";
 import { getPaymentProviderForOrder } from "../src/modules/payments/provider";
+import {
+  approveReceipt,
+  rejectReceipt,
+  restockRevokedItem,
+} from "../src/modules/admin/admin.service";
 
 const app = createApp();
 // Per-actor IP, reassigned at the start of each test group so their auth rate-limit
@@ -1645,11 +1650,173 @@ async function testSecurity(): Promise<void> {
   await prisma.user.deleteMany({ where: { id: { in: [userAId, userBId] } } });
 }
 
+// Money/fulfilment integrity under concurrency (double-verify, double-approve),
+// revoke-on-refund, and the NEEDS_REFUND path.
+async function testPaymentIntegrity(): Promise<void> {
+  ip = "10.10.0.40";
+  const suffix = Math.floor(Math.random() * 1e9)
+    .toString()
+    .padStart(9, "0");
+  const signup = await post("/auth/signup", {
+    name: "Integrity Tester",
+    email: `integ_${suffix}@example.com`,
+    password: "Integ@12345",
+  });
+  const token = String(body(signup).token);
+  const userId = String(obj(body(signup).user).id);
+
+  const category = await prisma.category.findUnique({ where: { slug: "ai-accounts" } });
+  const product = await prisma.product.create({
+    data: {
+      name: `Integrity ${suffix}`,
+      slug: `integrity-${suffix}`,
+      description: "Concurrency test product.",
+      type: "ACCOUNT",
+      categoryId: category!.id,
+    },
+  });
+  const plan = await prisma.productPlan.create({
+    data: { productId: product.id, label: "P", durationDays: 30, price: 1000 },
+  });
+  const emptyPlan = await prisma.productPlan.create({
+    data: { productId: product.id, label: "E", durationDays: 30, price: 1000 },
+  });
+  await prisma.inventoryItem.createMany({
+    data: Array.from({ length: 6 }, (_, i) => ({
+      productId: product.id,
+      planId: plan.id,
+      type: "ACCOUNT" as const,
+      accountEmail: `integ_${i}@smoke.local`,
+      accountPassword: `pw_${i}`,
+    })),
+  });
+  const count = (status: "SOLD" | "AVAILABLE" | "REVOKED") =>
+    prisma.inventoryItem.count({ where: { planId: plan.id, status } });
+
+  // 1) Parallel /payments/verify for ONE order must deliver exactly one unit.
+  const created = await post("/orders", { items: [{ planId: plan.id, quantity: 1 }] }, token);
+  const authority = String(obj(body(created).payment).authority);
+  const orderId = String(obj(body(created).order).id);
+  const results = await Promise.all(
+    Array.from({ length: 6 }, () => post("/payments/verify", { authority, status: "OK" })),
+  );
+  const delivered = await prisma.inventoryItem.count({
+    where: { orderItem: { orderId } },
+  });
+  record(
+    "parallel verify x6 -> all paid, exactly ONE unit delivered",
+    results.every((r) => r.statusCode === 200 && body(r).status === "paid") && delivered === 1,
+    `delivered=${delivered} codes=${results.map((r) => r.statusCode).join(",")}`,
+  );
+
+  // A late "cancel" report must not overwrite a PAID order.
+  await post("/payments/verify", { authority, status: "NOK" });
+  const stillPaid = await prisma.order.findUnique({ where: { id: orderId } });
+  record("NOK after PAID keeps order PAID", stillPaid?.paymentStatus === "PAID", "");
+
+  // 2) Parallel receipt approvals deliver once.
+  const c2c = await prisma.order.create({
+    data: {
+      userId,
+      totalAmount: 1000,
+      currency: "IRR",
+      paymentStatus: "PENDING_REVIEW",
+      paymentProvider: "CARD_TO_CARD",
+      items: {
+        create: [
+          { productId: product.id, planId: plan.id, quantity: 1, unitPrice: 1000, lineTotal: 1000 },
+        ],
+      },
+    },
+  });
+  const receipt = await prisma.receipt.create({
+    data: { orderId: c2c.id, imageData: new Uint8Array([1]), mimeType: "image/png" },
+  });
+  const soldBefore = await count("SOLD");
+  const approvals = await Promise.allSettled(
+    Array.from({ length: 4 }, () => approveReceipt(receipt.id, {})),
+  );
+  const soldAfter = await count("SOLD");
+  record(
+    "parallel approve x4 -> one success, one unit sold",
+    approvals.filter((a) => a.status === "fulfilled").length === 1 && soldAfter - soldBefore === 1,
+    `ok=${approvals.filter((a) => a.status === "fulfilled").length} sold+=${soldAfter - soldBefore}`,
+  );
+
+  // 3) Rejecting the approved receipt revokes (never re-sells) the seen credentials.
+  const availBefore = await count("AVAILABLE");
+  await rejectReceipt(receipt.id, {});
+  const refunded = await prisma.order.findUnique({ where: { id: c2c.id } });
+  const revoked = await prisma.inventoryItem.findMany({
+    where: { orderItem: { orderId: c2c.id } },
+  });
+  record(
+    "reject approved receipt -> REFUNDED + units REVOKED, not AVAILABLE",
+    refunded?.paymentStatus === "REFUNDED" &&
+      revoked.length === 1 &&
+      revoked[0].status === "REVOKED" &&
+      (await count("AVAILABLE")) === availBefore,
+    `order=${refunded?.paymentStatus} units=${revoked.map((r) => r.status).join(",")}`,
+  );
+  const sameSecret = await restockRevokedItem(revoked[0].id, {
+    accountPassword: revoked[0].accountPassword ?? undefined,
+  }).catch((e: unknown) => e);
+  record(
+    "restock with the SAME password -> refused",
+    sameSecret instanceof AppError && sameSecret.code === "SECRET_NOT_ROTATED",
+    String(sameSecret),
+  );
+  await restockRevokedItem(revoked[0].id, { accountPassword: "rotated-pw" });
+  const restocked = await prisma.inventoryItem.findUnique({ where: { id: revoked[0].id } });
+  record(
+    "restock with a rotated password -> AVAILABLE, unlinked",
+    restocked?.status === "AVAILABLE" && restocked.orderItemId === null,
+    `${restocked?.status}`,
+  );
+
+  // 4) Captured payment + no stock -> NEEDS_REFUND (not FAILED).
+  const oos = await prisma.order.create({
+    data: {
+      userId,
+      totalAmount: 1000,
+      currency: "IRR",
+      paymentStatus: "PENDING",
+      paymentProvider: "MANUAL",
+      paymentAuthority: `mock_oos_${suffix}`,
+      items: {
+        create: [
+          {
+            productId: product.id,
+            planId: emptyPlan.id,
+            quantity: 1,
+            unitPrice: 1000,
+            lineTotal: 1000,
+          },
+        ],
+      },
+    },
+  });
+  const oosRes = await post("/payments/verify", { authority: `mock_oos_${suffix}`, status: "OK" });
+  const oosOrder = await prisma.order.findUnique({ where: { id: oos.id } });
+  record(
+    "captured payment without stock -> 409 + NEEDS_REFUND",
+    oosRes.statusCode === 409 && oosOrder?.paymentStatus === "NEEDS_REFUND",
+    `status=${oosRes.statusCode} order=${oosOrder?.paymentStatus}`,
+  );
+
+  await prisma.order.deleteMany({ where: { userId } });
+  await prisma.inventoryItem.deleteMany({ where: { productId: product.id } });
+  await prisma.productPlan.deleteMany({ where: { productId: product.id } });
+  await prisma.product.delete({ where: { id: product.id } });
+  await prisma.user.delete({ where: { id: userId } });
+}
+
 async function main(): Promise<void> {
   await testFoundation();
   await testCatalog();
   await testAuth();
   await testOrders();
+  await testPaymentIntegrity();
   await testAdmin();
   await testCardToCard();
   await testRichness();

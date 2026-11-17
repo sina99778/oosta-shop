@@ -99,6 +99,11 @@ adminRouter.post(
   validate({ body: schemas.bulkInventorySchema }),
   ctrl.bulkInventory,
 );
+adminRouter.post(
+  "/inventory/:id/restock",
+  validate({ params: schemas.idParamSchema, body: schemas.restockInventorySchema }),
+  ctrl.restockInventory,
+);
 adminRouter.get(
   "/inventory",
   validate({ query: schemas.inventoryQuerySchema }),

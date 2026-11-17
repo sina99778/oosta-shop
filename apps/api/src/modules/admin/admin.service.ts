@@ -17,6 +17,7 @@ import type {
   InventoryQuery,
   OrdersQuery,
   ReceiptsQuery,
+  RestockInventoryInput,
   ReviewReceiptInput,
   ReviewsQuery,
   SeoGenerateInput,
@@ -553,11 +554,21 @@ export async function approveReceipt(id: string, input: ReviewReceiptInput) {
   if (receipt.order.paymentStatus === "PAID") {
     throw new AppError(409, "ALREADY_PAID", "This order is already paid and delivered");
   }
-  await deliverOrder(receipt.orderId, `card:${receipt.id}`);
-  await prisma.receipt.update({
-    where: { id },
-    data: { status: "APPROVED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
+  // The receipt is marked APPROVED inside the delivery transaction (which holds
+  // the order row lock), and only while it is still PENDING — so a double-click
+  // or two admins approving at once can never deliver twice.
+  const delivered = await deliverOrder(receipt.orderId, `card:${receipt.id}`, async (tx) => {
+    const marked = await tx.receipt.updateMany({
+      where: { id, status: "PENDING" },
+      data: { status: "APPROVED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
+    });
+    if (marked.count === 0) {
+      throw new AppError(409, "ALREADY_REVIEWED", "This receipt was already reviewed");
+    }
   });
+  if (!delivered) {
+    throw new AppError(409, "ALREADY_PAID", "This order is already paid and delivered");
+  }
   // Card-to-card sales consume inventory too — warn the admin when a plan runs low.
   void lowStockWarning(receipt.orderId)
     .then((warning) => (warning ? notifyAdmin(warning) : undefined))
@@ -572,12 +583,22 @@ export async function approveReceipt(id: string, input: ReviewReceiptInput) {
 //    receipt REJECTED; leave the order PAID and its inventory untouched.
 //  - the order is not yet paid: normal reject — move the order to REJECTED.
 export async function rejectReceipt(id: string, input: ReviewReceiptInput) {
-  const receipt = await loadReceiptForReview(id);
-  const undo = receipt.status === "APPROVED" && receipt.order.paymentStatus === "PAID";
-  const orderAlreadyPaidElsewhere =
-    receipt.status !== "APPROVED" && receipt.order.paymentStatus === "PAID";
-
   await prisma.$transaction(async (tx) => {
+    // Lock the order first so a concurrent approve/reject sees a consistent state.
+    const current = await tx.receipt.findUnique({ where: { id }, select: { orderId: true } });
+    if (!current) throw new AppError(404, "NOT_FOUND", "Receipt not found");
+    await tx.$queryRaw`SELECT id FROM orders WHERE id = ${current.orderId} FOR UPDATE`;
+    const receipt = await tx.receipt.findUniqueOrThrow({
+      where: { id },
+      include: { order: { select: { paymentStatus: true } } },
+    });
+    if (receipt.status === "REJECTED") {
+      throw new AppError(409, "ALREADY_REVIEWED", "This receipt was already rejected");
+    }
+    const undo = receipt.status === "APPROVED" && receipt.order.paymentStatus === "PAID";
+    const orderAlreadyPaidElsewhere =
+      receipt.status !== "APPROVED" && receipt.order.paymentStatus === "PAID";
+
     await tx.receipt.update({
       where: { id },
       data: { status: "REJECTED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
@@ -592,20 +613,51 @@ export async function rejectReceipt(id: string, input: ReviewReceiptInput) {
     }
 
     if (undo) {
-      const orderItems = await tx.orderItem.findMany({
-        where: { orderId: receipt.orderId },
-        select: { id: true },
-      });
-      const orderItemIds = orderItems.map((oi) => oi.id);
-
+      // The buyer has ALREADY SEEN these credentials, so they must never go back
+      // on sale as-is. They become REVOKED (still linked to the order for the
+      // audit trail) until the admin rotates the secret and restocks them.
       await tx.inventoryItem.updateMany({
-        where: { orderItemId: { in: orderItemIds } },
-        data: { status: "AVAILABLE", orderItemId: null, soldAt: null },
+        where: { orderItem: { orderId: receipt.orderId }, status: "SOLD" },
+        data: { status: "REVOKED" },
       });
     }
   });
 
   return serializeReceipt(await loadReceiptForReview(id));
+}
+
+// Put a REVOKED unit back on sale. The secret the buyer saw must be replaced:
+// ACCOUNT needs a new password, LICENSE/GIFTCARD a new code.
+export async function restockRevokedItem(id: string, input: RestockInventoryInput) {
+  const item = await prisma.inventoryItem.findUnique({ where: { id } });
+  if (!item) throw new AppError(404, "NOT_FOUND", "Inventory item not found");
+  if (item.status !== "REVOKED") {
+    throw new AppError(409, "NOT_REVOKED", "Only REVOKED inventory can be restocked");
+  }
+  const data: Prisma.InventoryItemUpdateInput = {
+    status: "AVAILABLE",
+    orderItem: { disconnect: true },
+    soldAt: null,
+  };
+  if (item.type === "ACCOUNT") {
+    if (!input.accountPassword || input.accountPassword === item.accountPassword) {
+      throw new AppError(400, "SECRET_NOT_ROTATED", "Set a NEW account password before restocking");
+    }
+    data.accountPassword = input.accountPassword;
+    if (input.accountEmail) data.accountEmail = input.accountEmail;
+  } else if (item.type === "LICENSE") {
+    if (!input.licenseKey || input.licenseKey === item.licenseKey) {
+      throw new AppError(400, "SECRET_NOT_ROTATED", "Set a NEW license key before restocking");
+    }
+    data.licenseKey = input.licenseKey;
+  } else {
+    if (!input.giftCardCode || input.giftCardCode === item.giftCardCode) {
+      throw new AppError(400, "SECRET_NOT_ROTATED", "Set a NEW gift card code before restocking");
+    }
+    data.giftCardCode = input.giftCardCode;
+  }
+  await prisma.inventoryItem.update({ where: { id }, data });
+  return { id, status: "AVAILABLE" as const };
 }
 
 // ---------------- Product gallery images ----------------

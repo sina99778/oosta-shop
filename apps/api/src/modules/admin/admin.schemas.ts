@@ -72,17 +72,34 @@ export const bulkInventorySchema = z.object({
     .max(1000),
 });
 
+// Restock a REVOKED unit with a rotated secret (see restockRevokedItem).
+export const restockInventorySchema = z.object({
+  accountEmail: z.string().trim().min(1).optional(),
+  accountPassword: z.string().trim().min(1).optional(),
+  licenseKey: z.string().trim().min(1).optional(),
+  giftCardCode: z.string().trim().min(1).optional(),
+});
+
 export const inventoryQuerySchema = z.object({
   productId: z.string().optional(),
   planId: z.string().optional(),
-  status: z.enum(["AVAILABLE", "RESERVED", "SOLD"]).optional(),
+  status: z.enum(["AVAILABLE", "RESERVED", "SOLD", "REVOKED"]).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(50),
 });
 
 export const ordersQuerySchema = z.object({
   status: z
-    .enum(["PENDING", "PENDING_REVIEW", "PAID", "FAILED", "REJECTED", "REFUNDED", "EXPIRED"])
+    .enum([
+      "PENDING",
+      "PENDING_REVIEW",
+      "PAID",
+      "FAILED",
+      "REJECTED",
+      "REFUNDED",
+      "EXPIRED",
+      "NEEDS_REFUND",
+    ])
     .optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(50),
@@ -134,6 +151,7 @@ export const idParamSchema = z.object({ id: z.string().min(1) });
 export const productIdParamSchema = z.object({ productId: z.string().min(1) });
 export const imageIdParamSchema = z.object({ imageId: z.string().min(1) });
 
+export type RestockInventoryInput = z.infer<typeof restockInventorySchema>;
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;
 export type CreateProductInput = z.infer<typeof createProductSchema>;

@@ -280,6 +280,7 @@ async function ordersMessage(): Promise<string> {
     REJECTED: "🚫",
     REFUNDED: "↩️",
     EXPIRED: "⌛",
+    NEEDS_REFUND: "🚨",
   };
   const lines = orders.map((order) => {
     const who = order.user.email ?? order.user.phone ?? "ناشناس";

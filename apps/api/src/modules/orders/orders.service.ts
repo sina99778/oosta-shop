@@ -221,14 +221,32 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
   };
 }
 
-export async function deliverOrder(orderId: string, refId: string | null): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
-    if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
-    if (order.paymentStatus === "PAID") return; // idempotent
+type Tx = Prisma.TransactionClient;
 
-    for (const item of order.items) {
-      // Lock and claim available units; SKIP LOCKED makes concurrent claims race-safe.
+// Deliver a paid order: claim one inventory unit per quantity and mark it PAID,
+// all in one transaction. Returns true when THIS call delivered the order and
+// false when it was already PAID (idempotent no-op).
+//
+// The order row is locked with SELECT ... FOR UPDATE before its status is read.
+// Without that lock two concurrent calls (parallel /payments/verify requests, or
+// a double-clicked receipt approval) both saw PENDING, SKIP LOCKED handed each a
+// DIFFERENT set of units, and one payment received N times the credentials.
+// `onDelivered` runs inside the same transaction (e.g. to mark the receipt).
+export async function deliverOrder(
+  orderId: string,
+  refId: string | null,
+  onDelivered?: (tx: Tx) => Promise<void>,
+): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<{ paymentStatus: string }[]>`
+      SELECT "paymentStatus" FROM orders WHERE id = ${orderId} FOR UPDATE`;
+    if (locked.length === 0) throw new AppError(404, "NOT_FOUND", "Order not found");
+    if (locked[0].paymentStatus === "PAID") return false; // idempotent
+
+    const items = await tx.orderItem.findMany({ where: { orderId } });
+    for (const item of items) {
+      // Claim available units; SKIP LOCKED keeps different orders from blocking
+      // each other while never handing the same unit to two orders.
       const rows = await tx.$queryRaw<{ id: string }[]>`
         SELECT id FROM inventory_items
         WHERE "planId" = ${item.planId} AND status = 'AVAILABLE'
@@ -248,8 +266,14 @@ export async function deliverOrder(orderId: string, refId: string | null): Promi
       where: { id: orderId },
       data: { paymentStatus: "PAID", paidAt: new Date(), paymentRefId: refId },
     });
+    if (onDelivered) await onDelivered(tx);
+    return true;
   });
 }
+
+// Statuses a gateway callback may still move an order out of. Anything else
+// (PAID, NEEDS_REFUND, REFUNDED, ...) is final as far as the callback goes.
+const OPEN_ONLINE_STATUSES = ["PENDING", "FAILED", "EXPIRED"] as const;
 
 export async function verifyAndDeliver(authority: string, status: string) {
   const order = await prisma.order.findUnique({ where: { paymentAuthority: authority } });
@@ -261,9 +285,26 @@ export async function verifyAndDeliver(authority: string, status: string) {
   if (order.paymentStatus === "PAID") {
     return { status: "paid" as const, orderId: order.id };
   }
+  if (order.paymentStatus === "NEEDS_REFUND") {
+    throw new AppError(
+      409,
+      "OUT_OF_STOCK",
+      "Payment captured but stock was exhausted; the order will be refunded",
+    );
+  }
+  if (!(OPEN_ONLINE_STATUSES as readonly string[]).includes(order.paymentStatus)) {
+    return { status: "failed" as const };
+  }
+
+  // Conditional writes: a failure report must never overwrite a concurrent success.
+  const markFailed = () =>
+    prisma.order.updateMany({
+      where: { id: order.id, paymentStatus: "PENDING" },
+      data: { paymentStatus: "FAILED" },
+    });
 
   if (status !== "OK") {
-    await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "FAILED" } });
+    await markFailed();
     return { status: "failed" as const };
   }
 
@@ -275,34 +316,39 @@ export async function verifyAndDeliver(authority: string, status: string) {
     verificationContext: order.paymentMetadata,
   });
   if (!verification.success) {
-    await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "FAILED" } });
+    await markFailed();
     return { status: "failed" as const };
   }
 
+  let delivered: boolean;
   try {
-    await deliverOrder(order.id, verification.refId);
+    delivered = await deliverOrder(order.id, verification.refId);
   } catch (error) {
     if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
-      await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "FAILED" } });
-
-      // Notify admin about stock exhaustion and manual refund requirement
-      void notifyAdmin(
-        `⚠️ *کمبود موجودی در حین پرداخت*\n\n` +
-          `سفارش *#${order.id.slice(-8)}* با مبلغ ${Number(order.totalAmount)} ${order.currency} پرداخت شد، اما موجودی محصول به اتمام رسیده بود.\n` +
-          `وضعیت سفارش به FAILED تغییر یافت. لطفا نسبت به بازگردانی وجه کاربر یا شارژ مجدد انبار اقدام نمایید.`,
-      ).catch(() => {});
-
+      // The money WAS captured, so this is not a plain failure: park it in its
+      // own status so the admin can refund it (or restock and fulfil manually).
+      const parked = await prisma.order.updateMany({
+        where: { id: order.id, paymentStatus: { in: [...OPEN_ONLINE_STATUSES] } },
+        data: { paymentStatus: "NEEDS_REFUND", paymentRefId: verification.refId },
+      });
+      if (parked.count > 0) {
+        void notifyAdmin(
+          `🚨 *کمبود موجودی در حین پرداخت*\n\n` +
+            `سفارش *#${order.id.slice(-8)}* با مبلغ ${Number(order.totalAmount)} ${order.currency} پرداخت شد (کد پیگیری: ${verification.refId ?? "—"})، اما موجودی محصول تمام شده بود.\n` +
+            `وضعیت سفارش: NEEDS_REFUND. لطفا وجه را بازگردانید یا انبار را شارژ و سفارش را دستی تحویل دهید.`,
+        ).catch(() => {});
+      }
       throw new AppError(
         409,
         "OUT_OF_STOCK",
-        "Payment captured but stock was exhausted; order failed and must be refunded",
+        "Payment captured but stock was exhausted; the order will be refunded",
       );
     }
     throw error;
   }
 
-  // Tell the admin about the sale (and any plan that just ran low) — fire & forget.
-  void notifySale(order.id).catch(() => {});
+  // Tell the admin about the sale (and any plan that just ran low) — once.
+  if (delivered) void notifySale(order.id).catch(() => {});
 
   return { status: "paid" as const, orderId: order.id };
 }

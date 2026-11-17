@@ -28,6 +28,9 @@ enum InventoryStatus {
   AVAILABLE
   RESERVED
   SOLD
+  // Credentials a buyer already saw on an order that was later reversed. Never
+  // resold as-is: the admin must rotate the secret and restock it explicitly.
+  REVOKED
 }
 
 enum PaymentStatus {
@@ -38,6 +41,9 @@ enum PaymentStatus {
   REJECTED
   REFUNDED
   EXPIRED
+  // Gateway captured the money but stock ran out during fulfillment — the buyer
+  // must be refunded (or the order fulfilled manually) by the admin.
+  NEEDS_REFUND
 }
 
 enum PaymentProvider {

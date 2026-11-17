@@ -442,7 +442,7 @@ const TOOLS: Tool[] = [
     parameters: obj({
       productId: str(),
       planId: str(),
-      status: { type: "string", enum: ["AVAILABLE", "RESERVED", "SOLD"] },
+      status: { type: "string", enum: ["AVAILABLE", "RESERVED", "SOLD", "REVOKED"] },
     }),
     run: (a) => adminSvc.listInventory(inventoryQuerySchema.parse(a)),
   },
@@ -452,7 +452,16 @@ const TOOLS: Tool[] = [
     parameters: obj({
       status: {
         type: "string",
-        enum: ["PENDING", "PENDING_REVIEW", "PAID", "FAILED", "REJECTED", "REFUNDED", "EXPIRED"],
+        enum: [
+          "PENDING",
+          "PENDING_REVIEW",
+          "PAID",
+          "FAILED",
+          "REJECTED",
+          "REFUNDED",
+          "EXPIRED",
+          "NEEDS_REFUND",
+        ],
       },
     }),
     run: (a) => adminSvc.listOrders(ordersQuerySchema.parse(a)),

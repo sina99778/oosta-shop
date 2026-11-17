@@ -11,6 +11,7 @@ import type {
   InventoryQuery,
   OrdersQuery,
   ReceiptsQuery,
+  RestockInventoryInput,
   ReviewReceiptInput,
   ReviewsQuery,
   SeoGenerateInput,
@@ -149,6 +150,11 @@ export async function deletePlan(req: Request, res: Response): Promise<void> {
 // Inventory
 export async function bulkInventory(req: Request, res: Response): Promise<void> {
   res.status(201).json(await admin.bulkImportInventory(req.body as BulkInventoryInput));
+}
+export async function restockInventory(req: Request, res: Response): Promise<void> {
+  res.json(
+    await admin.restockRevokedItem(String(req.params.id), req.body as RestockInventoryInput),
+  );
 }
 export async function listInventory(_req: Request, res: Response): Promise<void> {
   res.json(await admin.listInventory(res.locals.query as InventoryQuery));
