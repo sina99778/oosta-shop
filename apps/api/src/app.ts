@@ -22,9 +22,13 @@ import { analyticsRouter } from "./modules/analytics/analytics.routes";
 import { settingsRouter, settingsAdminRouter } from "./modules/settings/settings.routes";
 import { adminRouter } from "./modules/admin/admin.routes";
 import { maintenanceGate } from "./lib/maintenance";
+import { createSupplierCheckout, supplierCheckoutRouter } from "./modules/suppliers/checkout";
+import type { SupplierRegistry } from "./modules/suppliers/fulfillment";
 
-export function createApp() {
+export function createApp(options: { supplierAdapters?: SupplierRegistry } = {}) {
   const app = express();
+  const supplierCheckout = createSupplierCheckout(options.supplierAdapters);
+  app.locals.supplierCheckout = supplierCheckout;
 
   app.disable("x-powered-by");
   // Account data, credentials and payment results must not enter browser/proxy caches.
@@ -36,6 +40,7 @@ export function createApp() {
       "/admin",
       "/payments/verify",
       "/supplier-quotes",
+      "/supplier-checkout",
       "/internal/blu-events",
     ],
     (_req, res, next) => {
@@ -72,6 +77,7 @@ export function createApp() {
   app.use(catalogRouter);
   app.use("/orders", ordersRouter);
   app.use("/supplier-quotes", supplierQuoteRouter);
+  app.use("/supplier-checkout", supplierCheckoutRouter(supplierCheckout));
   app.use("/payments", paymentsRouter);
   app.use("/tickets", ticketsRouter);
   app.use(blogRouter); // public blog

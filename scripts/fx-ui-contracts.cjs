@@ -42,7 +42,10 @@ Module._load = function (name, ...args) {
   return load.call(this, name, ...args);
 };
 const { AdminSuppliers } = require("../apps/web/components/admin/admin-suppliers.tsx");
-const { quoteErrorMessage } = require("../apps/web/components/supplier-quote-panel.tsx");
+const {
+  quoteErrorMessage,
+  canBuyFirmQuote,
+} = require("../apps/web/components/supplier-quote-panel.tsx");
 const { ApiError } = require("../apps/web/lib/api.ts");
 Module._load = load;
 const html = renderToStaticMarkup(React.createElement(AdminSuppliers, { locale: "fa" }));
@@ -60,4 +63,23 @@ assert.equal(
   "این ترکیب فعلاً نزد تأمین‌کننده موجود نیست؛ گزینهٔ دیگری انتخاب کن.",
 );
 assert(!quoteErrorMessage(new ApiError("private upstream text", 500), false).includes("private"));
+const firm = {
+  id: "synthetic-quote",
+  planId: "fixture-plan",
+  amount: 1040000,
+  currency: "IRR",
+  kind: "FIRM",
+  checkoutEnabled: true,
+  expiresAt: new Date(200000).toISOString(),
+};
+assert(canBuyFirmQuote(firm, "fixture-plan", 100000));
+for (const changed of [
+  { kind: "INDICATIVE" },
+  { checkoutEnabled: false },
+  { planId: "another-plan" },
+  { expiresAt: new Date(0).toISOString() },
+  { amount: -1 },
+  { amount: NaN },
+])
+  assert(!canBuyFirmQuote({ ...firm, ...changed }, "fixture-plan", 100000));
 console.log("PASS: administrator sees sampled free FX timing, quota and explicit pricing source");

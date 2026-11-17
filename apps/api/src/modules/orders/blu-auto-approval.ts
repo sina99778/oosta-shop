@@ -13,7 +13,13 @@ export async function autoApproveBluReceipts(orderId?: string) {
       paymentStatus: "PENDING_REVIEW" as const,
       paidAt: null,
       user: { role: "USER" as const },
-      paymentMetadata: { path: ["stockHeld"], equals: true },
+      OR: [
+        { paymentMetadata: { path: ["stockHeld"], equals: true } },
+        {
+          paymentMetadata: { path: ["supplierCheckout"], equals: true },
+          supplierCheckoutQuote: { isNot: null },
+        },
+      ],
       bluBankClaim: { is: { reviewRequired: false } },
     },
   };

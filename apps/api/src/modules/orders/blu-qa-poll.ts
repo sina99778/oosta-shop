@@ -28,6 +28,15 @@ export async function pendingBluQaReceipts() {
         ]
       : []),
     ...(stock ? [{ paymentMetadata: { path: ["stockHeld"], equals: true } }] : []),
+    ...(env.BLU_AUTO_APPROVE_ENABLED
+      ? [
+          {
+            paymentMetadata: { path: ["supplierCheckout"], equals: true },
+            supplierCheckoutQuote: { isNot: null },
+            user: { role: "USER" as const },
+          },
+        ]
+      : []),
   ];
   if (!scope.length) return [];
 

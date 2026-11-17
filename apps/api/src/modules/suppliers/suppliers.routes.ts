@@ -6,6 +6,8 @@ import { validate } from "../../middleware/validate";
 import { supplierIds } from "./variant";
 import { pricingInput } from "./pricing";
 import * as service from "./suppliers.service";
+import type { SupplierCheckout } from "./checkout";
+import { AppError } from "../../utils/httpError";
 export const supplierAdminRouter = Router();
 supplierAdminRouter.get("/qa", async (_req, res) => res.json(await qa.qaStatus()));
 supplierAdminRouter.post(
@@ -45,6 +47,15 @@ supplierQuoteRouter.post(
       .strict(),
   }),
   async (req, res) => {
+    const checkout = req.app.locals.supplierCheckout as SupplierCheckout;
+    if (checkout?.available && req.user?.role === "USER") {
+      try {
+        res.json({ quote: await checkout.quote(req.user.id, req.body.planId) });
+        return;
+      } catch (error) {
+        if (!(error instanceof AppError && error.statusCode === 503)) throw error;
+      }
+    }
     res.json({ quote: await service.quote(req.body.planId) });
   },
 );

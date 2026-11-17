@@ -368,7 +368,7 @@ export function ProductDetailView({
             )}
             {plan?.quoteRequired && (
               <SupplierQuotePanel
-                key={plan.id + JSON.stringify(plan.variant)}
+                key={plan.id + JSON.stringify(plan.variant) + (token ?? "anonymous")}
                 plan={plan}
                 token={token}
                 locale={locale}

@@ -627,7 +627,8 @@ export async function uploadReceipt(
     const normalized = reference
       ?.trim()
       .replace(/[۰-۹٠-٩]/g, (digit) => String(digit.charCodeAt(0) % 16));
-    if (readBluInvoice(order.paymentMetadata)?.stockHeld && !/^\d{4,30}$/.test(normalized ?? ""))
+    const invoice = readBluInvoice(order.paymentMetadata);
+    if ((invoice?.stockHeld || invoice?.supplierCheckout) && !/^\d{4,30}$/.test(normalized ?? ""))
       throw new AppError(
         400,
         "BLU_REFERENCE_REQUIRED",

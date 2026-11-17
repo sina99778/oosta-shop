@@ -19,6 +19,7 @@ if (process.env.SUPPLIER_CREDENTIALS_FILE) {
 const stopCatalogRefresh = startCatalogRefresh();
 const stopFxRefresh = startFxRefresh();
 const app = createApp();
+const stopSupplierCheckout = app.locals.supplierCheckout.start();
 
 const server = app.listen(env.API_PORT, () => {
   console.log(`[oosta-api] listening on http://localhost:${env.API_PORT} (${env.NODE_ENV})`);
@@ -31,6 +32,7 @@ async function shutdown(signal: string): Promise<void> {
   console.log(`\n[oosta-api] ${signal} received — shutting down...`);
   stopCatalogRefresh();
   stopFxRefresh();
+  stopSupplierCheckout();
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await prisma.$disconnect();
   console.log("[oosta-api] shutdown complete");

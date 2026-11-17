@@ -13,7 +13,7 @@ fs.writeFileSync(
 );
 const entry = path.join(root, "apps/api/src/index.ts"),
   envModule = path.join(root, "apps/api/src/config/env.ts");
-const script = `require('tsx/cjs');const Module=require('node:module');const load=Module._load;Module._load=function(name,...args){if(name==='./modules/suppliers/fx.service')return{startFxRefresh:()=>()=>{}};if(name==='./modules/suppliers/suppliers.service'){require(${JSON.stringify(envModule)});return {startCatalogRefresh:()=>()=>{}};}if(name==='./app')return{createApp:()=>({listen:(port,fn)=>{fn();return{close:fn=>fn()};}})};if(name==='./lib/prisma')return{prisma:{$disconnect:async()=>{}}};if(name==='./bot')return{startBot:()=>{}};return load.call(this,name,...args);};require(${JSON.stringify(entry)});console.log('DOTENV_STARTUP_PASS');`;
+const script = `require('tsx/cjs');const Module=require('node:module');const load=Module._load;Module._load=function(name,...args){if(name==='./modules/suppliers/fx.service')return{startFxRefresh:()=>()=>{}};if(name==='./modules/suppliers/suppliers.service'){require(${JSON.stringify(envModule)});return {startCatalogRefresh:()=>()=>{}};}if(name==='./app')return{createApp:()=>({locals:{supplierCheckout:{start:()=>{console.log('WORKER_STARTUP_PASS');return()=>{}}}},listen:(port,fn)=>{fn();return{close:fn=>fn()};}})};if(name==='./lib/prisma')return{prisma:{$disconnect:async()=>{}}};if(name==='./bot')return{startBot:()=>{}};return load.call(this,name,...args);};require(${JSON.stringify(entry)});console.log('DOTENV_STARTUP_PASS');`;
 try {
   const env = { ...process.env, DOTENV_CONFIG_PATH: file };
   for (const key of [
@@ -32,6 +32,7 @@ try {
   });
   assert.equal(run.status, 0, "Environment must load before supplier/Prisma imports validate it");
   assert(run.stdout.includes("DOTENV_STARTUP_PASS"));
+  assert(run.stdout.includes("WORKER_STARTUP_PASS"));
   console.log(
     "PASS: startup loads synthetic dotenv before configuration validation without DB/network/listener",
   );

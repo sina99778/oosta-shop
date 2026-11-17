@@ -9,6 +9,7 @@ import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/httpError";
 import { isSafeRasterMime } from "../../middleware/upload";
 import { deliverOrderInTransaction, lowStockWarning } from "../orders/orders.service";
+import { confirmSupplierCardPayment } from "../suppliers/card-checkout";
 import { notifyAdmin } from "../../bot";
 import { ticketWriteError } from "../tickets/tickets.service";
 import { lockOrder } from "../../lib/orderLock";
@@ -603,7 +604,8 @@ type ReceiptWithOrder = Prisma.ReceiptGetPayload<{
 }>;
 
 function serializeReceipt(r: ReceiptWithOrder) {
-  const stockInvoice = readBluInvoice(r.order.paymentMetadata)?.stockHeld;
+  const bankInvoice = readBluInvoice(r.order.paymentMetadata);
+  const stockInvoice = bankInvoice?.stockHeld || bankInvoice?.supplierCheckout;
   const claim = r.order.bluBankClaim;
   return {
     id: r.id,
@@ -702,77 +704,84 @@ export async function approveReceipt(id: string, input: ReviewReceiptInput, auto
       throw new AppError(409, "ALREADY_PAID", "This order is already paid and delivered");
     }
     const invoice = readBluInvoice(receipt.order.paymentMetadata);
-    if (invoice?.stockHeld || automatic) {
-      const claim = await tx.bluBankObservation.findUnique({
-        where: { matchedOrderId: receipt.orderId },
-      });
-      if (!matchesBluReceipt(receipt.reference, claim)) {
-        throw new AppError(
-          409,
-          "BLU_MATCH_REQUIRED",
-          "This receipt requires a matching Blu deposit before approval",
-        );
-      }
-      if (automatic) {
-        const profile = await tx.user.findUnique({
-          where: { id: receipt.order.userId },
-          select: { role: true },
+    if (invoice?.supplierCheckout) {
+      await confirmSupplierCardPayment(tx, receipt, automatic);
+    } else {
+      if (invoice?.stockHeld || automatic) {
+        const claim = await tx.bluBankObservation.findUnique({
+          where: { matchedOrderId: receipt.orderId },
         });
-        const items = await tx.orderItem.findMany({
-          where: { orderId: receipt.orderId },
-          include: { plan: true, fulfilledItems: true },
-        });
-        const privatePilot =
-          invoice?.privateStockQa &&
-          invoice.qaCampaign === env.BLU_QA_INVOICE_CAMPAIGN?.toLowerCase() &&
-          receipt.order.userId === env.BLU_INVOICE_QA_USER_ID;
-        const ordinaryStock =
-          env.BLU_STOCK_CHECKOUT_ENABLED && !invoice?.qaCampaign && !invoice?.privateStockQa;
-        if (
-          !env.BLU_AUTO_APPROVE_ENABLED ||
-          !invoice?.stockHeld ||
-          (!privatePilot && !ordinaryStock) ||
-          receipt.order.paymentStatus !== "PENDING_REVIEW" ||
-          receipt.order.paidAt ||
-          profile?.role !== "USER" ||
-          invoice.iban !== env.BLU_INVOICE_IBAN ||
-          invoice.number !== env.BLU_INVOICE_CARD_NUMBER ||
-          receipt.order.bluInvoiceKey !== invoice.iban + ":" + invoice.amountIrr ||
-          !["IRR", "IRT"].includes(receipt.order.currency) ||
-          !receipt.order.totalAmount
-            .mul(receipt.order.currency === "IRT" ? 10 : 1)
-            .eq(invoice.amountIrr) ||
-          !receipt.order.totalAmount.add(invoice.discount).eq(invoice.baseAmount) ||
-          !claim ||
-          claim.invoiceKey !== receipt.order.bluInvoiceKey ||
-          claim.occurredAt < receipt.order.createdAt ||
-          claim.occurredAt.getTime() >= Date.parse(invoice.expiresAt) ||
-          Date.now() >= Date.parse(invoice.expiresAt) + 86400000 ||
-          items.length !== 1 ||
-          items[0].quantity !== 1 ||
-          items[0].plan.source !== "INTERNAL" ||
-          items[0].fulfilledItems.length !== 1 ||
-          items[0].fulfilledItems[0].status !== "RESERVED" ||
-          items[0].fulfilledItems[0].planId !== items[0].planId
-        )
-          throw new AppError(409, "BLU_AUTO_NOT_ELIGIBLE", "This receipt requires manual review");
+        if (!matchesBluReceipt(receipt.reference, claim)) {
+          throw new AppError(
+            409,
+            "BLU_MATCH_REQUIRED",
+            "This receipt requires a matching Blu deposit before approval",
+          );
+        }
+        if (automatic) {
+          const profile = await tx.user.findUnique({
+            where: { id: receipt.order.userId },
+            select: { role: true },
+          });
+          const items = await tx.orderItem.findMany({
+            where: { orderId: receipt.orderId },
+            include: { plan: true, fulfilledItems: true },
+          });
+          const privatePilot =
+            invoice?.privateStockQa &&
+            invoice.qaCampaign === env.BLU_QA_INVOICE_CAMPAIGN?.toLowerCase() &&
+            receipt.order.userId === env.BLU_INVOICE_QA_USER_ID;
+          const ordinaryStock =
+            env.BLU_STOCK_CHECKOUT_ENABLED && !invoice?.qaCampaign && !invoice?.privateStockQa;
+          if (
+            !env.BLU_AUTO_APPROVE_ENABLED ||
+            !invoice?.stockHeld ||
+            (!privatePilot && !ordinaryStock) ||
+            receipt.order.paymentStatus !== "PENDING_REVIEW" ||
+            receipt.order.paidAt ||
+            profile?.role !== "USER" ||
+            invoice.iban !== env.BLU_INVOICE_IBAN ||
+            invoice.number !== env.BLU_INVOICE_CARD_NUMBER ||
+            receipt.order.bluInvoiceKey !== invoice.iban + ":" + invoice.amountIrr ||
+            !["IRR", "IRT"].includes(receipt.order.currency) ||
+            !receipt.order.totalAmount
+              .mul(receipt.order.currency === "IRT" ? 10 : 1)
+              .eq(invoice.amountIrr) ||
+            !receipt.order.totalAmount.add(invoice.discount).eq(invoice.baseAmount) ||
+            !claim ||
+            claim.invoiceKey !== receipt.order.bluInvoiceKey ||
+            claim.occurredAt < receipt.order.createdAt ||
+            claim.occurredAt.getTime() >= Date.parse(invoice.expiresAt) ||
+            Date.now() >= Date.parse(invoice.expiresAt) + 86400000 ||
+            items.length !== 1 ||
+            items[0].quantity !== 1 ||
+            items[0].plan.source !== "INTERNAL" ||
+            items[0].fulfilledItems.length !== 1 ||
+            items[0].fulfilledItems[0].status !== "RESERVED" ||
+            items[0].fulfilledItems[0].planId !== items[0].planId
+          )
+            throw new AppError(409, "BLU_AUTO_NOT_ELIGIBLE", "This receipt requires manual review");
+        }
       }
+      await deliverOrderInTransaction(tx, receipt.orderId, `card:${receipt.id}`);
     }
-    await deliverOrderInTransaction(tx, receipt.orderId, `card:${receipt.id}`);
     await tx.receipt.update({
       where: { id },
       data: {
         status: "APPROVED",
         reviewedAt: new Date(),
         reviewerNote: automatic
-          ? "Automatic Blu approval: signed deposit and receipt matched; reserved stock delivered."
+          ? invoice?.supplierCheckout
+            ? "Automatic Blu approval: signed deposit and receipt matched; supplier fulfillment queued."
+            : "Automatic Blu approval: signed deposit and receipt matched; reserved stock delivered."
           : (input.note ?? null),
       },
     });
   });
-  void lowStockWarning(initial.orderId)
-    .then((warning) => (warning ? notifyAdmin(warning) : undefined))
-    .catch(() => {});
+  if (!readBluInvoice(initial.order.paymentMetadata)?.supplierCheckout)
+    void lowStockWarning(initial.orderId)
+      .then((warning) => (warning ? notifyAdmin(warning) : undefined))
+      .catch(() => {});
   return serializeReceipt(await loadReceiptForReview(id));
 }
 
@@ -941,7 +950,9 @@ export async function getTicket(id: string) {
   return serializeAdminTicket(ticket);
 }
 
-function serializeAdminTicket(ticket: Prisma.TicketGetPayload<{ include: typeof ticketDetailInclude }>) {
+function serializeAdminTicket(
+  ticket: Prisma.TicketGetPayload<{ include: typeof ticketDetailInclude }>,
+) {
   return {
     id: ticket.id,
     subject: ticket.subject,
@@ -959,22 +970,28 @@ function serializeAdminTicket(ticket: Prisma.TicketGetPayload<{ include: typeof 
 }
 
 export async function replyTicket(id: string, adminId: string, input: TicketReplyInput) {
-  const ticket = await prisma.ticket.update({
-    where: { id },
-    data: {
-      status: "ANSWERED",
-      updatedAt: new Date(),
-      messages: { create: { authorId: adminId, body: input.body, isStaff: true } },
-    },
-    include: ticketDetailInclude,
-  }).catch(ticketWriteError);
+  const ticket = await prisma.ticket
+    .update({
+      where: { id },
+      data: {
+        status: "ANSWERED",
+        updatedAt: new Date(),
+        messages: { create: { authorId: adminId, body: input.body, isStaff: true } },
+      },
+      include: ticketDetailInclude,
+    })
+    .catch(ticketWriteError);
   return serializeAdminTicket(ticket);
 }
 
 export async function setTicketStatus(id: string, input: TicketStatusInput) {
-  const ticket = await prisma.ticket.update({
-    where: { id }, data: { status: input.status }, include: ticketDetailInclude,
-  }).catch(ticketWriteError);
+  const ticket = await prisma.ticket
+    .update({
+      where: { id },
+      data: { status: input.status },
+      include: ticketDetailInclude,
+    })
+    .catch(ticketWriteError);
   return serializeAdminTicket(ticket);
 }
 

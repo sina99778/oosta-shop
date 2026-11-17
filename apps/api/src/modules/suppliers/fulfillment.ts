@@ -4,8 +4,11 @@ import { Prisma, type SupplierFulfillment } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma";
 import { lockOrder } from "../../lib/orderLock";
+import { env } from "../../config/env";
+import { readBluInvoice } from "../orders/blu-invoice";
+import { matchesBluReceipt } from "../orders/blu-events";
 import { AppError } from "../../utils/httpError";
-import { catalogs, getPricing, matchingOffers } from "./suppliers.service";
+import { catalogs, getPricing, matchingOffers, type SourcePlan } from "./suppliers.service";
 import { quotePricing } from "./fx.service";
 import { indicativePrice } from "./pricing";
 import { readVariant, variantKey } from "./variant";
@@ -31,6 +34,7 @@ export type SupplierAdapter = {
 // No current vendor contract establishes all three guarantees. Only trusted internal callers
 // may supply an adapter; no HTTP body, setting or test switch can register one.
 type Registry = ReadonlyMap<SupplierId, SupplierAdapter>;
+export type SupplierRegistry = Registry;
 const live: Registry = new Map();
 const supported = (a: SupplierAdapter | undefined): a is SupplierAdapter =>
   !!a &&
@@ -83,7 +87,10 @@ function summary(job: SupplierFulfillment) {
 function denied() {
   return new AppError(409, "SUPPLIER_ORDER_INELIGIBLE", "Paid supplier order requires review");
 }
-async function eligible(tx: Pick<Prisma.TransactionClient, "order">, orderId: string) {
+async function eligible(
+  tx: Pick<Prisma.TransactionClient, "order" | "receipt" | "bluBankObservation">,
+  orderId: string,
+) {
   const order = await tx.order.findUnique({
     where: { id: orderId },
     include: {
@@ -107,6 +114,30 @@ async function eligible(tx: Pick<Prisma.TransactionClient, "order">, orderId: st
     order.items.length !== 1
   )
     throw denied();
+  if (order.paymentProvider === "CARD_TO_CARD") {
+    const invoice = readBluInvoice(order.paymentMetadata);
+    const claim = await tx.bluBankObservation.findUnique({ where: { matchedOrderId: order.id } });
+    const approved = await tx.receipt.findMany({
+      where: { orderId: order.id, status: "APPROVED" },
+      select: { reference: true },
+    });
+    if (
+      !invoice?.supplierCheckout ||
+      invoice.qaCampaign ||
+      invoice.stockHeld ||
+      invoice.privateStockQa ||
+      invoice.iban !== env.BLU_INVOICE_IBAN ||
+      invoice.number !== env.BLU_INVOICE_CARD_NUMBER ||
+      order.bluInvoiceKey !== invoice.iban + ":" + invoice.amountIrr ||
+      !order.totalAmount.eq(invoice.amountIrr) ||
+      !claim ||
+      claim.invoiceKey !== order.bluInvoiceKey ||
+      claim.occurredAt < order.createdAt ||
+      claim.occurredAt.getTime() >= Date.parse(invoice.expiresAt) ||
+      !approved.some((r) => matchesBluReceipt(r.reference, claim))
+    )
+      throw denied();
+  }
   const item = order.items[0],
     variant = readVariant(item.plan.variant);
   const snapshot =
@@ -138,15 +169,24 @@ async function eligible(tx: Pick<Prisma.TransactionClient, "order">, orderId: st
   return { order, item, signature: variantKey(variant, item.plan.durationDays) };
 }
 
-export async function prepareSupplierFulfillment(orderId: string, registry: Registry = live) {
-  const previous = await prisma.supplierFulfillment.findUnique({ where: { orderId } });
-  if (previous) return summary(previous);
-  const initial = await eligible(prisma, orderId);
+export async function selectSupplierPurchase(
+  plan: SourcePlan,
+  registry: Registry = live,
+  maximumAmount?: Prisma.Decimal,
+) {
+  const variant = readVariant(plan.variant);
+  if (
+    plan.source !== "SUPPLIER" ||
+    !variant ||
+    variant.delivery !== "AUTOMATIC" ||
+    !["ACCOUNT", "CODE"].includes(variant.fulfillment)
+  )
+    throw denied();
   const policy = await getPricing();
   if (!policy?.enabled)
     throw new AppError(503, "PRICING_UNAVAILABLE", "Fresh supplier pricing required");
   const resolved = await quotePricing(policy);
-  const candidates = matchingOffers(initial.item.plan, await catalogs())
+  const candidates = matchingOffers(plan, await catalogs())
     .flatMap((candidate) => {
       if (!supported(registry.get(candidate.offer.supplier))) return [];
       try {
@@ -186,9 +226,8 @@ export async function prepareSupplierFulfillment(orderId: string, registry: Regi
     }
     const expiry = Math.min(
       Date.parse(quote.expiresAt),
-      candidate.expiresAt,
       resolved.rateExpiresAt,
-      Date.now() + 60000,
+      Date.now() + 900000,
     );
     if (
       quote.externalId !== offer.externalId ||
@@ -205,7 +244,7 @@ export async function prepareSupplierFulfillment(orderId: string, registry: Regi
     });
   }
   const selected = locked
-    .filter((q) => q.expiry > Date.now() && q.price.lte(initial.order.totalAmount))
+    .filter((q) => q.expiry > Date.now() && (!maximumAmount || q.price.lte(maximumAmount)))
     .sort((a, b) => a.price.cmp(b.price) || a.offer.supplier.localeCompare(b.offer.supplier))[0];
   if (!selected)
     throw new AppError(
@@ -213,7 +252,18 @@ export async function prepareSupplierFulfillment(orderId: string, registry: Regi
       "SUPPLIER_PURCHASE_UNSUPPORTED",
       "No bounded matching supplier purchase is available",
     );
-  const { offer, quote, expiry } = selected;
+  return { ...selected, signature: variantKey(variant, plan.durationDays), fx: resolved.fx };
+}
+
+export async function prepareSupplierFulfillment(orderId: string, registry: Registry = live) {
+  const previous = await prisma.supplierFulfillment.findUnique({ where: { orderId } });
+  if (previous) return summary(previous);
+  const initial = await eligible(prisma, orderId);
+  const { offer, quote, expiry } = await selectSupplierPurchase(
+    initial.item.plan,
+    registry,
+    initial.order.totalAmount,
+  );
   return prisma.$transaction(async (tx) => {
     await lockOrder(tx, orderId);
     const existing = await tx.supplierFulfillment.findUnique({ where: { orderId } });

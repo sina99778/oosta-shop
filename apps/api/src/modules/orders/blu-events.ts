@@ -91,12 +91,26 @@ async function observe(
     const privateCampaign = env.BLU_QA_INVOICE_CAMPAIGN?.toLowerCase();
     const stockCheckout =
       env.BLU_STOCK_CHECKOUT_ENABLED && snapshot?.stockHeld && !snapshot.qaCampaign;
+    const supplierCheckout =
+      snapshot?.supplierCheckout &&
+      !snapshot.qaCampaign &&
+      !snapshot.stockHeld &&
+      !!(await tx.order.findFirst({
+        where: {
+          id: order.id,
+          user: { role: "USER" },
+          supplierCheckoutQuote: { isNot: null },
+          supplierFulfillment: { state: "AWAITING_PAYMENT" },
+        },
+        select: { id: true },
+      }));
     if (
       !snapshot ||
       (!stockCheckout &&
+        !supplierCheckout &&
         (order.userId !== userId ||
           (privateCampaign && snapshot.qaCampaign !== privateCampaign))) ||
-      (stockCheckout && snapshot.number !== env.BLU_INVOICE_CARD_NUMBER) ||
+      ((stockCheckout || supplierCheckout) && snapshot.number !== env.BLU_INVOICE_CARD_NUMBER) ||
       snapshot.iban !== receivingIban ||
       snapshot.amountIrr !== event.amountIrr ||
       (order.currency !== "IRR" && order.currency !== "IRT") ||
@@ -188,7 +202,7 @@ bluEventRouter.post(
     const trackingKey = Buffer.from(env.BLU_TRACKING_HMAC_KEY ?? "", "base64");
     if (
       !configuredKey ||
-      (!userId && !env.BLU_STOCK_CHECKOUT_ENABLED) ||
+      (!userId && !env.BLU_STOCK_CHECKOUT_ENABLED && !env.BLU_AUTO_APPROVE_ENABLED) ||
       !receivingIban ||
       trackingKey.length !== 32
     ) {

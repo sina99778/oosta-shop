@@ -20,6 +20,7 @@ const invoiceSchema = z.object({
   qaCampaign: z.string().uuid().optional(),
   stockHeld: z.literal(true).optional(),
   privateStockQa: z.literal(true).optional(),
+  supplierCheckout: z.literal(true).optional(),
 });
 
 export function readBluInvoice(metadata: Prisma.JsonValue | null) {
