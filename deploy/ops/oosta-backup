@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+destination=${OOSTA_BACKUP_DIR:-/opt/oostaAI/shared/backups/daily}
+lock=${OOSTA_BACKUP_LOCK:-/run/lock/oosta-backup.lock}
+[[ "$destination" = /* && "$lock" = /* ]]
+exec 9>"$lock"
+flock -n 9 || exit 0
+install -d -m 700 "$destination"
+pending=''
+source=''
+cleanup() {
+  [[ -z "$pending" ]] || rm -f -- "$pending"
+  if [[ -n "$source" ]]; then
+    docker exec oosta-api-1 rm -f -- "$source" >/dev/null 2>&1 || true
+    docker exec oosta-api-1 rmdir -- "$(dirname "$source")" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+candidate=$(docker exec oosta-api-1 node -e '
+  require("./dist/lib/backup").createEncryptedBackup(process.env.BACKUP_AGE_RECIPIENT)
+    .then(result => console.log(result.file))
+    .catch(() => { console.error("Encrypted backup creation failed"); process.exitCode = 1; });
+')
+if [[ ! "$candidate" =~ ^/tmp/oosta-backup-[A-Za-z0-9]+/oosta-[0-9TZ.-]+\.sql\.gz\.age$ ]]; then
+  echo 'Invalid encrypted backup path' >&2
+  exit 1
+fi
+source=$candidate
+pending=$(mktemp "$destination/.pending.XXXXXX")
+docker cp "oosta-api-1:$source" "$pending"
+test -s "$pending"
+head -n 1 "$pending" | grep -qx 'age-encryption.org/v1'
+chmod 600 "$pending"
+target="$destination/oosta-daily-$(date -u +%Y%m%dT%H%M%SZ).sql.gz.age"
+test ! -e "$target"
+mv -- "$pending" "$target"
+pending=''
+# Prune only this runner's completed ciphertexts, after a successful new backup.
+find "$destination" -maxdepth 1 -type f -name 'oosta-daily-*.sql.gz.age' -mtime +30 -delete
+echo "Encrypted daily backup saved: $(basename "$target")"

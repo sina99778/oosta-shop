@@ -4,13 +4,16 @@ const assert = require("node:assert/strict");
 const origin = new URL(process.argv[2]);
 assert(["http:", "https:"].includes(origin.protocol));
 
-async function check(path, status, options = {}) {
+async function check(path, status, options = {}, fingerprintedAsset = false) {
   const response = await fetch(new URL(path, origin), {
     ...options,
     signal: AbortSignal.timeout(25000),
   });
   assert.equal(response.status, status, `${options.method ?? "GET"} ${path}`);
-  assert.match(response.headers.get("cache-control") ?? "", /no-store/);
+  assert.match(
+    response.headers.get("cache-control") ?? "",
+    fingerprintedAsset ? /\bpublic\b.*\bimmutable\b/ : /no-store/,
+  );
   assert.equal(response.headers.get("x-oosta-mode"), "preview-read-only");
   return response;
 }
@@ -22,7 +25,7 @@ async function main() {
   const html = await home.text();
   const asset = html.match(/(?:src|href)="(\/_next\/[^"]+)"/);
   assert(asset, "Missing frontend asset");
-  await check(asset[1].replaceAll("&amp;", "&"), 200);
+  await check(asset[1].replaceAll("&amp;", "&"), 200, {}, true);
   for (const path of ["/api/health/db", "/api/products", "/fa/products", "/fa/login"])
     await check(path, 200);
   for (const path of ["/api/orders", "/api/tickets", "/api/admin/stats"]) await check(path, 401);
