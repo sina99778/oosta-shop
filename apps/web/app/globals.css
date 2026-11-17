@@ -28,6 +28,9 @@
 
 /* ---- Light theme (default) ---- */
 :root {
+  /* Brand constants shared by both themes: the navy stage and its mint highlight. */
+  --c-navy: #101d2e;
+  --c-mint: #b7ecd8;
   --c-on-primary: #ffffff;
   --c-bg: #f8fbfc;
   --c-surface: #eef4f6;
@@ -38,6 +41,7 @@
   --c-primary: #176c80;
   --c-primary-hover: #11586a;
   --c-accent: #36b9c6;
+  --c-danger-text: #b91c1c;
   --shadow-card: 0 2px 8px -5px rgba(18, 59, 66, 0.12);
   --shadow-glow: none;
 }
@@ -54,6 +58,7 @@
   --c-primary: #55cebd;
   --c-primary-hover: #80dfd0;
   --c-accent: #36b9c6;
+  --c-danger-text: #fca5a5;
   --shadow-card: 0 22px 60px -35px rgba(0, 0, 0, 0.9);
   --shadow-glow: none;
 }
@@ -67,7 +72,7 @@ body {
 .oosta-button {
   --button-fill: var(--c-primary);
   --button-ink: var(--c-on-primary);
-  --button-line: color-mix(in srgb, var(--button-fill) 82%, #101d2e);
+  --button-line: color-mix(in srgb, var(--button-fill) 82%, var(--c-navy));
   --button-hover: var(--c-primary-hover);
   --button-light: rgb(255 255 255 / 15%);
   --button-depth: 0 2px 0 rgb(9 20 32 / 23%), 0 3px 9px -5px rgb(9 20 32 / 40%);
@@ -369,7 +374,7 @@ body {
   inset-inline-start: 16px;
   z-index: 60;
   transform: translateY(-200%);
-  background: #b7ecd8;
+  background: var(--c-mint);
   color: #102b28;
   padding: 12px 20px;
   font-size: 13px;

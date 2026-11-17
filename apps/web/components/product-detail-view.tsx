@@ -156,15 +156,17 @@ export function ProductDetailView({
         <Link href={`/${locale}`} className="hover:text-foreground">
           {dict.nav.home}
         </Link>
-        <span>/</span>
+        <span aria-hidden="true">/</span>
         <Link
           href={`/${locale}/products?category=${product.category.slug}`}
           className="hover:text-foreground"
         >
           {product.category.name}
         </Link>
-        <span>/</span>
-        <span className="text-foreground">{product.name}</span>
+        <span aria-hidden="true">/</span>
+        <span className="text-foreground" aria-current="page">
+          <bdi>{product.name}</bdi>
+        </span>
       </nav>
 
       <div className={cn("grid lg:grid-cols-2", styles.detailGrid)}>

@@ -1,12 +1,12 @@
 .header,
 .footer {
-  --c-bg: #101d2e;
+  --c-bg: var(--c-navy);
   --c-card: #182a3f;
   --c-surface: #223a50;
   --c-fg: #f3f6f8;
   --c-muted: #bacbd8;
   --c-border: #3d5266;
-  --c-primary: #b7ecd8;
+  --c-primary: var(--c-mint);
   --c-primary-hover: #d5f7e9;
   --c-on-primary: #102b28;
   background: var(--c-bg);

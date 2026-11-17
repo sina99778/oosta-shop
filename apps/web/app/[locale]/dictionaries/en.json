@@ -96,7 +96,16 @@
     "haveAccount": "Already have an account?",
     "noAccount": "Don't have an account?",
     "submitting": "Please wait…",
-    "contactHint": "Provide an email or a phone number."
+    "contactHint": "Provide an email or a phone number.",
+    "panelEyebrow": "Oosta account",
+    "panelTitle": "Your purchases and deliveries, in one place",
+    "panelPoints": [
+      "Orders and delivered details stay in your dashboard",
+      "Follow up and get help through support tickets",
+      "Changing your password signs out every other device"
+    ],
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "checkout": {
     "verifying": "Confirming your payment…",

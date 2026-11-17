@@ -1,8 +1,8 @@
 /* Oosta / bold editorial: a dark brand stage, sharp typography, an asymmetric journal. */
 .home {
   --tint: #e8f1ee;
-  --mint: #b7ecd8;
-  --navy: #101d2e;
+  --mint: var(--c-mint);
+  --navy: var(--c-navy);
   --ink: var(--c-fg);
   overflow: clip;
 }
@@ -53,7 +53,7 @@
   display: block;
 }
 .heroCopy h1 > span:nth-child(2) {
-  color: #b7ecd8;
+  color: var(--c-mint);
 }
 .heroCopy p {
   max-width: 450px;
@@ -260,7 +260,7 @@
   scroll-margin-top: 110px;
 }
 .promptIntro .eyebrow {
-  color: #b7ecd8;
+  color: var(--c-mint);
 }
 .promptIntro h2 {
   font-size: 2.25rem;
@@ -275,7 +275,7 @@
   margin-top: 16px;
 }
 .promptIntro .textLink {
-  color: #b7ecd8;
+  color: var(--c-mint);
   margin-top: 12px;
 }
 .promptPaper {
@@ -427,7 +427,7 @@
   gap: 12px;
   min-width: 190px;
   padding: 24px;
-  background: #b7ecd8;
+  background: var(--c-mint);
   border-radius: 0.75rem;
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 25%),
