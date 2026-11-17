@@ -47,4 +47,6 @@
 - `npm audit --omit=dev` و `npm audit`: هر دو صفر advisory، با CA سیستم و بدون غیرفعال‌کردن بررسی TLS.
 - `git diff --check`: موفق.
 
+اجرای واقعی [GitHub Actions شمارهٔ 44095297943](https://github.com/sina99778/oosta-shop/actions/runs/44095297943) برای commit `29cd433` نیز با conclusion=success تمام شد؛ verify، lint، build، تست shell بکاپ و هر دو audit در Ubuntu موفق بودند. این CI از کلیدهای واقعی فروشنده یا دیتابیس production استفاده نمی‌کند.
+
 این تغییر هنوز روی production مستقر یا migration آن روی دیتابیس اصلی اعمال نشده است. فعال‌سازی خرید عمومی و اتصال به vendor زنده انجام نشد. موفقیت تست‌های ساختگی نه کیفیت اکانت واقعی را اثبات می‌کند، نه نبود همهٔ باگ‌ها و نه امنیت کامل سیستم مستقر را.
