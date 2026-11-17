@@ -144,7 +144,7 @@ function warrantyMatches(offer: Offer, variant: Variant) {
   if (
     offer.supplier === "canboso2" &&
     offer.externalId === "6a7347f6b1446d1a93c12cdf" &&
-    offer.fingerprint === "d9d9c7efaf5a51b81d586857654aa9b9ebccd92e36f9107f889a6cec9b30a700"
+    offer.fingerprint === "4aa7403e67eac18477ea506ddbfd8210138c4c2b82caf7ff45ae323e4c29b3c2"
   ) {
     return (
       variant.warranty.kind === "WARRANTED" &&

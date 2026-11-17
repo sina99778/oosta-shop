@@ -33,7 +33,7 @@ assert(!variantSchema.safeParse({ ...base, warranty: { kind: "WARRANTED", days: 
 console.log("PASS: exact variants and unknown-to-no-warranty normalization");
 const { matchingOffers } = require("../apps/api/src/modules/suppliers/suppliers.service.ts");
 const reviewedSku = "6a7347f6b1446d1a93c12cdf";
-const reviewedFingerprint = "d9d9c7efaf5a51b81d586857654aa9b9ebccd92e36f9107f889a6cec9b30a700";
+const reviewedFingerprint = "4aa7403e67eac18477ea506ddbfd8210138c4c2b82caf7ff45ae323e4c29b3c2";
 const reviewedVariant = variantSchema.parse({
   ...base,
   plan: "ChatGPT Plus",
@@ -247,4 +247,21 @@ assert.notEqual(
   beforeDelivery.fingerprint,
   afterDelivery.fingerprint,
   "Delivery semantics must invalidate supplier approval",
+);
+
+const { classify, terms } = require("./import-supplier-storefront.cjs");
+const { families } = require("./supplier-storefront-families.json");
+const apiOffer = {
+  name: "API 50M Token Claude 1 Day",
+  description: "",
+  flags: [],
+  warranty: { kind: "NONE" },
+};
+assert.equal(classify(apiOffer, families).slug, "claude-api");
+assert.equal(terms(apiOffer, { name: "Claude API" }).durationDays, 1);
+assert.equal(terms(apiOffer, { name: "Claude API" }).variant.quota, "50M Token");
+assert.equal(classify({ ...apiOffer, name: "Claude Pro 1 Month" }, families).slug, "claude");
+assert.equal(
+  classify({ ...apiOffer, name: "Discord Nitro 3M Token not guaranteed" }, families).slug,
+  "discord",
 );

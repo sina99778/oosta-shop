@@ -8,7 +8,15 @@ const path = require("node:path");
 function terms(offer, family) {
   const title = offer.name.replace(/[^\p{L}\p{N}\p{P}\p{Z}]/gu, "").trim();
   const text = title + "\n" + offer.description;
-  const segment = title.split(/\b(?:full )?warrant|\bguarantee/i)[0];
+  const tokenQuota = title.match(/\b\d+(?:\.\d+)?\s*[MB]\s*tokens?\b/i)?.[0];
+  const withoutQuota =
+    family.category === "api" || /\bAPI\b/i.test(family.name)
+      ? title.replace(/\b\d+(?:\.\d+)?\s*[MB]\s*tokens?\b/gi, "")
+      : title;
+  const segment = withoutQuota
+    .replace(/\b\d+\s*(?:days?|d|months?|m)\s+warranty\b/gi, "")
+    .split(/\b(?:full )?warrant|\bguarantee/i)[0]
+    .replace(/(?<=[A-Za-z])-(?=\d)/g, " ");
   const duration = segment.match(
     /(?<![\d–-])(\d{1,3})\s*(?:[-–]\s*\d{1,3}\s*)?(years?|yrs?|months?|mo|m|days?|d)\b/i,
   );
@@ -46,7 +54,9 @@ function terms(offer, family) {
       warranty,
       region: /\b(?:US only|United States only)\b/i.test(text) ? "US" : "UNSPECIFIED",
       quota:
-        title.match(/\b\d+(?:\.\d+)?\s*(?:devices|seats|GB|TB|credits?)\b/i)?.[0] ?? "UNSPECIFIED",
+        (withoutQuota !== title ? tokenQuota : undefined) ??
+        title.match(/\b\d+(?:\.\d+)?\s*(?:devices|seats|GB|TB|credits?)\b/i)?.[0] ??
+        "UNSPECIFIED",
     },
   };
 }
@@ -70,7 +80,11 @@ function classify(offer, families) {
     )
   )
     return "manual-review";
-  return families.find((family) => new RegExp(family.pattern, "i").test(text)) ?? "unclassified";
+  const matches = families.filter((family) => new RegExp(family.pattern, "i").test(text));
+  return (
+    matches.find((family) => family.category === "api") ??
+    (/\bapi\b/i.test(text) ? "manual-review" : (matches[0] ?? "unclassified"))
+  );
 }
 
 async function main() {
@@ -119,7 +133,10 @@ async function main() {
     for (const family of families) {
       const offers = found.get(family.slug);
       if (!offers?.length) continue;
-      const image = fs.readFileSync(path.join(dir, "covers", family.slug + ".webp"));
+      const cover = path.join(dir, "covers", family.slug + ".webp");
+      const image = fs.readFileSync(
+        fs.existsSync(cover) ? cover : path.join(dir, "covers", family.parent + ".webp"),
+      );
       assert(image.length <= 200000 && image.subarray(8, 12).toString() === "WEBP");
       const existing = await prisma.product.findUnique({
         where: { slug: family.slug },

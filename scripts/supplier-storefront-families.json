@@ -39,9 +39,77 @@
       "digital-security",
       "امنیت و حریم خصوصی",
       "Security"
+    ],
+    "api": [
+      "api-subscriptions",
+      "اشتراک‌ها و اعتبار API",
+      "API subscriptions"
     ]
   },
   "families": [
+    {
+      "category": "api",
+      "slug": "claude-api",
+      "name": "Claude API",
+      "parent": "claude",
+      "pattern": "(?=.*\\bapi\\b)(?=.*(?:claude))"
+    },
+    {
+      "category": "api",
+      "slug": "grok-api",
+      "name": "Grok API",
+      "parent": "grok",
+      "pattern": "(?=.*\\bapi\\b)(?=.*(?:grok))"
+    },
+    {
+      "category": "api",
+      "slug": "deepseek-api",
+      "name": "DeepSeek API",
+      "parent": "deepseek",
+      "pattern": "(?=.*\\bapi\\b)(?=.*(?:deepseek))"
+    },
+    {
+      "category": "api",
+      "slug": "qwen-api",
+      "name": "Qwen API",
+      "parent": "qwen",
+      "pattern": "(?=.*\\bapi\\b)(?=.*(?:qwen))"
+    },
+    {
+      "category": "api",
+      "slug": "muse-ai-api",
+      "name": "Muse AI API",
+      "parent": "muse-ai",
+      "pattern": "(?=.*\\bapi\\b)(?=.*(?:muse))|\\bmuse\\b.*\\b\\d+[MB]\\s*tokens?\\b"
+    },
+    {
+      "category": "api",
+      "slug": "freepik-api",
+      "name": "Freepik / Magnific API",
+      "parent": "freepik",
+      "pattern": "(?=.*\\bapi\\b)(?=.*(?:freepik|magnific))"
+    },
+    {
+      "category": "api",
+      "slug": "cursor-api",
+      "name": "Cursor API",
+      "parent": "cursor",
+      "pattern": "(?=.*\\bapi\\b)(?=.*(?:cursor))"
+    },
+    {
+      "category": "api",
+      "slug": "chatgpt-api",
+      "name": "ChatGPT API",
+      "parent": "chatgpt",
+      "pattern": "(?=.*\\bapi\\b)(?=.*(?:chat\\s*gpt|\\bgpt\\b))"
+    },
+    {
+      "category": "api",
+      "slug": "gemini-api",
+      "name": "Gemini API",
+      "parent": "gemini",
+      "pattern": "(?=.*\\bapi\\b)(?=.*(?:gemini|google ai))"
+    },
     {
       "category": "ai",
       "slug": "chatgpt",
@@ -541,7 +609,7 @@
       "pattern": "\\bcursor\\b"
     },
     {
-      "category": "development",
+      "category": "api",
       "slug": "codex-api",
       "name": "Codex API",
       "pattern": "api.*codex|codex.*api"
