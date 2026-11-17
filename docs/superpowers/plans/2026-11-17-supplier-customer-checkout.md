@@ -6,7 +6,9 @@
 
 **Scope:** Connect online payment and unique-amount card-to-card through signed Blu evidence. Production mock protections remain enforced. Supplier card approval requires exact immutable quote/invoice/order, current USER, a matching signed deposit/reference and valid payment window; a receipt image alone never starts procurement. Existing internal-stock/QA Blu guards remain in force. Public supplier checkout stays unavailable with the empty live adapter registry, and host nginx is not opened by this phase. No real supplier order, bank or gateway call is authorized by this work.
 
-- [ ] Add failing HTTP regression for quote ownership/expiry/schema, one order/session per quote, no purchase before verified payment, failed/forged callback denial, paid delivery/vault privacy, replay, expired-after-payment review and worker recovery with one debit.
-- [ ] Add additive private quote schema/migration; extract bounded offer selection for reuse; implement checkout service/router, callback delegation and bounded recovery worker with trusted dependency injection.
-- [ ] Connect the existing supplier price panel to firm quotes when available; bind purchase to quote id only, clear stale/session-switched quotes and disable expired/duplicate submissions. Keep indicative fallback safe and preserve navy/mint styling.
-- [ ] Run isolated regressions/full verify, lint, build and both audits; obtain final independent review; document exact limits, commit/push and inspect CI. No production debit activation.
+- [x] Add failing HTTP regression for quote ownership/expiry/schema, one order/session per quote, no purchase before verified payment, failed/forged callback denial, paid delivery/vault privacy, replay, expired-after-payment review and worker recovery with one debit.
+- [x] Add additive private quote schema/migration; extract bounded offer selection for reuse; implement checkout service/router, callback delegation and bounded recovery worker with trusted dependency injection.
+- [x] Connect the existing supplier price panel to firm quotes when available; bind purchase to quote id only, clear stale/session-switched quotes and disable expired/duplicate submissions. Keep indicative fallback safe and preserve navy/mint styling.
+- [x] Run isolated regressions/full verify, lint, build and both audits; obtain final independent review; document exact limits, commit/push and inspect CI. No production debit activation.
+
+**Observed release:** Production deployed with the empty registry and closed public purchase gate. Both new tables remain empty; prior five-attempt USD1.38 ledger and disabled financial grant are unchanged. CI run 44125826197 passed; public/private smoke and both timers passed. No live supplier debit or gateway/bank transaction occurred.
