@@ -60,6 +60,22 @@
   - ورود دوباره از فرم با رمز جدید کار کرد. دکمه «خروج» در هدر کوکی را پاک کرد و پس از بارگذاری دوباره، `/auth/me` همچنان `401` بود.
 - **آزموده نشد:** production پشت nginx/CDN با HTTPS و پرچم `Secure`، و مرورگرهای دیگر (Safari/Firefox).
 
+### استقرار روی VPS (2026-11-17)
+
+- **release:** `/opt/oostaAI/releases/20261117-login-session` از commit `b9ef681` (git archive) ساخته شد و `current` به آن اشاره می‌کند. فایل‌های migrationهای قبلاً اعمال‌شده از release قبلی کپی شدند تا بایت‌به‌بایت یکسان بمانند (تفاوت فقط CRLF بود).
+- **پشتیبان و برگشت:**
+  - backup دیتابیس با مجوز 0600: `/opt/oostaAI/shared/backups/pre-login-session-20261117.dump` (۲۲ جدول داده با `pg_restore -l` خوانده شد).
+  - ایمیج‌های قبلی با tag `oosta-api:pre-login-session-20261117` و `oosta-web:pre-login-session-20261117` نگه داشته شدند.
+  - نسخه قبلی پیکربندی nginx: `/opt/oostaAI/shared/backups/nginx-oostaai.store.pre-login-session`.
+- **migration:** فقط `20261117000100_user_session_version` اعمال شد (یک ستون اضافه با مقدار پیش‌فرض). به داده‌ها دست نخورد و چیزی seed نشد.
+- **nginx:** catch-all پیش‌نمایش همه POSTها را با 503 می‌بست، پس `logout` نمی‌توانست کوکی را پاک کند. include جدید `deploy/nginx/oosta-auth-session-preview.conf` فقط `POST` به `logout`، `logout-all` و `change-password` را روی HTTPS عبور می‌دهد. `nginx -t` موفق بود و nginx reload شد. ثبت‌نام و بقیه نوشتن‌ها همچنان 503 هستند.
+- **بررسی‌های زنده روی `https://oostaai.store`:**
+  - `POST /api/auth/logout` جواب `204` داد، با `Set-Cookie: oosta_session=; HttpOnly; SameSite=Lax; Secure; Max-Age=0`.
+  - `logout-all` و `change-password` بدون نشست `401` دادند. `GET logout` جواب `405` داد. کوکی جعلی روی `/auth/me` `401` گرفت. signup جواب `503` داد.
+  - صفحه‌های `/fa`، `/fa/products`، `/fa/login` و `/fa/dashboard/security` همه `200` دادند.
+  - `scripts/preview-http-check.cjs --login-ready` PASS شد، به جز یک فرض قدیمی: اسکریپت انتظار `no-store` را روی فایل‌های fingerprinted در `/_next` دارد، در حالی که `oosta-static-assets.conf` عمداً برای آن‌ها `immutable` می‌فرستد. این بررسی‌ها با همان اسکریپت، فقط بدون این یک assert، اجرا شدند.
+- **آزموده نشد:** ورود واقعی ادمین در production، چون با رمز واقعی وارد نمی‌شوم. ادمین باید یک بار دوباره وارد شود و بعد از آن، خروج و ورود دوباره را امتحان کند.
+
 ## محدودیت‌ها و کارهای باقی‌مانده
 
 - **فراموشی رمز** پیاده نشد، چون پروژه کانال ایمیل یا پیامک ندارد. فعلاً بازیابی فقط از طریق ادمین ممکن است.
