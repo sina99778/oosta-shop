@@ -247,6 +247,16 @@ async function main() {
         env,
       ),
     );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/supplier-fulfillment-regressions.ts",
+        ],
+        { ...env, DATABASE_URL: env.DATABASE_URL + "&connection_limit=1&pool_timeout=3" },
+      ),
+    );
   } finally {
     if (started)
       run(executable("pg_ctl"), ["-D", path.join(dir, "data"), "-m", "fast", "-w", "stop"], env);

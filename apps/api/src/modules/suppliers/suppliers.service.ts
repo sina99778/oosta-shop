@@ -24,8 +24,10 @@ import {
 
 const prefix = "suppliers.catalog.";
 const parsedCatalogs = new Map<string, { value: string; catalog: Catalog | null }>();
-export async function catalogs(): Promise<Map<SupplierId, Catalog>> {
-  const rows = await prisma.siteSetting.findMany({
+export async function catalogs(
+  client: Pick<Prisma.TransactionClient, "siteSetting"> = prisma,
+): Promise<Map<SupplierId, Catalog>> {
+  const rows = await client.siteSetting.findMany({
     where: { key: { in: supplierIds.map((id) => prefix + id) } },
   });
   const map = new Map<SupplierId, Catalog>();

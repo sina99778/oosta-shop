@@ -376,6 +376,7 @@ model Order {
 
   receipts  Receipt[]
   supplierQaAttempt SupplierQaAttempt?
+  supplierFulfillment SupplierFulfillment?
   bluBankClaim BluBankObservation?
 
   paidAt    DateTime?
@@ -432,6 +433,31 @@ model Receipt {
 
 
 // Operator-funded integration QA: not a customer gateway payment or a public product.
+model SupplierFulfillment {
+  id String @id @default(cuid())
+  orderId String @unique
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  reference String @unique
+  supplier String
+  externalId String
+  variantKey String
+  fingerprint String
+  quoteId String
+  maximumCost Decimal @db.Decimal(18,6)
+  currency String
+  expiresAt DateTime
+  state String @default("READY")
+  supplierOrderId String?
+  chargedCost Decimal? @db.Decimal(18,6)
+  // Private recovery data; never included in customer or admin DTOs.
+  result Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([supplier, supplierOrderId])
+  @@map("supplier_fulfillments")
+}
+
 model SupplierQaAttempt {
   id String @id @default(cuid())
   authorizationId String
