@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { fetchJson, siteUrl } from "@/lib/seo";
 import { locales } from "@/lib/i18n";
+import { CONTENT_LOCALE } from "@/lib/page-metadata";
 
 export const revalidate = 3600;
 
@@ -27,38 +28,34 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const next = await fetchJson<ProductsPage>(`/products?pageSize=50&page=${page}`, 0);
     productSlugs.push(...(next?.items ?? []));
   }
+  // Products, posts and CMS pages are single-language (Persian); their /en
+  // copies canonicalize to /fa, so only the canonical URL is listed.
   for (const product of productSlugs) {
     const updatedAt = product.updatedAt ? new Date(product.updatedAt) : undefined;
-    for (const locale of locales) {
-      entries.push({
-        url: `${site}/${locale}/products/${product.slug}`,
-        lastModified: updatedAt && Number.isFinite(updatedAt.getTime()) ? updatedAt : undefined,
-        changeFrequency: "weekly",
-        priority: 0.7,
-      });
-    }
+    entries.push({
+      url: `${site}/${CONTENT_LOCALE}/products/${encodeURIComponent(product.slug)}`,
+      lastModified: updatedAt && Number.isFinite(updatedAt.getTime()) ? updatedAt : undefined,
+      changeFrequency: "weekly",
+      priority: 0.7,
+    });
   }
 
   const blog = await fetchJson<{ posts: { slug: string }[] }>("/blog", 0);
   for (const post of blog?.posts ?? []) {
-    for (const locale of locales) {
-      entries.push({
-        url: `${site}/${locale}/blog/${post.slug}`,
-        changeFrequency: "weekly",
-        priority: 0.6,
-      });
-    }
+    entries.push({
+      url: `${site}/${CONTENT_LOCALE}/blog/${encodeURIComponent(post.slug)}`,
+      changeFrequency: "weekly",
+      priority: 0.6,
+    });
   }
 
   const pages = await fetchJson<{ pages: { slug: string }[] }>("/pages", 0);
   for (const page of pages?.pages ?? []) {
-    for (const locale of locales) {
-      entries.push({
-        url: `${site}/${locale}/p/${page.slug}`,
-        changeFrequency: "monthly",
-        priority: 0.5,
-      });
-    }
+    entries.push({
+      url: `${site}/${CONTENT_LOCALE}/p/${encodeURIComponent(page.slug)}`,
+      changeFrequency: "monthly",
+      priority: 0.5,
+    });
   }
 
   return entries;

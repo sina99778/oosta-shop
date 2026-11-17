@@ -9,6 +9,7 @@ import { getDictionary } from "./dictionaries";
 import { dirFor, isLocale, locales } from "@/lib/i18n";
 import { getSiteConfig, localizedSetting, themeCss } from "@/lib/settings";
 import { siteUrl } from "@/lib/seo";
+import { DEFAULT_SHARE_IMAGE } from "@/lib/page-metadata";
 import { Providers } from "@/components/providers";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
@@ -48,6 +49,7 @@ export async function generateMetadata({
       siteName: "oostaAI",
       locale: locale === "fa" ? "fa_IR" : "en_US",
       type: "website",
+      images: [DEFAULT_SHARE_IMAGE],
     },
   };
 }

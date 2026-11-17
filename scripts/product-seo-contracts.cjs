@@ -91,7 +91,13 @@ async function main() {
   const metadata = await page.generateMetadata(props);
   assert.equal(metadata.alternates.canonical, "https://oostaai.store/fa/products/synthetic");
   assert.equal(metadata.alternates.languages.fa, "https://oostaai.store/fa/products/synthetic");
-  assert.equal(metadata.alternates.languages.en, "https://oostaai.store/en/products/synthetic");
+  // Product copy is Persian-only: no English hreflang, and /en canonicalizes to /fa.
+  assert.equal(metadata.alternates.languages.en, undefined);
+  assert.equal(metadata.alternates.languages["x-default"], metadata.alternates.canonical);
+  const englishMetadata = await page.generateMetadata({
+    params: Promise.resolve({ locale: "en", slug: product.slug }),
+  });
+  assert.equal(englishMetadata.alternates.canonical, metadata.alternates.canonical);
   assert.equal(
     metadata.openGraph.images[0].url,
     "https://oostaai.store/api/products/synthetic-product/image?v=123",
@@ -102,7 +108,9 @@ async function main() {
   assert.equal(item.offers.price, 250000);
   assert.equal(item.offers.url, metadata.alternates.canonical);
   assert(!item.aggregateRating);
-  const listed = (await sitemap()).find((entry) => entry.url === metadata.alternates.canonical);
+  const sitemapEntries = await sitemap();
+  assert(!sitemapEntries.some((entry) => entry.url.includes("/en/products/")));
+  const listed = sitemapEntries.find((entry) => entry.url === metadata.alternates.canonical);
   assert.equal(listed.lastModified.toISOString(), product.updatedAt);
   product.updatedAt = "invalid";
   assert(
@@ -119,7 +127,12 @@ async function main() {
   product.name = "</script><script>unsafe()</script>";
   assert(!(await graphs()).html.includes("</script><script>unsafe()"));
   product.image = "javascript:unsafe()";
-  assert(!(await page.generateMetadata(props)).openGraph.images);
+  const unsafeImages = (await page.generateMetadata(props)).openGraph.images;
+  assert.deepEqual(
+    unsafeImages.map((image) => image.url),
+    ["/brand/oosta-ai.png"],
+    "an unsafe product image falls back to the brand image",
+  );
   const before = fetches;
   await assert.rejects(
     page.generateMetadata({ params: Promise.resolve({ locale: "bad", slug: product.slug }) }),
@@ -129,7 +142,7 @@ async function main() {
   missing = true;
   await assert.rejects(page.default(props), /NOT_FOUND/);
   console.log(
-    "PASS: product canonical/hreflang, absolute images, IRR offer, truthful availability, breadcrumbs and safe JSON-LD",
+    "PASS: product Persian canonical/hreflang, absolute images, IRR offer, truthful availability, breadcrumbs and safe JSON-LD",
   );
 }
 main().catch((error) => {

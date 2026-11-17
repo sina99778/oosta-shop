@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { isLocale } from "@/lib/i18n";
 import { Container } from "@/components/ui/container";
 import { Markdown } from "@/components/markdown";
-import { fetchJson, siteUrl } from "@/lib/seo";
+import { fetchJson } from "@/lib/seo";
+import { contentAlternates } from "@/lib/page-metadata";
 
 export const revalidate = 300;
 
@@ -25,15 +26,16 @@ export async function generateMetadata({
 }: {
   params: Promise<{ locale: string; slug: string }>;
 }): Promise<Metadata> {
-  const { locale, slug } = await params;
+  const { slug } = await params;
   const page = await load(slug);
   if (!page) return { title: "Not found" };
   const description = page.content.replace(/[#*!]/g, "").slice(0, 160);
-  const url = `${siteUrl()}/${locale}/p/${slug}`;
+  const alternates = contentAlternates(`/p/${encodeURIComponent(page.slug)}`);
+  const url = alternates.canonical as string;
   return {
     title: page.title,
     description,
-    alternates: { canonical: url },
+    alternates,
     openGraph: { title: page.title, description, url, type: "website" },
   };
 }

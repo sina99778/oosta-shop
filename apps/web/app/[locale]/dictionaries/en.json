@@ -1,7 +1,11 @@
 {
   "meta": {
     "title": "Oosta AI — Learning, prompts and digital tools",
-    "description": "Practical AI tutorials, prompts and tool guides, alongside subscriptions, software licenses and digital products."
+    "description": "Practical AI tutorials, prompts and tool guides, alongside subscriptions, software licenses and digital products.",
+    "catalogTitle": "AI subscriptions, software licenses and digital products",
+    "catalogDescription": "Browse ChatGPT, Claude, Gemini, Cursor, Spotify and other subscriptions with plan details, delivery method and stock status at oostaAI.",
+    "blogTitle": "oostaAI blog: AI tool guides and prompting",
+    "blogDescription": "AI tool comparisons, buying guides, prompting tutorials and practical tips for work and learning."
   },
   "nav": {
     "home": "Home",

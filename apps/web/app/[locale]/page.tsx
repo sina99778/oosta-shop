@@ -4,6 +4,7 @@ import { getDictionary } from "./dictionaries";
 import { isLocale } from "@/lib/i18n";
 import { getSiteSettings, localizedSetting } from "@/lib/settings";
 import { HomeSections } from "@/components/home-sections";
+import { homeJsonLd, safeJsonLd } from "@/lib/page-metadata";
 
 export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
   await connection();
@@ -16,6 +17,14 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
   const heroSubtitle = localizedSetting(settings, "heroSubtitle", locale) ?? dict.home.heroSubtitle;
 
   return (
-    <HomeSections locale={locale} dict={dict} heroTitle={heroTitle} heroSubtitle={heroSubtitle} />
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: safeJsonLd(homeJsonLd(locale, dict.meta.title, dict.meta.description)),
+        }}
+      />
+      <HomeSections locale={locale} dict={dict} heroTitle={heroTitle} heroSubtitle={heroSubtitle} />
+    </>
   );
 }

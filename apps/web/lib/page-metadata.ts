@@ -1,0 +1,132 @@
+// Shared page-level metadata for the storefront.
+//
+// Next merges metadata shallowly: a page that sets `alternates` or `openGraph`
+// replaces the layout's whole object. Without these helpers every page that
+// doesn't set its own metadata inherits the layout's `canonical: /<locale>`,
+// which tells search engines that pages like /fa/products and /fa/blog are
+// duplicates of the home page.
+import type { Metadata } from "next";
+import type { Locale } from "@/lib/i18n";
+import { siteUrl } from "@/lib/seo";
+
+// Products, blog posts and CMS pages are stored in a single language (Persian).
+// The /en/... copies render the same body inside English chrome, so they point
+// their canonical at the Persian URL and are not advertised as English hreflang.
+export const CONTENT_LOCALE: Locale = "fa";
+
+export const DEFAULT_SHARE_IMAGE = {
+  url: "/brand/oosta-ai.png",
+  width: 640,
+  height: 640,
+  alt: "oostaAI",
+};
+
+export function absoluteUrl(path: string): string {
+  return `${siteUrl()}${path}`;
+}
+
+// A storefront page that exists in both locales with its own translated chrome
+// (home, catalog, blog index): self-canonical plus fa/en/x-default hreflang.
+export function localizedPageMetadata(
+  locale: Locale,
+  path: string,
+  title: string,
+  description: string,
+): Metadata {
+  const url = absoluteUrl(`/${locale}${path}`);
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: url,
+      languages: {
+        fa: absoluteUrl(`/fa${path}`),
+        en: absoluteUrl(`/en${path}`),
+        "x-default": absoluteUrl(`/fa${path}`),
+      },
+    },
+    openGraph: {
+      title,
+      description,
+      url,
+      siteName: "oostaAI",
+      locale: locale === "fa" ? "fa_IR" : "en_US",
+      type: "website",
+      images: [DEFAULT_SHARE_IMAGE],
+    },
+  };
+}
+
+// Single-language content (product, blog post, CMS page): canonical is always
+// the Persian URL; hreflang lists only the Persian version.
+export function contentAlternates(path: string): NonNullable<Metadata["alternates"]> {
+  const canonical = absoluteUrl(`/${CONTENT_LOCALE}${path}`);
+  return { canonical, languages: { fa: canonical, "x-default": canonical } };
+}
+
+// Sign-in, account, checkout, support and admin pages: never indexed, and no
+// canonical inherited from the layout (a noindex page must not claim to be
+// a copy of the home page).
+export const PRIVATE_PAGE_METADATA: Metadata = {
+  robots: { index: false, follow: false },
+  alternates: null,
+};
+
+// Sign-in and sign-up are public but have no search value; their links may
+// still be followed.
+export const AUTH_PAGE_METADATA: Metadata = {
+  robots: { index: false, follow: true },
+  alternates: null,
+};
+
+// The store as a schema.org Organization; other entities reference it by @id.
+export function organizationJsonLd() {
+  const site = siteUrl();
+  return {
+    "@type": "Organization",
+    "@id": `${site}/#organization`,
+    name: "oostaAI",
+    alternateName: "اوستا ای‌آی",
+    url: `${site}/${CONTENT_LOCALE}`,
+    logo: {
+      "@type": "ImageObject",
+      url: `${site}${DEFAULT_SHARE_IMAGE.url}`,
+      width: DEFAULT_SHARE_IMAGE.width,
+      height: DEFAULT_SHARE_IMAGE.height,
+    },
+  };
+}
+
+// Home page graph: the Organization plus the WebSite with its catalog search.
+export function homeJsonLd(locale: Locale, name: string, description: string) {
+  const site = siteUrl();
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      organizationJsonLd(),
+      {
+        "@type": "WebSite",
+        "@id": `${site}/#website`,
+        url: `${site}/${locale}`,
+        name,
+        description,
+        inLanguage: locale === "fa" ? "fa-IR" : "en",
+        publisher: { "@id": `${site}/#organization` },
+        potentialAction: {
+          "@type": "SearchAction",
+          target: {
+            "@type": "EntryPoint",
+            urlTemplate: `${site}/${locale}/products?q={search_term_string}`,
+          },
+          "query-input": "required name=search_term_string",
+        },
+      },
+    ],
+  };
+}
+
+// JSON for a <script type="application/ld+json">: `<` is escaped so stored
+// text can never close the script element.
+export function safeJsonLd(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
+}

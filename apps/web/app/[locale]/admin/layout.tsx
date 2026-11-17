@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { getDictionary } from "../dictionaries";
@@ -5,6 +6,9 @@ import { isLocale } from "@/lib/i18n";
 import { RequireAuth } from "@/components/require-auth";
 import { AdminNav } from "@/components/admin/admin-nav";
 import styles from "@/components/admin/admin.module.css";
+import { PRIVATE_PAGE_METADATA } from "@/lib/page-metadata";
+
+export const metadata: Metadata = PRIVATE_PAGE_METADATA;
 
 export default async function AdminLayout({
   children,

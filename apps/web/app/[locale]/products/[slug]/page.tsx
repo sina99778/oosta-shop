@@ -8,6 +8,7 @@ import { fetchJson, siteUrl } from "@/lib/seo";
 import { productImageUrl } from "@/lib/api";
 import type { PaymentConfig, ProductDetail } from "@/lib/types";
 import { availabilityOf, canBuyPlan } from "@/lib/product-availability";
+import { CONTENT_LOCALE, DEFAULT_SHARE_IMAGE, contentAlternates } from "@/lib/page-metadata";
 
 const loadProduct = cache(
   async (slug: string) =>
@@ -48,25 +49,20 @@ export async function generateMetadata({
   const description =
     p.metaDescription || p.shortDescription || p.description.replace(/[#*]/g, "").slice(0, 160);
   const image = imageFor(p);
-  const url = productUrl(locale, p.slug);
+  // Product copy is stored in Persian only, so /en/products/<slug> is the same
+  // content in English chrome: both locales canonicalize to the Persian URL.
+  const url = productUrl(CONTENT_LOCALE, p.slug);
 
   return {
     title,
     description,
-    alternates: {
-      canonical: url,
-      languages: {
-        fa: productUrl("fa", p.slug),
-        en: productUrl("en", p.slug),
-        "x-default": productUrl("fa", p.slug),
-      },
-    },
+    alternates: contentAlternates(`/products/${encodeURIComponent(p.slug)}`),
     openGraph: {
       title,
       description,
       url,
       type: "website",
-      images: image ? [{ url: image }] : undefined,
+      images: image ? [{ url: image }] : [DEFAULT_SHARE_IMAGE],
     },
     twitter: {
       card: image ? "summary_large_image" : "summary",
@@ -104,7 +100,7 @@ export default async function ProductDetailPage({
     (cheapest, item) => (!cheapest || item.price < cheapest.price ? item : cheapest),
     undefined,
   );
-  const url = productUrl(locale, p.slug);
+  const url = productUrl(CONTENT_LOCALE, p.slug);
   const jsonLd = p
     ? {
         "@type": "Product",
