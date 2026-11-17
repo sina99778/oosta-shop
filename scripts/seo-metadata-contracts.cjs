@@ -143,10 +143,14 @@ async function main() {
   for (const mod of [login, signup]) {
     assert.deepEqual(mod.metadata.robots, { index: false, follow: true });
     assert.equal(mod.metadata.alternates, null);
+    // These pages are prerendered; on the VPS the build has no public origin,
+    // so inherited og:url/og:image would point at localhost.
+    assert.equal(mod.metadata.openGraph, null);
   }
   for (const [segment, mod] of privateLayouts) {
     assert.deepEqual(mod.metadata.robots, { index: false, follow: false }, segment);
     assert.equal(mod.metadata.alternates, null, segment);
+    assert.equal(mod.metadata.openGraph, null, segment);
   }
 
   const canonicalPost = `${SITE}/fa/blog/${post.slug}`;

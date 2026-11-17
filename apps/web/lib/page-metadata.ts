@@ -66,10 +66,13 @@ export function contentAlternates(path: string): NonNullable<Metadata["alternate
 
 // Sign-in, account, checkout, support and admin pages: never indexed, and no
 // canonical inherited from the layout (a noindex page must not claim to be
-// a copy of the home page).
+// a copy of the home page). No Open Graph either: these pages are prerendered,
+// and the VPS build (NEXT_PUBLIC_API_URL=/api) has no public origin, so the
+// layout's og:url/og:image would point at localhost.
 export const PRIVATE_PAGE_METADATA: Metadata = {
   robots: { index: false, follow: false },
   alternates: null,
+  openGraph: null,
 };
 
 // Sign-in and sign-up are public but have no search value; their links may
@@ -77,6 +80,7 @@ export const PRIVATE_PAGE_METADATA: Metadata = {
 export const AUTH_PAGE_METADATA: Metadata = {
   robots: { index: false, follow: true },
   alternates: null,
+  openGraph: null,
 };
 
 // The store as a schema.org Organization; other entities reference it by @id.

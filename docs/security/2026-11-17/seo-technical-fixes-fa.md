@@ -18,7 +18,7 @@
 - **`apps/web/lib/page-metadata.ts` (جدید):** helperهای مشترک:
   - `localizedPageMetadata`: canonical خودِ صفحه، hreflang `fa`/`en`/`x-default` و OG با تصویر برند.
   - `contentAlternates`: canonical همیشه نسخهٔ فارسی است و hreflang فقط `fa` و `x-default`.
-  - `PRIVATE_PAGE_METADATA` برابر `noindex, nofollow` و `AUTH_PAGE_METADATA` برابر `noindex, follow`. هر دو `alternates: null` دارند تا canonical صفحهٔ اصلی ارث نرسد.
+  - `PRIVATE_PAGE_METADATA` برابر `noindex, nofollow` و `AUTH_PAGE_METADATA` برابر `noindex, follow`. هر دو `alternates: null` و `openGraph: null` دارند تا canonical و تگ‌های OG صفحهٔ اصلی ارث نرسند.
   - `organizationJsonLd`، `homeJsonLd` و `safeJsonLd`. `safeJsonLd` هر `<` را به `\u003c` تبدیل می‌کند.
 - **کاتالوگ و فهرست وبلاگ:**
   - هر کدام عنوان و توضیح اختصاصی از دیکشنری دارند (`meta.catalogTitle` و موارد مشابه، در fa و en).
@@ -68,11 +68,31 @@
   - `/fa/login`: `noindex, follow`.
   - `/fa/dashboard`، `/fa/admin` و `/fa/support`: `noindex, nofollow` و بدون canonical.
   - `/fa`: JSON-LD شامل Organization و WebSite.
-  - در build محلی، `og:url` صفحه‌های استاتیک به `localhost:4000` اشاره می‌کرد، چون آدرس سایت هنگام build تنظیم نبود. در production، `NEXT_PUBLIC_API_URL=${PUBLIC_ORIGIN}/api` به‌عنوان build arg داده می‌شود و `siteUrl()` دامنهٔ واقعی را برمی‌گرداند.
+  - در build محلی، `og:url` صفحه‌های استاتیک به `localhost:4000` اشاره می‌کرد. فرض اولیهٔ من این بود که در production دامنهٔ واقعی ساخته می‌شود. این فرض غلط بود و بخش استقرار علت و اصلاحش را شرح می‌دهد.
+
+## استقرار
+
+- **release `20261117-seo-technical`** (commit `851aba6`):
+  - فقط وب دوباره ساخته شد و با `--no-deps` بالا آمد. کانتینر API دست نخورد.
+  - این release دو commit از Codex را هم شامل می‌شد (`29cd433` و `567bd5a`، موتور fulfillment تأمین‌کننده). این دو فقط API و migration `20261117000200_supplier_fulfillments` را تغییر می‌دهند. API از release جدید ساخته نشد و این migration روی دیتابیس اجرا نشد. آن کد هنوز روی سرور فعال نیست.
+  - **پیش از استقرار:** backup دیتابیس با مجوز 0600 (`pre-seo-technical-20261117.dump`) و tag ایمیج قبلی وب (`oosta-web:pre-seo-technical-20261117`).
+- **باگ پیدا شده پس از استقرار:**
+  - روی سایت زنده، صفحه‌های استاتیک (ورود، ثبت‌نام، داشبورد، امنیت حساب، پرداخت و ادمین) `og:image` برابر `http://localhost:3000/brand/oosta-ai.png` داشتند.
+  - **علت:** `docker-compose.vps.yml` وب را با `NEXT_PUBLIC_API_URL=/api` می‌سازد. در این حالت `siteUrl()` هنگام prerender دامنه را نمی‌داند و به `localhost:3000` برمی‌گردد. `og:url` این صفحه‌ها از قبل همین مشکل را داشت و این تغییر `og:image` را هم به آن اضافه کرد.
+  - **اصلاح:** همهٔ صفحه‌های استاتیک، صفحه‌های خصوصی یا ورود هستند. پس `PRIVATE_PAGE_METADATA` و `AUTH_PAGE_METADATA` حالا `openGraph: null` دارند.
+  - **رگرسیون:** assertion جدید در `seo-metadata-contracts.cjs` قبل از اصلاح شکست خورد و بعد از آن پاس شد. `verify`، lint و build دوباره پاس شدند.
+  - این اصلاح با release `20261117-seo-technical-2` مستقر شد.
+- **بررسی‌های زنده** روی `https://oostaai.store`:
+  - `preview-http-check --login-ready` پاس شد.
+  - `/fa/products` و `/en/blog` canonical خودشان و hreflang درست را دارند.
+  - `/en/products/chatgpt` به `/fa/products/chatgpt` canonical شده و hreflang `en` ندارد.
+  - صفحهٔ اصلی JSON-LD از نوع `WebSite` دارد.
+  - نقشهٔ سایت ۱۰۳ آدرس دارد و هیچ‌کدام `/en/products/` نیست. قبلاً ۲۰۰ آدرس داشت.
+  - هدر nginx برای صفحه‌های تکی محصول `index, follow` و برای بقیه `noindex, nofollow` است، مثل قبل.
 
 ## محدودیت‌ها
 
-- روی سرور مستقر نشده است.
+- **ریشهٔ مشکل OG هنوز باقی است:** `siteUrl()` در build سرور، دامنهٔ واقعی را نمی‌شناسد. هر صفحهٔ عمومی که در آینده استاتیک ساخته شود و OG داشته باشد، باز `localhost` می‌گیرد. اصلاح کامل این است که `NEXT_PUBLIC_WEB_URL` به‌عنوان build arg در `docker-compose.vps.yml` داده شود. این کار تغییر تنظیم استقرار است و انجام نشد.
 - هدر `X-Robots-Tag: noindex, nofollow` در nginx پیش‌نمایش برای صفحهٔ اصلی، کاتالوگ و وبلاگ هنوز فعال است. باز کردن آن تصمیم مالک است و این تغییر آن را باز نمی‌کند.
 - این موارد اصلاح نشدند:
   - ۷۲ محصول کم‌محتوا. این کار محتوایی است، نه فنی.
