@@ -84,10 +84,21 @@ export async function changePassword(
     throw new AppError(400, "INVALID_CURRENT_PASSWORD", "Current password is incorrect");
   }
   const passwordHash = await hashPassword(input.newPassword);
-  const updated = await prisma.user.update({
-    where: { id: userId },
-    data: { passwordHash, sessionVersion: { increment: 1 } },
-  });
+  let updated: User;
+  try {
+    updated = await prisma.user.update({
+      where: { id: userId, passwordHash: user.passwordHash, sessionVersion: user.sessionVersion },
+      data: { passwordHash, sessionVersion: { increment: 1 } },
+    });
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2025")
+      throw new AppError(
+        409,
+        "CREDENTIALS_CHANGED",
+        "Credentials changed during this request. Sign in again.",
+      );
+    throw error;
+  }
   return { user: toPublicUser(updated), token: issueToken(updated) };
 }
 

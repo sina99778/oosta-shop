@@ -3,11 +3,19 @@
 // Client-side auth state. The session itself is an httpOnly cookie set by the API,
 // so no script on the page can read the JWT. The current user is hydrated via /auth/me.
 //
-// `token` is NOT a credential: it is an opaque per-session marker ("session:<userId>")
+// `token` identifies the session generation, rather than carrying an authentication credential.
 // that components already use to gate authenticated requests and that api.ts uses to
 // tell which session a 401 belonged to. The cookie is what authenticates.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 import { api, ApiError } from "./api";
 
@@ -39,14 +47,23 @@ type AuthContextValue = {
 const LEGACY_TOKEN_KEY = "oosta_token";
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const sessionMarker = (user: AuthUser | null) => (user ? `session:${user.id}` : null);
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const generation = useRef(0);
+  const activeMarker = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [sessionError, setSessionError] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const token = sessionMarker(user);
+  const acceptUser = useCallback((next: AuthUser | null) => {
+    generation.current++;
+    const marker = next ? `session:${next.id}:${generation.current}` : null;
+    activeMarker.current = marker;
+    setUser(next);
+    setToken(marker);
+    setLoading(false);
+    setSessionError(false);
+  }, []);
   const retrySession = useCallback(() => {
     setLoading(true);
     setSessionError(false);
@@ -60,17 +77,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Storage may be unavailable (private mode); nothing to clean up then.
     }
     let active = true;
+    const startedAt = generation.current;
+    const isCurrent = () => active && generation.current === startedAt;
     api
       .get<{ user: AuthUser }>("/auth/me")
       .then((data) => {
-        if (active) {
-          setUser(data.user);
-          setSessionError(false);
-        }
+        if (isCurrent()) acceptUser(data.user);
       })
       .catch((error: unknown) => {
-        if (!active) return;
-        if (error instanceof ApiError && error.status === 401) setUser(null);
+        if (!isCurrent()) return;
+        if (error instanceof ApiError && error.status === 401) acceptUser(null);
         else setSessionError(true);
       })
       .finally(() => {
@@ -79,22 +95,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [attempt]);
+  }, [attempt, acceptUser]);
 
   useEffect(() => {
     const invalidate = (event: Event) => {
       const detail = (event as CustomEvent<string>).detail;
-      setUser((current) => (sessionMarker(current) === detail ? null : current));
-      setSessionError(false);
+      if (detail === activeMarker.current) acceptUser(null);
     };
     window.addEventListener("oosta:unauthorized", invalidate);
     return () => window.removeEventListener("oosta:unauthorized", invalidate);
-  }, []);
+  }, [acceptUser]);
 
-  const accept = useCallback((result: AuthResult) => {
-    setUser(result.user);
-    setSessionError(false);
-  }, []);
+  const accept = useCallback(
+    (result: AuthResult) => {
+      acceptUser(result.user);
+    },
+    [acceptUser],
+  );
 
   const login = useCallback(
     async (identifier: string, password: string) => {
@@ -124,15 +141,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    setUser(null);
-    // Clearing the cookie needs the server; local state is cleared regardless.
-    await api.post("/auth/logout").catch(() => {});
-  }, []);
+    await api.post("/auth/logout");
+    acceptUser(null);
+  }, [acceptUser]);
 
   const logoutAll = useCallback(async () => {
     await api.post("/auth/logout-all", undefined, token ?? undefined);
-    setUser(null);
-  }, [token]);
+    acceptUser(null);
+  }, [token, acceptUser]);
 
   const value = useMemo(
     () => ({

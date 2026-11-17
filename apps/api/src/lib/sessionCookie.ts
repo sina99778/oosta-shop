@@ -57,7 +57,8 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 export function isTrustedCookieWrite(req: Request): boolean {
   if (SAFE_METHODS.has(req.method)) return true;
   const origin = req.headers.origin;
-  if (typeof origin === "string" && origin !== "null") return env.corsOrigins.includes(origin);
+  if (origin !== undefined)
+    return typeof origin === "string" && origin !== "null" && env.corsOrigins.includes(origin);
   const referer = req.headers.referer;
   if (typeof referer !== "string") return false;
   try {

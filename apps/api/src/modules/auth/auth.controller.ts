@@ -7,7 +7,11 @@
 
 import type { Request, Response } from "express";
 import { AppError } from "../../utils/httpError";
-import { clearSessionCookie, setSessionCookie } from "../../lib/sessionCookie";
+import {
+  clearSessionCookie,
+  isTrustedCookieWrite,
+  setSessionCookie,
+} from "../../lib/sessionCookie";
 import {
   changePassword as changeUserPassword,
   getUserById,
@@ -25,13 +29,24 @@ function requireUserSession(req: Request): string {
   return req.user!.id;
 }
 
+function requireTrustedBrowserSource(req: Request): void {
+  if (
+    (req.headers.origin !== undefined || req.headers.referer !== undefined) &&
+    !isTrustedCookieWrite(req)
+  ) {
+    throw new AppError(403, "CSRF_REJECTED", "Request origin is not allowed");
+  }
+}
+
 export async function signup(req: Request, res: Response): Promise<void> {
+  requireTrustedBrowserSource(req);
   const result = await registerUser(req.body);
   setSessionCookie(res, result.token);
   res.status(201).json(result);
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
+  requireTrustedBrowserSource(req);
   const result = await loginUser(req.body);
   setSessionCookie(res, result.token);
   res.status(200).json(result);
@@ -51,6 +66,7 @@ export async function changePassword(req: Request, res: Response): Promise<void>
 
 // Clears this browser's cookie. Needs no valid session, so a stale cookie can always be removed.
 export function logout(_req: Request, res: Response): void {
+  requireTrustedBrowserSource(_req);
   clearSessionCookie(res);
   res.status(204).end();
 }

@@ -44,6 +44,40 @@ async function main() {
   assert.match(signupCookie, /;\s*Max-Age=\d+/i);
   assert.doesNotMatch(signupCookie, /;\s*Secure/i, "Development cookies work over plain HTTP");
   assert.equal(signup.headers["cache-control"], "private, no-store");
+  for (const origin of ["https://foreign.example.invalid", "null"]) {
+    for (const route of ["/auth/login", "/auth/signup", "/auth/logout"]) {
+      const attack = await inject(app, {
+        method: "POST",
+        url: route,
+        remoteAddress: nextIp(),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          origin,
+          cookie: cookiePair(signupCookie),
+        },
+        payload: new URLSearchParams({
+          identifier: email,
+          email: "foreign-signup@example.invalid",
+          name: "Synthetic foreign",
+          password,
+        }).toString(),
+      });
+      assert.equal(
+        attack.statusCode,
+        403,
+        "Foreign forms must not replace or clear browser sessions",
+      );
+      assert.equal(attack.headers["set-cookie"], undefined);
+    }
+  }
+  const foreignReferer = await inject(app, {
+    method: "POST",
+    url: "/auth/login",
+    remoteAddress: nextIp(),
+    headers: { ...json, referer: "https://foreign.example.invalid/login" },
+    payload: JSON.stringify({ identifier: email, password }),
+  });
+  assert.equal(foreignReferer.statusCode, 403);
 
   // Production cookies are Secure.
   const priorProduction = env.isProduction;
@@ -201,7 +235,7 @@ async function main() {
     payload: changeBody,
   });
   assert.equal(changed.statusCode, 200, changed.body);
-  const newCookie = cookiePair(sessionCookie(changed.headers["set-cookie"]));
+  let newCookie = cookiePair(sessionCookie(changed.headers["set-cookie"]));
   assert.notEqual(newCookie, oldCookie);
   assert.doesNotMatch(changed.body, /passwordHash|sessionVersion/);
   for (const headers of [{ cookie: oldCookie }, { authorization: `Bearer ${oldToken}` }]) {
@@ -233,7 +267,7 @@ async function main() {
     payload: JSON.stringify({ identifier: email, password: "Rotated-Pass-2" }),
   });
   assert.equal(bearerLogin.statusCode, 200, bearerLogin.body);
-  const bearer = (JSON.parse(bearerLogin.body) as { token: string }).token;
+  let bearer = (JSON.parse(bearerLogin.body) as { token: string }).token;
   const bearerWrite = await inject(app, {
     method: "POST",
     url: "/orders",
@@ -242,6 +276,40 @@ async function main() {
     payload: "{}",
   });
   assert.equal(bearerWrite.statusCode, 400, "Bearer writes reach validation without an Origin");
+  const candidates = ["Concurrent-Pass-A-3", "Concurrent-Pass-B-3"];
+  const concurrent = await Promise.all(
+    candidates.map((newPassword) =>
+      inject(app, {
+        method: "POST",
+        url: "/auth/change-password",
+        remoteAddress: nextIp(),
+        headers: { ...json, cookie: newCookie, origin: ORIGIN },
+        payload: JSON.stringify({ currentPassword: "Rotated-Pass-2", newPassword }),
+      }),
+    ),
+  );
+  assert.equal(
+    concurrent.filter((result) => result.statusCode === 200).length,
+    1,
+    "One old-password verification must permit only one concurrent change",
+  );
+  assert(concurrent.every((result) => [200, 400, 401, 409].includes(result.statusCode)));
+  const winner = concurrent.findIndex((result) => result.statusCode === 200);
+  newCookie = cookiePair(sessionCookie(concurrent[winner].headers["set-cookie"]));
+  for (const [index, candidate] of candidates.entries()) {
+    const check = await inject(app, {
+      method: "POST",
+      url: "/auth/login",
+      remoteAddress: nextIp(),
+      headers: json,
+      payload: JSON.stringify({ identifier: email, password: candidate }),
+    });
+    assert.equal(check.statusCode, index === winner ? 200 : 401);
+    if (index === winner) bearer = (JSON.parse(check.body) as { token: string }).token;
+  }
+  console.log(
+    "PASS: concurrent password changes preserve the winning credential and reject the stale writer",
+  );
 
   // Logout clears this browser's cookie; logout-all revokes every device.
   const logout = await inject(app, {

@@ -36,6 +36,10 @@ export function AccountSecurity({ locale }: { locale: Locale }) {
     if (error instanceof ApiError) {
       if (error.code === "INVALID_CURRENT_PASSWORD")
         return fa ? "رمز عبور فعلی درست نیست." : "Your current password is incorrect.";
+      if (error.code === "CREDENTIALS_CHANGED")
+        return fa
+          ? "اطلاعات ورود هم‌زمان تغییر کرده است؛ دوباره وارد حسابت شو."
+          : "Your credentials changed during this request. Please sign in again.";
       if (error.code === "VALIDATION_ERROR")
         return fa
           ? "رمز جدید باید دست‌کم ۸ کاراکتر باشد."

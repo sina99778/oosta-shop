@@ -37,6 +37,8 @@ export function Header({
   const { user, logout, loading } = useAuth();
   const pathname = usePathname();
   const [openPath, setOpenPath] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const menuButton = useRef<HTMLButtonElement>(null);
   const menuOpen = openPath === pathname;
   const fa = locale === "fa";
@@ -78,12 +80,23 @@ export function Header({
           variant="outline"
           type="button"
           size="sm"
-          onClick={() => {
-            setOpenPath(null);
-            void logout();
+          disabled={loggingOut}
+          onClick={async () => {
+            setLogoutError(null);
+            setLoggingOut(true);
+            try {
+              await logout();
+              setOpenPath(null);
+            } catch {
+              setLogoutError(
+                fa ? "خروج انجام نشد؛ دوباره تلاش کن." : "Sign-out failed. Please try again.",
+              );
+            } finally {
+              setLoggingOut(false);
+            }
           }}
         >
-          {dict.logout}
+          {loggingOut ? (fa ? "در حال خروج…" : "Signing out…") : dict.logout}
         </Button>
       );
     return (
@@ -172,6 +185,11 @@ export function Header({
           {!loading && <div className={styles.mobileAccount}>{accountActions()}</div>}
         </Container>
       </nav>
+      {logoutError && (
+        <p role="alert" className="px-4 pb-3 text-center text-sm text-danger">
+          {logoutError}
+        </p>
+      )}
     </header>
   );
 }

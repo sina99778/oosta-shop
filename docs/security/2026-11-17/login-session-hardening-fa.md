@@ -1,5 +1,7 @@
 # سخت‌سازی نشست ورود — 2026-11-17
 
+اصلاح‌های تکمیلی CSRF، رقابت تغییر رمز و وضعیت مرورگر، همراه با آزمون HTTPS عمومی، در [گزارش انتشار تکمیلی](session-production-rollout-fa.md) ثبت شده‌اند.
+
 پیگیری موارد ۴ و ۷ از [full-project-review-fa.md](full-project-review-fa.md).
 
 ## مشکل
@@ -11,6 +13,7 @@
 ## تغییرات
 
 ### API
+
 - **کوکی نشست:** `oosta_session` با `HttpOnly; SameSite=Lax; Path=/` و `Max-Age` برابر انقضای JWT. در production پرچم `Secure` هم دارد (`apps/api/src/lib/sessionCookie.ts`). signup، login و change-password این کوکی را می‌گذارند.
 - **احراز هویت:** `authenticate` هدر `Authorization` را ترجیح می‌دهد و بعد کوکی را می‌خواند. Bearer و API key برای اسکریپت‌ها و اتوماسیون مثل قبل کار می‌کنند.
 - **محافظ CSRF:** هر درخواست نوشتنی (غیر از GET/HEAD/OPTIONS) که با کوکی احراز شود، باید `Origin` یا در نبودش `Referer` از `CORS_ORIGIN` داشته باشد؛ وگرنه `403 CSRF_REJECTED`.
@@ -23,6 +26,7 @@
 - `sessionVersion` در پاسخ‌های کاربر برنمی‌گردد. مسیر `/auth` از قبل `Cache-Control: private, no-store` داشت.
 
 ### وب
+
 - `lib/api.ts` همه درخواست‌ها را با `credentials: "include"` می‌فرستد و دیگر هدر `Authorization` نمی‌سازد.
 - `lib/auth.tsx` توکن را ذخیره نمی‌کند و کلید قدیمی `oosta_token` را هنگام بارگذاری پاک می‌کند. فیلد `token` در context اکنون فقط یک نشانگر غیرمحرمانه (`session:<userId>`) است، تا ده‌ها کامپوننت موجود بدون تغییر کار کنند.
 - صفحه جدید `/[locale]/dashboard/security`: تغییر رمز و «خروج از همه دستگاه‌ها». لینک آن در ناوبری حساب کاربری آمده است.
@@ -41,11 +45,11 @@
   - کارکرد Bearer بدون Origin
 - **نتایج کل مجموعه:**
 
-| بررسی | نتیجه |
-|---|---|
-| `npm run verify` | exit 0، ۵۵ PASS |
-| `npm run lint` | بدون خطا |
-| `npm run build` | موفق؛ صفحه `/dashboard/security` ساخته شد |
+| بررسی                                | نتیجه                                         |
+| ------------------------------------ | --------------------------------------------- |
+| `npm run verify`                     | exit 0، ۵۵ PASS                               |
+| `npm run lint`                       | بدون خطا                                      |
+| `npm run build`                      | موفق؛ صفحه `/dashboard/security` ساخته شد     |
 | `npm audit --omit=dev` و `npm audit` | `found 0 vulnerabilities`، بدون تغییر وابستگی |
 
 ### آزمون دستی در مرورگر (dev)
