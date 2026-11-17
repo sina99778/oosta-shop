@@ -213,6 +213,7 @@ export function walletAdapter(supplier: LiveSupplier): SupplierAdapter {
         throw new Error("Unsupported product");
       const limit = await walletAllowance(supplier, input.currency);
       const offer = await currentOffer(supplier, input.externalId);
+      if (offer.fingerprint !== input.fingerprint) throw new Error("Offer changed");
       const { wallet, cost } = await currentPrice(supplier, input.externalId, offer.cost);
       if (cost.lte(0) || cost.gt(input.maximumCost) || wallet.lt(cost) || wallet.gt(limit))
         throw new Error("Wallet unavailable");

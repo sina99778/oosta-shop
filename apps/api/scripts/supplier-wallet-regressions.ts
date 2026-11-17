@@ -444,6 +444,19 @@ async function main() {
   });
   await assert.rejects(prisma.$transaction((tx) => reserveWallet(tx, copy)));
   const actualQuote = await fixture("ventebot");
+  await assert.rejects(
+    actualQuote.registry
+      .get("ventebot")!
+      .quote({
+        externalId: "101",
+        quantity: 1,
+        maximumCost: "0.5",
+        currency: "USD",
+        productType: "ACCOUNT",
+        fingerprint: "changed-product-fingerprint",
+      }),
+    "A freshly changed product definition must not receive a firm checkout quote",
+  );
   mode = "quote-drift";
   await assert.rejects(
     actualQuote.registry.get("ventebot")!.quote({
@@ -452,6 +465,7 @@ async function main() {
       maximumCost: "0.5",
       currency: "USD",
       productType: "ACCOUNT",
+      fingerprint: actualQuote.job.fingerprint,
     }),
     "Vendor's actual quote must be checked, not just the catalog price",
   );

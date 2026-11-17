@@ -30,6 +30,7 @@ type PurchaseInput = {
   maximumCost: string;
   currency: "USD" | "USDT";
   productType?: "ACCOUNT" | "LICENSE" | "GIFTCARD";
+  fingerprint?: string;
 };
 export type SupplierAdapter = {
   capabilities: {
@@ -244,6 +245,7 @@ export async function selectSupplierPurchase(
           maximumCost: offer.cost,
           currency: offer.currency,
           productType: plan.productType,
+          fingerprint: offer.fingerprint,
         }),
       );
     } catch {
