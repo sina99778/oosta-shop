@@ -21,7 +21,27 @@ async function check(path, status, options = {}, fingerprintedAsset = false) {
 async function main() {
   const home = await check("/fa", 200);
   assert.equal(home.headers.get("x-frame-options"), "DENY");
-  assert.match(home.headers.get("x-robots-tag") ?? "", /noindex/);
+  // --content-indexed: home, catalog and blog are open to search engines
+  // (oosta-content-indexing.conf); everything private must stay noindex.
+  const contentIndexed = process.argv.includes("--content-indexed");
+  const robots = (response) => response.headers.get("x-robots-tag") ?? "";
+  assert.match(robots(home), contentIndexed ? /^index, follow$/ : /noindex/, "/fa robots");
+  if (contentIndexed) {
+    const blog = await check("/fa/blog", 200);
+    const post = (await blog.text()).match(/href="(\/fa\/blog\/[a-z0-9-]+)"/);
+    const open = ["/en", "/fa/products", "/en/products", ...(post ? [post[1]] : [])];
+    assert.match(robots(blog), /^index, follow$/, "/fa/blog robots");
+    for (const path of open)
+      assert.match(robots(await check(path, 200)), /^index, follow$/, `${path} robots`);
+    for (const path of [
+      "/fa/login",
+      "/fa/dashboard",
+      "/fa/admin",
+      "/fa/checkout/cancel",
+      "/api/products",
+    ])
+      assert.match(robots(await check(path, 200)), /noindex/, `${path} robots`);
+  }
   const html = await home.text();
   const asset = html.match(/(?:src|href)="(\/_next\/[^"]+)"/);
   assert(asset, "Missing frontend asset");

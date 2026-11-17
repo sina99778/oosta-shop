@@ -9,12 +9,22 @@ const run = promisify(execFile);
   let privateCache = "private, no-store";
   let staticCache = "public, max-age=31536000, immutable";
   let walletReady = false;
+  // Mirrors deploy/nginx/oosta-content-indexing.conf; `leak` marks a private page as indexable.
+  let contentIndexed = false;
+  let leak = null;
+  const content = /^\/(?:fa|en)(?:\/products|\/blog(?:\/[a-z0-9][a-z0-9-]{0,119})?)?$/;
   const server = createServer((req, res) => {
     const asset = req.url.startsWith("/_next/");
     res.setHeader("cache-control", asset ? staticCache : privateCache);
     res.setHeader("x-oosta-mode", "preview-read-only");
     res.setHeader("x-frame-options", "DENY");
-    res.setHeader("x-robots-tag", "noindex, nofollow");
+    const path = req.url.split("?")[0];
+    res.setHeader(
+      "x-robots-tag",
+      (contentIndexed && content.test(path)) || path === leak
+        ? "index, follow"
+        : "noindex, nofollow",
+    );
     res.statusCode =
       walletReady && req.method === "POST" && req.url === "/api/auth/signup"
         ? 400
@@ -35,7 +45,13 @@ const run = promisify(execFile);
               : req.url === "/.env.production"
                 ? 404
                 : 200;
-    res.end(req.url === "/fa" ? '<script src="/_next/static/synthetic.js"></script>' : "{}");
+    res.end(
+      req.url === "/fa"
+        ? '<script src="/_next/static/synthetic.js"></script>'
+        : req.url === "/fa/blog"
+          ? '<a href="/fa/blog/synthetic-post">post</a>'
+          : "{}",
+    );
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const args = [
@@ -49,13 +65,25 @@ const run = promisify(execFile);
     await run(process.execPath, [...args, "--supplier-wallet-ready"]);
     walletReady = false;
     await assert.rejects(run(process.execPath, [...args, "--supplier-wallet-ready"]));
+    // Content indexing: open pages must say "index, follow", private ones must not.
+    await assert.rejects(run(process.execPath, [...args, "--content-indexed"]), /\/fa robots/);
+    contentIndexed = true;
+    await run(process.execPath, [...args, "--content-indexed"]);
+    await assert.rejects(run(process.execPath, args), /\/fa robots/);
+    leak = "/fa/dashboard";
+    await assert.rejects(
+      run(process.execPath, [...args, "--content-indexed"]),
+      /\/fa\/dashboard robots/,
+    );
+    leak = null;
+    contentIndexed = false;
     privateCache = "public, max-age=60";
     await assert.rejects(run(process.execPath, args), /no-store/);
     privateCache = "private, no-store";
     staticCache = "private, no-store";
     await assert.rejects(run(process.execPath, args), /immutable/);
     console.log(
-      "PASS: preview accepts immutable assets and rejects public caching of private routes or uncached fingerprinted assets",
+      "PASS: preview accepts immutable assets, indexes only home/catalog/blog when opened, and rejects public caching of private routes or uncached fingerprinted assets",
     );
   } finally {
     server.closeAllConnections();
