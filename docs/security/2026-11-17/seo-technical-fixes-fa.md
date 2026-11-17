@@ -94,9 +94,35 @@
   - نقشهٔ سایت ۱۰۳ آدرس دارد و هیچ‌کدام `/en/products/` نیست. قبلاً ۲۰۰ آدرس داشت.
   - هدر nginx برای صفحه‌های تکی محصول `index, follow` و برای بقیه `noindex, nofollow` است، مثل قبل.
 
+## اصلاح ریشه‌ای: آدرس سایت در build سرور
+
+- **مشکل:** `docker-compose.vps.yml` وب را با `NEXT_PUBLIC_API_URL=/api` می‌سازد. این مقدار دامنه ندارد، پس `siteUrl()` هنگام prerender به `http://localhost:3000` برمی‌گشت.
+- **اصلاح** (commit `db0f05e`):
+  - `docker-compose.prod.yml` به build وب آرگومان `NEXT_PUBLIC_WEB_URL: ${PUBLIC_ORIGIN}` می‌دهد. overlay سرور آن را تغییر نمی‌دهد، پس روی VPS هم اعمال می‌شود.
+  - `apps/web/Dockerfile` در مرحلهٔ build، `ARG` و `ENV NEXT_PUBLIC_WEB_URL` را پیش از `npm run build` تعریف می‌کند. مقدار پیش‌فرض خالی است، پس رفتار قبلی (ساختن آدرس از API URL) برای کسی که این آرگومان را نمی‌دهد عوض نمی‌شود.
+  - این مقدار فقط دامنهٔ عمومی سایت است و چیز محرمانه‌ای نیست.
+- **رگرسیون:** `scripts/web-build-origin-contracts.cjs` به `test:contracts` اضافه شد. این‌ها را بررسی می‌کند:
+  - آرگومان‌های build در ادغام prod و VPS
+  - ترتیب `ARG`/`ENV` نسبت به `npm run build` در Dockerfile
+  - خروجی `siteUrl()` با env سرور
+  - تست قبل از اصلاح شکست خورد.
+- **بررسی‌ها:**
+  - `docker compose config` با env ساختگی، آرگومان‌های ادغام‌شده را `NEXT_PUBLIC_API_URL: /api` و `NEXT_PUBLIC_WEB_URL: https://example.test` نشان داد.
+  - **کار هم‌زمان Codex:** هنگام اجرای بررسی‌ها، Codex تغییرات commit‌نشده‌ای در همین checkout داشت (checkout تأمین‌کننده). یکی از آن‌ها، `supplier-quote-panel.tsx`، خطای type داشت و `verify` و build را می‌شکست. آن تغییرات دست نخوردند.
+  - بررسی‌ها در یک worktree موقت از HEAD به‌اضافهٔ فقط چهار فایل این تغییر اجرا شدند. `npm run verify` با exit 0 تمام شد (۶۰ خط PASS و `fail 0`) و `npm run lint` بدون خطا رد شد.
+  - `next build` در آن worktree اجرا نشد، چون Turbopack با `node_modules` لینک‌شده کار نمی‌کند. این تغییر کد وب را عوض نمی‌کند. build واقعی، build Docker روی سرور بود و موفق شد.
+- **استقرار:** release `20261117-web-origin`.
+  - فقط وب ساخته و با `--no-deps` بالا آمد. `apps/api` با release قبلی یکسان بود.
+  - ایمیج قبلی tag شد: `oosta-web:pre-web-origin-20261117`.
+  - خروجی `docker compose config` روی سرور، `NEXT_PUBLIC_WEB_URL: https://oostaai.store` را نشان داد.
+- **بررسی پس از استقرار:**
+  - در کد سرور build‌شده، سه فایلی که در ایمیج قبلی `localhost:3000` داشتند، حالا `https://oostaai.store` دارند و هیچ فایلی `localhost:3000` ندارد.
+  - روی سایت زنده هیچ صفحه‌ای `localhost` ندارد. صفحه‌های بررسی‌شده: `/fa`، `/fa/products`، `/fa/blog`، `/en/products/chatgpt`، `/fa/login`، `/fa/dashboard` و `/fa/admin`.
+  - canonicalها و robots درست بودند و `preview-http-check --login-ready` پاس شد.
+- `openGraph: null` روی صفحه‌های خصوصی و ورود باقی ماند. این صفحه‌ها چیزی برای اشتراک‌گذاری ندارند.
+
 ## محدودیت‌ها
 
-- **ریشهٔ مشکل OG هنوز باقی است:** `siteUrl()` در build سرور، دامنهٔ واقعی را نمی‌شناسد. هر صفحهٔ عمومی که در آینده استاتیک ساخته شود و OG داشته باشد، باز `localhost` می‌گیرد. اصلاح کامل این است که `NEXT_PUBLIC_WEB_URL` به‌عنوان build arg در `docker-compose.vps.yml` داده شود. این کار تغییر تنظیم استقرار است و انجام نشد.
 - هدر `X-Robots-Tag: noindex, nofollow` در nginx پیش‌نمایش برای صفحهٔ اصلی، کاتالوگ و وبلاگ هنوز فعال است. باز کردن آن تصمیم مالک است و این تغییر آن را باز نمی‌کند.
 - این موارد اصلاح نشدند:
   - ۷۲ محصول کم‌محتوا. این کار محتوایی است، نه فنی.
