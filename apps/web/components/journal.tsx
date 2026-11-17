@@ -87,7 +87,8 @@ export function JournalArticle({ post, locale, back }: { post: BlogPostDetail; l
         // eslint-disable-next-line @next/next/no-img-element
         <img src={assetUrl(`/blog-cover/${post.id}`)} alt="" className={styles.articleCover} decoding="async" />
       )}
-      <Markdown text={post.content} className={styles.prose} />
+      {/* The title is the page h1, so "##" in the article is h2 (matches .prose h2/h3). */}
+      <Markdown text={post.content} className={styles.prose} headingOffset={0} />
       <footer className={styles.articleFooter}><Link href={`/${locale}/blog`} className={styles.read}>{back}</Link></footer>
     </article>
   );

@@ -126,6 +126,10 @@ const article = screen(JournalArticle, { post: live, back: fa.blog.back });
 assert(article.includes("حدود ۱ دقیقه مطالعه"));
 assert(article.includes(`<time dateTime="${live.publishedAt}"`));
 assert(article.includes("راهنمای آزمایشی"));
+// The page title is the only h1; a post's "##" sections are h2 (not h4), so the
+// outline is h1 > h2 > h3 for readers and search engines.
+assert.match(article, /<h2[^>]*>شروع<\/h2>/);
+assert(!/<h[456][^>]*>شروع</.test(article));
 assert(article.includes('href="/fa/blog"'));
 async function checkPublication() {
   const params = Promise.resolve({ locale: "fa", slug: live.slug });
