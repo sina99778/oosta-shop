@@ -49,6 +49,13 @@ const reviewedOffer = {
   flags: ["WARRANTY_CONFLICT"],
   stock: 5,
 };
+const { blocksAutomaticPurchase } = require("../apps/api/src/modules/suppliers/catalog.ts");
+assert.equal(blocksAutomaticPurchase(reviewedOffer), false);
+assert.equal(blocksAutomaticPurchase({ ...reviewedOffer, fingerprint: "a".repeat(64) }), true);
+assert.equal(
+  blocksAutomaticPurchase({ ...reviewedOffer, flags: ["WARRANTY_CONFLICT", "INPUT_CONFLICT"] }),
+  true,
+);
 const matchReviewed = (offer, warranty = reviewedVariant.warranty) => {
   const variant = { ...reviewedVariant, warranty };
   const supplierMappings = [

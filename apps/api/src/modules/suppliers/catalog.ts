@@ -60,6 +60,17 @@ export const offerSchema = z
   })
   .strict();
 export type Offer = z.infer<typeof offerSchema>;
+export function isReviewedPremiKeyPlus(offer: Offer) {
+  return (
+    offer.supplier === "canboso2" &&
+    offer.externalId === "6a7347f6b1446d1a93c12cdf" &&
+    offer.fingerprint === "4aa7403e67eac18477ea506ddbfd8210138c4c2b82caf7ff45ae323e4c29b3c2"
+  );
+}
+
+export function blocksAutomaticPurchase(offer: Offer) {
+  return offer.flags.some((flag) => flag !== "WARRANTY_CONFLICT" || !isReviewedPremiKeyPlus(offer));
+}
 export const catalogSchema = z.object({
   supplier: z.enum(supplierIds),
   fetchedAt: z.string().datetime(),

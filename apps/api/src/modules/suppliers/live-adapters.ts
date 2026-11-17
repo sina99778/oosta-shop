@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma";
-import { fetchCatalog, supplierEndpoints, type SupplierId } from "./catalog";
+import {
+  blocksAutomaticPurchase,
+  fetchCatalog,
+  supplierEndpoints,
+  type SupplierId,
+} from "./catalog";
 import type { SupplierAdapter, SupplierRegistry } from "./fulfillment";
 import { reservedWallet, walletAllowance } from "./wallet-budget";
 
@@ -65,7 +70,7 @@ async function currentOffer(supplier: LiveSupplier, externalId: string) {
     offer.currency !== "USD" ||
     (offer.stock ?? 0) < 1 ||
     offer.onRequest ||
-    offer.flags.length
+    blocksAutomaticPurchase(offer)
   )
     throw new Error("Offer unavailable");
   return offer;

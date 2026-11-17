@@ -6,6 +6,7 @@ import { AppError } from "../../utils/httpError";
 import {
   catalogSchema,
   fetchCatalog,
+  isReviewedPremiKeyPlus,
   supplierEndpoints,
   type Catalog,
   type Offer,
@@ -141,11 +142,7 @@ function deliveryMatches(offer: Offer, variant: Variant, automaticVerified?: boo
 
 function warrantyMatches(offer: Offer, variant: Variant) {
   // The store approved this warranty for the reviewed listing, including its stated exclusions.
-  if (
-    offer.supplier === "canboso2" &&
-    offer.externalId === "6a7347f6b1446d1a93c12cdf" &&
-    offer.fingerprint === "4aa7403e67eac18477ea506ddbfd8210138c4c2b82caf7ff45ae323e4c29b3c2"
-  ) {
+  if (isReviewedPremiKeyPlus(offer)) {
     return (
       variant.warranty.kind === "WARRANTED" &&
       variant.warranty.days === 30 &&
