@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { startBot } from "../src/bot";
 import { env } from "../src/config/env";
 import { prisma } from "../src/lib/prisma";
+import { inject } from "light-my-request";
+import { createApp } from "../src/app";
 
 async function main() {
   assert.equal(process.env.ISOLATED_REGRESSION_DB, "1");
@@ -96,6 +98,30 @@ async function main() {
       assert(!denial.includes("ورود مجدد به بلو"));
     }
     assert.equal(replies.length, count + 2);
+    const app = createApp();
+    const signup = (password = "Synthetic-signup-pass1") =>
+      inject(app, {
+        method: "POST",
+        url: "/auth/signup",
+        headers: { "content-type": "application/json" },
+        payload: { name: "Synthetic signup", email: "telegram-signup@example.invalid", password },
+      });
+    const beforeSignup = replies.length;
+    const registered = await signup();
+    assert.equal(registered.statusCode, 201, registered.body);
+    assert.equal(
+      replies.length,
+      beforeSignup + 1,
+      "Successful signup must alert the Telegram admin",
+    );
+    const alert = JSON.parse(replies.at(-1)!);
+    assert.equal(alert.chat_id, admin);
+    assert.match(alert.text, /ثبت‌نام جدید/);
+    assert(alert.text.includes(registered.json().user.id.slice(-8)));
+    assert.doesNotMatch(alert.text, /telegram-signup@example\.invalid|Synthetic-signup-pass1/);
+    assert.equal((await signup()).statusCode, 409);
+    assert.equal((await signup("short")).statusCode, 400);
+    assert.equal(replies.length, beforeSignup + 1, "Failed signups must not send alerts");
     const buyer = await prisma.user.create({
       data: {
         email: "private-order-fixture@example.invalid",

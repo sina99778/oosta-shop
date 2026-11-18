@@ -7,6 +7,7 @@
 
 import type { Request, Response } from "express";
 import { AppError } from "../../utils/httpError";
+import { notifyAdmin } from "../../bot";
 import {
   clearSessionCookie,
   isTrustedCookieWrite,
@@ -43,6 +44,7 @@ export async function signup(req: Request, res: Response): Promise<void> {
   const result = await registerUser(req.body);
   setSessionCookie(res, result.token);
   res.status(201).json(result);
+  void notifyAdmin(`👤 ثبت‌نام جدید در اوستا\nشناسهٔ عضو: ${result.user.id.slice(-8)}`);
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
