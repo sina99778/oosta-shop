@@ -14,12 +14,17 @@ import { siteUrl } from "@/lib/seo";
 // their canonical at the Persian URL and are not advertised as English hreflang.
 export const CONTENT_LOCALE: Locale = "fa";
 
+// Landscape card for Open Graph/Telegram/X previews (a square image renders as
+// a small thumbnail). Rendered from the brand mark with Persian text set in Estedad.
 export const DEFAULT_SHARE_IMAGE = {
-  url: "/brand/oosta-ai.png",
-  width: 640,
-  height: 640,
-  alt: "oostaAI",
+  url: "/brand/oosta-og-1200x630.jpg",
+  width: 1200,
+  height: 630,
+  alt: "اوستا ای‌آی — فروشگاه و مجلهٔ هوش مصنوعی",
 };
+
+// Square brand mark for schema.org Organization.logo.
+const ORGANIZATION_LOGO = { url: "/brand/oosta-ai.png", width: 640, height: 640 };
 
 export function absoluteUrl(path: string): string {
   return `${siteUrl()}${path}`;
@@ -94,9 +99,9 @@ export function organizationJsonLd() {
     url: `${site}/${CONTENT_LOCALE}`,
     logo: {
       "@type": "ImageObject",
-      url: `${site}${DEFAULT_SHARE_IMAGE.url}`,
-      width: DEFAULT_SHARE_IMAGE.width,
-      height: DEFAULT_SHARE_IMAGE.height,
+      url: `${site}${ORGANIZATION_LOGO.url}`,
+      width: ORGANIZATION_LOGO.width,
+      height: ORGANIZATION_LOGO.height,
     },
   };
 }

@@ -130,7 +130,7 @@ async function main() {
   const unsafeImages = (await page.generateMetadata(props)).openGraph.images;
   assert.deepEqual(
     unsafeImages.map((image) => image.url),
-    ["/brand/oosta-ai.png"],
+    ["/brand/oosta-og-1200x630.jpg"],
     "an unsafe product image falls back to the brand image",
   );
   const before = fetches;

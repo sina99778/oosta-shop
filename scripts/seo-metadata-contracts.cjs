@@ -133,7 +133,15 @@ async function main() {
       assert.equal(meta.alternates.languages["x-default"], `${SITE}/fa${route}`);
       assert.equal(meta.title, dictionaries[locale].meta[title]);
       assert.equal(meta.openGraph.url, meta.alternates.canonical);
-      assert(meta.openGraph.images.length > 0);
+      // Social cards: a 1200x630 landscape image (a square one renders as a small thumbnail).
+      assert.deepEqual(
+        [
+          meta.openGraph.images[0].url,
+          meta.openGraph.images[0].width,
+          meta.openGraph.images[0].height,
+        ],
+        ["/brand/oosta-og-1200x630.jpg", 1200, 630],
+      );
     }
     const before = fetches;
     await assert.rejects(mod.generateMetadata(params("de")), /NOT_FOUND/);
