@@ -3,6 +3,7 @@ title: ساخت ویدیو با هوش مصنوعی؛ مقایسهٔ Veo، Kling
 slug: ai-video-generators-veo-kling-runway
 excerpt: کدام ابزار برای تیزر محصول، ریلز اینستاگرام یا ویدیوی آموزشی فارسی مناسب است؟ قیمت، طول کلیپ، هزینهٔ واقعی هر ثانیه و محدودیت متن فارسی را مقایسه کرده‌ایم. Sora دیگر در این فهرست نیست.
 cover: covers/ai-video-generators-comparison.webp
+coverAlt: نوار فیلمی که از طرح خطی به نمای واقعی سینمایی تبدیل می‌شود
 status: draft
 checked: 2026-11-17
 ---

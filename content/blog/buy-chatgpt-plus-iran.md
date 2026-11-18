@@ -3,6 +3,7 @@ title: راهنمای خرید ChatGPT Plus در ایران؛ چه می‌گیر
 slug: buy-chatgpt-plus-iran
 excerpt: ChatGPT Plus دقیقاً چه چیزی به نسخهٔ رایگان اضافه می‌کند، با Go و Pro چه فرقی دارد، و از ایران با کدام روش تهیه‌اش کنید که کمترین ریسک را داشته باشد.
 cover: covers/buy-chatgpt-plus-iran.webp
+coverAlt: کارت عضویت ویژه و سه مسیر متفاوت برای تهیهٔ اشتراک
 status: draft
 checked: 2026-11-18
 ---

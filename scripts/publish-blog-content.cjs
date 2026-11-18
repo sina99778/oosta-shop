@@ -3,6 +3,8 @@
 //
 //   node scripts/publish-blog-content.cjs <contentDir> <slug> [<slug> ...]          # dry run
 //   node scripts/publish-blog-content.cjs <contentDir> <slug> [...] --apply          # write
+//   node scripts/publish-blog-content.cjs <contentDir> <slug> [...] --fill-alt [--apply]
+//     sets coverAlt from front matter on already-published posts whose coverAlt is empty
 //
 // Applies the same limits as the admin API (blog.schemas.ts / SAFE_RASTER_MIMES),
 // never overwrites an existing slug, and writes each post + cover in one
@@ -42,6 +44,8 @@ function load(dir, slug) {
   const { meta, content } = parseArticle(path.join(dir, `${slug}.md`));
   const title = (meta.title || "").trim();
   const excerpt = (meta.excerpt || "").trim() || null;
+  const coverAlt = (meta.coverAlt || "").trim() || null;
+  if (coverAlt && coverAlt.length > 200) throw new Error(`${slug}: coverAlt over 200 chars`);
   if (meta.slug !== slug) throw new Error(`${slug}: front matter slug is ${meta.slug}`);
   if (!title || title.length > 200) throw new Error(`${slug}: title must be 1-200 chars`);
   if (excerpt && excerpt.length > 500) throw new Error(`${slug}: excerpt over 500 chars`);
@@ -58,15 +62,17 @@ function load(dir, slug) {
     if (data.length > MAX_COVER_BYTES) throw new Error(`${slug}: cover over 5 MB`);
     cover = { data, mime };
   }
-  return { slug, title, excerpt, content, cover };
+  return { slug, title, excerpt, content, cover, coverAlt };
 }
 
 async function main() {
   const args = process.argv.slice(2);
   const apply = args.includes("--apply");
-  const [dir, ...slugs] = args.filter((a) => a !== "--apply");
+  const fillAlt = args.includes("--fill-alt");
+  const [dir, ...slugs] = args.filter((a) => a !== "--apply" && a !== "--fill-alt");
   if (!dir || slugs.length === 0) throw new Error("usage: <contentDir> <slug>... [--apply]");
   const posts = slugs.map((slug) => load(dir, slug));
+  if (fillAlt) return fillCoverAlt(posts, apply);
   for (const p of posts)
     console.log(
       `${apply ? "PUBLISH" : "DRY-RUN"} ${p.slug}: ${p.content.length} chars, cover ${p.cover ? `${p.cover.mime} ${p.cover.data.length} B` : "none"}`,
@@ -96,12 +102,38 @@ async function main() {
             publishedAt: new Date(now.getTime() - i * 1000),
             coverData: p.cover ? new Uint8Array(p.cover.data) : null,
             coverMime: p.cover ? p.cover.mime : null,
+            coverAlt: p.coverAlt,
           },
           select: { id: true },
         }),
       ),
     );
     console.log(`published ${posts.length} posts`);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+// Only fills empty alt text on existing posts; never changes text an editor wrote.
+async function fillCoverAlt(posts, apply) {
+  for (const p of posts) {
+    if (!p.coverAlt) throw new Error(`${p.slug}: no coverAlt in front matter`);
+    console.log(`${apply ? "FILL" : "DRY-RUN"} ${p.slug}: ${p.coverAlt}`);
+  }
+  if (!apply) return;
+  const { PrismaClient } = require("@prisma/client");
+  const prisma = new PrismaClient();
+  try {
+    const results = await prisma.$transaction(
+      posts.map((p) =>
+        prisma.blogPost.updateMany({
+          where: { slug: p.slug, OR: [{ coverAlt: null }, { coverAlt: "" }] },
+          data: { coverAlt: p.coverAlt },
+        }),
+      ),
+    );
+    const filled = results.reduce((sum, r) => sum + r.count, 0);
+    console.log(`filled ${filled} of ${posts.length} posts`);
   } finally {
     await prisma.$disconnect();
   }

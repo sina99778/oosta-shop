@@ -3,6 +3,7 @@ title: Cursor، Claude Code یا GitHub Copilot؟ راهنمای انتخاب ب
 slug: cursor-vs-claude-code-vs-copilot
 excerpt: سه ابزار اصلی کدنویسی با هوش مصنوعی را از نظر قیمت، مدل‌ها، محیط کار و هزینه‌های پنهان مقایسه کرده‌ایم؛ همراه با تغییر مهم قیمت‌گذاری Cursor که خیلی از منابع فارسی هنوز به آن نپرداخته‌اند.
 cover: covers/cursor-claude-code-copilot.webp
+coverAlt: میز برنامه‌نویس با سه محیط کدنویسی هوش مصنوعی: ویرایشگر، ترمینال و پنل پیشنهاد کد
 status: draft
 checked: 2026-11-17
 ---

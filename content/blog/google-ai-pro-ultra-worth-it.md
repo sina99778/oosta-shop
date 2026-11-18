@@ -3,6 +3,7 @@ title: Google AI Pro و Ultra ارزش خرید دارند؟ بررسی کامل
 slug: google-ai-pro-ultra-worth-it
 excerpt: اشتراک‌های Google AI فقط Gemini نیستند؛ فضای ابری، ابزار ویدیو، Gemini Notebook و ادغام با Gmail را هم دارند. بررسی کرده‌ایم هر پلن دقیقاً چه می‌دهد و کدام قابلیت‌ها فقط در آمریکا فعال‌اند.
 cover: covers/google-ai-pro-ultra-value.webp
+coverAlt: جعبهٔ اشتراکی که فضای ابری، اسناد، ویدیو و اشتراک خانوادگی از آن بیرون می‌آید
 status: draft
 checked: 2026-11-17
 ---

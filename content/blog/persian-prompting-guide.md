@@ -3,6 +3,7 @@ title: آموزش پرامپت‌نویسی به فارسی؛ از اصول رس
 slug: persian-prompting-guide
 excerpt: اصول مشترک راهنماهای رسمی Anthropic و Google برای پرامپت‌نویسی، راه‌حل چهار مشکل رایج متن فارسی در هوش مصنوعی، و ده مثال پرامپت بد و خوب برای کارهای روزمره.
 cover: covers/persian-prompting-guide.webp
+coverAlt: دستی با قلم که خطوط جوهرش به بلوک‌های منظم تبدیل می‌شوند؛ نماد پرامپت ساختارمند
 status: draft
 checked: 2026-11-17
 ---

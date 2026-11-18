@@ -3,6 +3,7 @@ title: ChatGPT، Claude یا Gemini؟ مقایسهٔ پلن‌ها و کاربر
 slug: chatgpt-vs-claude-vs-gemini
 excerpt: سه دستیار هوش مصنوعی اصلی بازار را از نظر قیمت پلن‌ها، حجم متنی که هم‌زمان می‌خوانند، ابزارها و کاربرد واقعی مقایسه کرده‌ایم تا بدانید برای نوشتن، برنامه‌نویسی و تحقیق کدام بهتر است.
 cover: covers/chatgpt-claude-gemini-comparison.webp
+coverAlt: سه ابزار هوش مصنوعی به شکل سه شیء نورانی متفاوت که کاربر بین آن‌ها انتخاب می‌کند
 status: draft
 checked: 2026-11-17
 ---

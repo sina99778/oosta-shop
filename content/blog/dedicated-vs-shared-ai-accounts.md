@@ -3,6 +3,7 @@ title: اکانت اختصاصی، اشتراکی یا ارتقای حساب ش�
 slug: dedicated-vs-shared-ai-accounts
 excerpt: سه روش رایج تهیهٔ اشتراک ChatGPT، Claude و Gemini در ایران را از نظر حریم خصوصی، مالکیت حساب و ریسک تعلیق مقایسه کرده‌ایم، با استناد به شرایط استفادهٔ رسمی خود این شرکت‌ها.
 cover: covers/dedicated-vs-shared-ai-accounts.webp
+coverAlt: سه کلید که سه روش تهیهٔ اکانت را نشان می‌دهند: شخصی، اشتراکی و اختصاصی
 status: draft
 checked: 2026-11-17
 ---

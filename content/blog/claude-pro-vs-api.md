@@ -3,6 +3,7 @@ title: Claude Pro یا اعتبار API؟ کدام برای شما به‌صرف
 slug: claude-pro-vs-api
 excerpt: اشتراک ماهانهٔ Claude یا پرداخت به‌ازای مصرف API؟ قیمت رسمی مدل‌ها، چند مثال هزینهٔ واقعی و اینکه کِی کدام انتخاب درست‌تر است.
 cover: covers/claude-pro-vs-api.webp
+coverAlt: ترازو بین اشتراک ماهانه و سکه‌های پرداخت به‌ازای مصرف
 status: draft
 checked: 2026-11-18
 ---

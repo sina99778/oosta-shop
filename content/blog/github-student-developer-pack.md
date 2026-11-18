@@ -3,6 +3,7 @@ title: GitHub Student Developer Pack؛ چه می‌دهد، چطور تأیید 
 slug: github-student-developer-pack
 excerpt: بستهٔ دانشجویی GitHub شامل Copilot، دامنه، اعتبار ابری و ابزارهای حرفه‌ای است. شرایط تأیید، دلایل رایج رد شدن درخواست و آنچه GitHub دربارهٔ ایران گفته را بررسی کرده‌ایم.
 cover: covers/github-student-developer-pack.webp
+coverAlt: کوله‌پشتی دانشجویی که ابزارهای برنامه‌نویسی و اعتبار ابری از آن بیرون می‌آیند
 status: draft
 checked: 2026-11-18
 ---
