@@ -21,6 +21,9 @@ import { quotePricing } from "./fx.service";
 import { indicativePrice } from "./pricing";
 import { readVariant, variantKey } from "./variant";
 import { reserveWallet, settleWallet } from "./wallet-budget";
+import { readManualSupplier } from "./manual-payment";
+import { queueOrderEmail } from "../../lib/mailer";
+import { notifyAdmin } from "../../bot";
 
 type PurchaseInput = {
   reference: string;
@@ -31,6 +34,7 @@ type PurchaseInput = {
   currency: "USD" | "USDT";
   productType?: "ACCOUNT" | "LICENSE" | "GIFTCARD";
   fingerprint?: string;
+  estimateWithoutWallet?: boolean;
 };
 export type SupplierAdapter = {
   capabilities: {
@@ -46,6 +50,7 @@ export type SupplierAdapter = {
     externalId: string;
     supplierOrderId?: string;
   }): Promise<unknown>;
+  walletBalance?(): Promise<{ amount: string; currency: string }>;
 };
 // Only trusted server code registers adapters. Wallet risk is separate from a vendor price ceiling.
 type Registry = ReadonlyMap<SupplierId, SupplierAdapter>;
@@ -130,7 +135,14 @@ async function eligible(
     order.items.length !== 1
   )
     throw denied();
-  if (order.paymentProvider === "CARD_TO_CARD") {
+  if (order.paymentProvider === "CARD_TO_CARD" && readManualSupplier(order.paymentMetadata)) {
+    const receipt = await tx.receipt.findFirst({
+      where: { orderId: order.id, id: order.paymentRefId.slice(5), status: "APPROVED" },
+      select: { id: true },
+    });
+    if (!env.SUPPLIER_MANUAL_APPROVAL || !order.paymentRefId.startsWith("card:") || !receipt)
+      throw denied();
+  } else if (order.paymentProvider === "CARD_TO_CARD") {
     const invoice = readBluInvoice(order.paymentMetadata);
     const claim = await tx.bluBankObservation.findUnique({ where: { matchedOrderId: order.id } });
     const approved = await tx.receipt.findMany({
@@ -189,6 +201,7 @@ export async function selectSupplierPurchase(
   plan: SourcePlan,
   registry: Registry = live,
   maximumAmount?: Prisma.Decimal,
+  estimateWithoutWallet = false,
 ) {
   const variant = readVariant(plan.variant);
   if (
@@ -246,6 +259,7 @@ export async function selectSupplierPurchase(
           currency: offer.currency,
           productType: plan.productType,
           fingerprint: offer.fingerprint,
+          estimateWithoutWallet,
         }),
       );
     } catch {
@@ -323,12 +337,13 @@ export async function prepareSupplierFulfillment(orderId: string, registry: Regi
   });
 }
 
-async function applyResult(id: string, raw: unknown) {
+async function applyResult(id: string, reference: string, raw: unknown) {
   const found = await prisma.supplierFulfillment.findUniqueOrThrow({ where: { id } });
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     await lockOrder(tx, found.orderId);
     const job = await tx.supplierFulfillment.findUniqueOrThrow({ where: { id } });
-    if (!["SENDING", "PENDING", "UNCERTAIN"].includes(job.state)) return summary(job);
+    if (job.reference !== reference || !["SENDING", "PENDING", "UNCERTAIN"].includes(job.state))
+      return summary(job);
     const parsed = resultSchema.safeParse(raw);
     if (!parsed.success)
       return summary(
@@ -345,11 +360,23 @@ async function applyResult(id: string, raw: unknown) {
       );
     if (result.state === "NO_CHARGE") {
       if (!job.chargedCost) await settleWallet(tx, job, "0");
+      const order = await tx.order.findUniqueOrThrow({
+        where: { id: job.orderId },
+        select: { paymentMetadata: true },
+      });
+      const retry = !job.chargedCost && !!readManualSupplier(order.paymentMetadata);
       // Once an earlier response reported a debit, a later rejection cannot erase it.
       return summary(
         await tx.supplierFulfillment.update({
           where: { id },
-          data: { state: job.chargedCost ? "REVIEW" : "NO_CHARGE" },
+          data: retry
+            ? {
+                state: "AWAITING_FUNDS",
+                walletExposure: null,
+                reference: "oosta-manual-" + randomUUID(),
+                result: Prisma.DbNull,
+              }
+            : { state: job.chargedCost ? "REVIEW" : "NO_CHARGE" },
         }),
       );
     }
@@ -360,7 +387,18 @@ async function applyResult(id: string, raw: unknown) {
     };
     if (
       result.currency !== job.currency ||
-      new Prisma.Decimal(result.amount).gt(job.walletExposure ?? job.maximumCost) ||
+      new Prisma.Decimal(result.amount).gt(
+        readManualSupplier(
+          (
+            await tx.order.findUniqueOrThrow({
+              where: { id: job.orderId },
+              select: { paymentMetadata: true },
+            })
+          ).paymentMetadata,
+        )
+          ? job.maximumCost
+          : (job.walletExposure ?? job.maximumCost),
+      ) ||
       (job.supplierOrderId && job.supplierOrderId !== result.supplierOrderId) ||
       (job.chargedCost && !job.chargedCost.eq(result.amount))
     )
@@ -404,10 +442,109 @@ async function applyResult(id: string, raw: unknown) {
       },
     });
     await tx.order.update({ where: { id: job.orderId }, data: { paymentStatus: "PAID" } });
+    if (readManualSupplier(current.order.paymentMetadata))
+      await queueOrderEmail(tx, job.orderId, "ORDER_DELIVERED");
     return summary(
       await tx.supplierFulfillment.update({ where: { id }, data: { ...data, state: "DELIVERED" } }),
     );
   });
+  if (
+    found.state !== updated.state &&
+    ["DELIVERED", "AWAITING_FUNDS", "REVIEW", "UNCERTAIN"].includes(updated.state)
+  ) {
+    const order = await prisma.order
+      .findUnique({ where: { id: found.orderId }, select: { paymentMetadata: true } })
+      .catch(() => null);
+    if (readManualSupplier(order?.paymentMetadata))
+      void notifyAdmin(`وضعیت سفارش ${found.orderId.slice(-8)}: ${updated.state}`);
+  }
+  return updated;
+}
+
+export async function dispatchManualSupplier(
+  id: string,
+  adminId: string,
+  registry: Registry,
+  acceptedCost?: string,
+) {
+  const checkAdmin = async (tx: Pick<Prisma.TransactionClient, "user">) => {
+    if (
+      !env.SUPPLIER_MANUAL_APPROVAL ||
+      (await tx.user.findUnique({ where: { id: adminId }, select: { role: true } }))?.role !==
+        "ADMIN"
+    )
+      throw new AppError(403, "FORBIDDEN", "Administrator required");
+  };
+  await checkAdmin(prisma);
+  const job = await prisma.supplierFulfillment.findUniqueOrThrow({ where: { id } });
+  if (job.state !== "AWAITING_FUNDS") throw denied();
+  const current = await eligible(prisma, job.orderId);
+  if (!readManualSupplier(current.order.paymentMetadata)) throw denied();
+  const supplier = job.supplier as SupplierId;
+  const adapter = registry.get(supplier);
+  if (!supplierSupported(adapter)) throw denied();
+  const selected = await selectSupplierPurchase(
+    {
+      ...current.item.plan,
+      productType: current.item.product.type,
+      supplierMappings: readMappings(current.item.plan.supplierMappings).filter(
+        (mapping) =>
+          mapping.supplier === supplier &&
+          mapping.externalId === job.externalId &&
+          mapping.fingerprint === job.fingerprint,
+      ),
+    },
+    new Map([[supplier, adapter]]),
+    undefined,
+    true,
+  );
+  const cost = new Prisma.Decimal(selected.quote.cost);
+  const approved = job.approvedCost ?? job.maximumCost;
+  if (cost.gt(approved) && (!acceptedCost || !cost.eq(acceptedCost)))
+    throw new AppError(409, "SUPPLIER_COST_INCREASED", "New supplier cost must be accepted", {
+      cost: cost.toString(),
+      currency: job.currency,
+    });
+  await prisma.$transaction(async (tx) => {
+    await lockOrder(tx, job.orderId);
+    await checkAdmin(tx);
+    const latest = await tx.supplierFulfillment.findUniqueOrThrow({ where: { id } });
+    const fresh = await eligible(tx, job.orderId);
+    if (
+      latest.state !== "AWAITING_FUNDS" ||
+      latest.reference !== job.reference ||
+      !latest.maximumCost.eq(job.maximumCost) ||
+      !(latest.approvedCost ?? latest.maximumCost).eq(approved) ||
+      fresh.signature !== job.variantKey ||
+      selected.expiry <= Date.now()
+    )
+      throw denied();
+    const ready = await tx.supplierFulfillment.update({
+      where: { id },
+      data: {
+        state: "READY",
+        quoteId: selected.quote.quoteId,
+        maximumCost: cost,
+        approvedCost: Prisma.Decimal.max(approved, cost),
+        expiresAt: new Date(selected.expiry),
+      },
+    });
+    if (adapter.capabilities.walletExposure) await reserveWallet(tx, ready);
+    if (cost.gt(approved))
+      await tx.siteSetting.create({
+        data: {
+          key: "supplierAudit." + randomUUID(),
+          value: JSON.stringify({
+            action: "acceptCost",
+            id,
+            adminId,
+            cost: cost.toString(),
+            at: new Date(),
+          }),
+        },
+      });
+  });
+  return processSupplierFulfillment(id, registry);
 }
 
 export async function processSupplierFulfillment(id: string, registry: Registry = live) {
@@ -428,6 +565,12 @@ export async function processSupplierFulfillment(id: string, registry: Registry 
     await lockOrder(tx, found.orderId);
     let job = await tx.supplierFulfillment.findUniqueOrThrow({ where: { id } });
     if (job.state !== "READY") return { job, send: false };
+    const payment = await tx.order.findUniqueOrThrow({
+      where: { id: job.orderId },
+      select: { paymentMetadata: true },
+    });
+    if (!env.SUPPLIER_MANUAL_APPROVAL && readManualSupplier(payment.paymentMetadata))
+      return { job, send: false };
     if (!supplierSupported(registry.get(job.supplier as SupplierId)))
       throw new AppError(503, "SUPPLIER_PURCHASE_UNSUPPORTED", "Bounded supplier adapter required");
     let valid = job.expiresAt.getTime() > Date.now();
@@ -473,9 +616,9 @@ export async function processSupplierFulfillment(id: string, registry: Registry 
       currency: job.currency as "USD" | "USDT",
     });
   } catch {
-    return applyResult(id, { state: "NOT_FOUND" });
+    return applyResult(id, job.reference, { state: "NOT_FOUND" });
   }
-  return applyResult(id, response);
+  return applyResult(id, job.reference, response);
 }
 
 export async function reconcileSupplierFulfillment(id: string, registry: Registry = live) {
@@ -494,5 +637,5 @@ export async function reconcileSupplierFulfillment(id: string, registry: Registr
   } catch {
     return summary(job);
   }
-  return applyResult(id, response);
+  return applyResult(id, job.reference, response);
 }

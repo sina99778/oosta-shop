@@ -10,9 +10,13 @@ import { uploadReceipt } from "../src/modules/orders/orders.service";
 import { readBluInvoice } from "../src/modules/orders/blu-invoice";
 import { pendingBluQaReceipts } from "../src/modules/orders/blu-qa-poll";
 import { prisma } from "../src/lib/prisma";
+import { approveReceipt, rejectReceipt } from "../src/modules/admin/admin.service";
+import { queueOrderEmail, sendNextOrderEmail } from "../src/lib/mailer";
+import { recordSupplierFunding, refundManualSupplier } from "../src/modules/suppliers/manual-admin";
 import { variantKey, variantSchema } from "../src/modules/suppliers/variant";
 import {
   prepareSupplierFulfillment,
+  dispatchManualSupplier,
   processSupplierFulfillment,
   reconcileSupplierFulfillment,
   type SupplierAdapter,
@@ -1006,6 +1010,182 @@ async function main() {
   );
   assert.equal(manualQuote.json().quote.kind, "INDICATIVE");
   assert.equal(buys, 0);
+  const m = await fixture();
+  const manualAdmin = await prisma.user.create({
+    data: {
+      name: "Manual supplier admin",
+      email: randomUUID() + "@example.invalid",
+      passwordHash: "synthetic-unused",
+      role: "ADMIN",
+    },
+  });
+  const mode = m.registry.get("canboso2")!;
+  mode.capabilities = {
+    priceCeiling: false,
+    walletExposure: true,
+    idempotency: true,
+    lookup: true,
+  };
+  let supplierCost = "8";
+  mode.quote = async (input) => {
+    assert.equal(input.estimateWithoutWallet, true);
+    return {
+      quoteId: randomUUID(),
+      externalId: input.externalId,
+      quantity: 1,
+      currency: "USD",
+      cost: supplierCost,
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
+    };
+  };
+  m.registry.delete("ventebot");
+  await prisma.supplierWalletBudget.upsert({
+    where: { supplier: "canboso2" },
+    create: {
+      supplier: "canboso2",
+      currency: "USD",
+      authorizedAmount: 0,
+      remainingAmount: 0,
+      enabled: true,
+    },
+    update: {
+      currency: "USD",
+      authorizedAmount: 0,
+      remainingAmount: 0,
+      activeReference: null,
+      enabled: true,
+    },
+  });
+  Object.assign(env, { SUPPLIER_MANUAL_APPROVAL: true, BLU_AUTO_APPROVE_ENABLED: false });
+  const manualApp = createApp({ supplierAdapters: m.registry });
+  const mHeaders = {
+    ...headers,
+    authorization: "Bearer " + signAccessToken({ sub: m.user.id, role: "USER", sv: 0 }),
+  };
+  const call = (url: string, body: object) =>
+    inject(manualApp, { method: "POST", url, headers: mHeaders, payload: JSON.stringify(body) });
+  const mq = await call("/supplier-checkout/quotes", { planId: m.product.plans[0].id });
+  assert.equal(mq.statusCode, 201, mq.body);
+  assert.deepEqual(mq.json().quote.methods, { online: false, cardToCard: true });
+  const mo = await call("/supplier-checkout/orders", {
+    quoteId: mq.json().quote.id,
+    method: "card_to_card",
+  });
+  assert.equal(mo.statusCode, 201, mo.body);
+  const orderId = mo.json().order.id;
+  assert.equal(mo.json().cardToCard.amount, mq.json().quote.amount);
+  const manualJob = await prisma.supplierFulfillment.findUniqueOrThrow({ where: { orderId } });
+  assert.equal(manualJob.walletExposure, null);
+  await assert.rejects(dispatchManualSupplier(manualJob.id, manualAdmin.id, m.registry));
+  const file = { buffer: Buffer.from("synthetic PNG"), mimetype: "image/png" };
+  const mr = await uploadReceipt(m.user.id, orderId, file, "01234567");
+  await assert.rejects(approveReceipt(mr.receiptId, {}, true));
+  const approvals = await Promise.allSettled([
+    approveReceipt(mr.receiptId, {}, false, manualAdmin.id),
+    approveReceipt(mr.receiptId, {}, false, manualAdmin.id),
+  ]);
+  assert.equal(approvals.filter((result) => result.status === "fulfilled").length, 1);
+  await manualApp.locals.supplierCheckout.sweep();
+  assert.equal(buys, 0);
+  assert.equal(
+    (await prisma.supplierFulfillment.findUniqueOrThrow({ where: { id: manualJob.id } })).state,
+    "AWAITING_FUNDS",
+  );
+  assert.equal(
+    (await call("/admin/suppliers/manual/" + manualJob.id + "/dispatch", {})).statusCode,
+    403,
+  );
+  await assert.rejects(dispatchManualSupplier(manualJob.id, manualAdmin.id, m.registry), {
+    code: "SUPPLIER_WALLET_UNAVAILABLE",
+  });
+  const funding = randomUUID();
+  await recordSupplierFunding(manualJob.id, manualAdmin.id, "9", funding);
+  await recordSupplierFunding(manualJob.id, manualAdmin.id, "9", funding);
+  assert.equal(
+    (
+      await prisma.supplierWalletBudget.findUniqueOrThrow({ where: { supplier: "canboso2" } })
+    ).remainingAmount.toString(),
+    "9",
+  );
+  supplierCost = "9";
+  await prisma.siteSetting.update({
+    where: { key: "suppliers.catalog.canboso2" },
+    data: { value: JSON.stringify(catalog("canboso2", "9", "b".repeat(64))) },
+  });
+  await assert.rejects(dispatchManualSupplier(manualJob.id, manualAdmin.id, m.registry), {
+    code: "SUPPLIER_COST_INCREASED",
+  });
+  assert.equal(buys, 0);
+  const dispatch = await Promise.allSettled([
+    dispatchManualSupplier(manualJob.id, manualAdmin.id, m.registry, "9"),
+    dispatchManualSupplier(manualJob.id, manualAdmin.id, m.registry, "9"),
+  ]);
+  assert(dispatch.some((result) => result.status === "fulfilled"));
+  assert.equal(buys, 1);
+  assert.equal(
+    (await prisma.order.findUniqueOrThrow({ where: { id: orderId } })).paymentStatus,
+    "PAID",
+  );
+  assert.equal(await prisma.emailOutbox.count({ where: { orderId, kind: "ORDER_DELIVERED" } }), 1);
+  await assert.rejects(refundManualSupplier(manualJob.id, manualAdmin.id, "123456"));
+  await sendNextOrderEmail(async () => {
+    throw new Error("Synthetic SMTP failure");
+  });
+  let email = await prisma.emailOutbox.findFirstOrThrow({ where: { orderId } });
+  assert.equal(email.status, "PENDING");
+  assert.equal(email.attempts, 1);
+  assert.equal(
+    (await prisma.order.findUniqueOrThrow({ where: { id: orderId } })).paymentStatus,
+    "PAID",
+  );
+  await prisma.emailOutbox.update({ where: { id: email.id }, data: { nextAt: new Date(0) } });
+  await sendNextOrderEmail(async (message) => {
+    assert(message.text.includes("/fa/dashboard/orders/" + orderId));
+    assert(!message.text.includes("Synthetic-only-1"));
+  });
+  email = await prisma.emailOutbox.findFirstOrThrow({ where: { orderId } });
+  assert.equal(email.status, "SENT");
+  await prisma.user.update({ where: { id: m.user.id }, data: { email: null } });
+  await prisma.$transaction((tx) => queueOrderEmail(tx, orderId, "ORDER_REJECTED"));
+  assert.equal(await prisma.emailOutbox.count({ where: { orderId } }), 1);
+  async function nextManualOrder() {
+    const quote = await call("/supplier-checkout/quotes", { planId: m.product.plans[0].id });
+    assert.equal(quote.statusCode, 201, quote.body);
+    const order = await call("/supplier-checkout/orders", {
+      quoteId: quote.json().quote.id,
+      method: "card_to_card",
+    });
+    assert.equal(order.statusCode, 201, order.body);
+    const id = order.json().order.id;
+    return {
+      id,
+      job: await prisma.supplierFulfillment.findUniqueOrThrow({ where: { orderId: id } }),
+    };
+  }
+  const rejected = await nextManualOrder();
+  const rejectedReceipt = await uploadReceipt(m.user.id, rejected.id, file, "12345678");
+  await rejectReceipt(rejectedReceipt.receiptId, {}, manualAdmin.id);
+  assert.equal(
+    (await prisma.supplierFulfillment.findUniqueOrThrow({ where: { id: rejected.job.id } })).state,
+    "REJECTED",
+  );
+  await prisma.supplierCheckoutQuote.update({
+    where: { orderId: rejected.id },
+    data: { expiresAt: new Date(0) },
+  });
+  const refund = await nextManualOrder();
+  const refundReceipt = await uploadReceipt(m.user.id, refund.id, file, "12345679");
+  await approveReceipt(refundReceipt.receiptId, {}, false, manualAdmin.id);
+  await refundManualSupplier(refund.job.id, manualAdmin.id, "12345680");
+  assert.equal(
+    (await prisma.order.findUniqueOrThrow({ where: { id: refund.id } })).paymentStatus,
+    "REFUNDED",
+  );
+  assert.equal(buys, 1);
+  Object.assign(env, { SUPPLIER_MANUAL_APPROVAL: false });
+  console.log(
+    "PASS: unfunded manual checkout, admin-only receipt approval and purchase, Blu isolation, cost increase, funding idempotency, concurrent final delivery and email outbox",
+  );
   assert.equal(new Prisma.Decimal("8").toString(), "8");
   console.log(
     "PASS: supplier paid-only gate, exact variants, price ceiling capability, cheapest selection, single dispatch/delivery, expiry, price/identity/credential denial, refund race, no-charge, pending/timeout/crash lookup recovery and empty live registry",

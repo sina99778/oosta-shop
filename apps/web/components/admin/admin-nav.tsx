@@ -3,8 +3,9 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { useApi } from "@/lib/use-api";
 import type { Locale } from "@/lib/i18n";
 import styles from "./admin.module.css";
 
@@ -19,7 +20,18 @@ export function AdminNav({
   >;
 }) {
   const pathname = usePathname();
-  const { logout } = useAuth();
+  const { logout, token } = useAuth();
+  const { data: supplierQueue, refetch } = useApi<{ enabled: boolean; count: number }>(
+    token ? "/admin/suppliers/manual/pending" : null,
+    token ?? undefined,
+  );
+  useEffect(() => {
+    if (!token) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") refetch();
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [token, refetch]);
   const [open, setOpen] = useState(false);
   const fa = locale === "fa";
   const base = `/${locale}/admin`;
@@ -29,6 +41,16 @@ export function AdminNav({
       links: [
         { path: "", label: fa ? "نمای کلی" : "Overview" },
         { path: "/orders", label: labels.orders },
+        ...(supplierQueue?.enabled
+          ? [
+              {
+                path: "/orders#supplier-orders",
+                label:
+                  (fa ? "سفارش‌های تأمین‌کننده" : "Supplier orders") +
+                  (supplierQueue.count ? ` (${supplierQueue.count})` : ""),
+              },
+            ]
+          : []),
         { path: "/receipts", label: labels.receipts },
         { path: "/tickets", label: labels.tickets },
       ],

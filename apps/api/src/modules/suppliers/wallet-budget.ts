@@ -23,7 +23,16 @@ export async function reserveWallet(tx: Prisma.TransactionClient, job: SupplierF
     if (budget.activeReference !== job.reference) throw blocked();
     return job;
   }
-  if (budget.activeReference || budget.remainingAmount.lt(job.maximumCost)) throw blocked();
+  if (budget.activeReference) throw blocked();
+  if (budget.remainingAmount.lt(job.maximumCost))
+    throw new AppError(
+      503,
+      "SUPPLIER_WALLET_UNAVAILABLE",
+      "Authorized supplier wallet is unavailable",
+      job.approvedCost
+        ? { shortfall: job.maximumCost.sub(budget.remainingAmount).toString(), currency: job.currency }
+        : undefined,
+    );
   const reserved = await tx.supplierFulfillment.update({
     where: { id: job.id },
     data: { walletExposure: budget.remainingAmount },

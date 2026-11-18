@@ -12,6 +12,7 @@ import type { Locale } from "@/lib/i18n";
 import type { AdminStats, Paginated } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 import { AdminOrderList } from "./admin-order-list";
+import { ManualSupplierJobs } from "./manual-supplier-jobs";
 import styles from "./admin.module.css";
 
 const statuses = [
@@ -51,6 +52,7 @@ export function AdminOrders({ locale, dict }: { locale: Locale; dict: Dictionary
           {fa ? "صف رسیدها" : "Receipt queue"} <span aria-hidden="true">↗</span>
         </Link>
       </header>
+      <ManualSupplierJobs locale={locale} />
       <section className={styles.panel}>
         <form
           className={styles.toolbar}

@@ -9,6 +9,7 @@ import { env } from "./config/env";
 import { createApp } from "./app";
 import { prisma } from "./lib/prisma";
 import { startBot } from "./bot";
+import { startOrderMail } from "./lib/mailer";
 
 // Explicit server-owned path only; never supplied through an HTTP request.
 if (process.env.SUPPLIER_CREDENTIALS_FILE) {
@@ -20,6 +21,7 @@ const stopCatalogRefresh = startCatalogRefresh();
 const stopFxRefresh = startFxRefresh();
 const app = createApp();
 const stopSupplierCheckout = app.locals.supplierCheckout.start();
+const stopOrderMail = startOrderMail();
 
 const server = app.listen(env.API_PORT, () => {
   console.log(`[oosta-api] listening on http://localhost:${env.API_PORT} (${env.NODE_ENV})`);
@@ -33,6 +35,7 @@ async function shutdown(signal: string): Promise<void> {
   stopCatalogRefresh();
   stopFxRefresh();
   stopSupplierCheckout();
+  stopOrderMail();
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await prisma.$disconnect();
   console.log("[oosta-api] shutdown complete");

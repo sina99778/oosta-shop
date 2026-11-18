@@ -29,6 +29,9 @@ import {
 } from "./modules/admin/admin.service";
 import { getGatewayConfig, maskCard, patchGatewayConfig } from "./lib/gatewayConfig";
 import { readBluPollStatus } from "./modules/orders/blu-poll-status";
+import { dispatchManualSupplier } from "./modules/suppliers/fulfillment";
+import { liveSupplierRegistry } from "./modules/suppliers/live-adapters";
+import { AppError } from "./utils/httpError";
 
 let bot: Telegraf | undefined;
 let backupTimer: ReturnType<typeof setInterval> | undefined;
@@ -231,12 +234,10 @@ function receiptCaption(r: {
     user: { name: string; email: string | null; phone: string | null };
   };
 }): string {
-  const who = r.order.user.email ?? r.order.user.phone ?? r.order.user.name;
   const when = new Date(r.createdAt).toISOString().replace("T", " ").slice(0, 16);
   const statusIcon = r.status === "APPROVED" ? "✅" : r.status === "REJECTED" ? "❌" : "🕒";
   return [
     `🧾 Receipt — order #${r.order.id.slice(-8)}`,
-    `👤 ${r.order.user.name} (${who})`,
     `💰 ${r.order.totalAmount} ${r.order.currency}`,
     `🏷 Note: ${r.reference ?? "—"}`,
     `${statusIcon} Status: ${r.status}`,
@@ -402,13 +403,52 @@ async function sendBackup(chatId: number): Promise<void> {
 }
 
 // Fire-and-forget notification to the admin (used by e.g. the tickets module).
-export async function notifyAdmin(text: string): Promise<void> {
+export async function notifyAdmin(
+  text: string,
+  button?: { label: string; data: string },
+): Promise<void> {
   const adminId = env.TELEGRAM_ADMIN_ID;
   if (!bot || !adminId) return;
   try {
-    await bot.telegram.sendMessage(adminId, text);
-  } catch (error) {
-    console.error("[telegram] notifyAdmin failed", error);
+    await bot.telegram.sendMessage(
+      adminId,
+      text,
+      button
+        ? Markup.inlineKeyboard([Markup.button.callback(button.label, button.data)])
+        : undefined,
+    );
+  } catch {
+    console.error("[telegram] notifyAdmin failed");
+  }
+}
+
+export async function notifySupplierReceipt(receiptId: string, orderId: string) {
+  const chatId = env.TELEGRAM_ADMIN_ID;
+  if (!bot || !chatId) return;
+  try {
+    const { data, mimeType } = await getReceiptImage(receiptId);
+    const caption = "رسید سفارش تأمین‌کننده " + orderId.slice(-8);
+    const buttons = Markup.inlineKeyboard([
+      [
+        Markup.button.callback("تأیید رسید", "rcp_ok_" + receiptId),
+        Markup.button.callback("رد رسید", "rcp_no_" + receiptId),
+      ],
+    ]);
+    await bot.telegram.sendDocument(
+      chatId,
+      {
+        source: data,
+        filename:
+          mimeType === "application/pdf"
+            ? "receipt.pdf"
+            : mimeType === "image/png"
+              ? "receipt.png"
+              : "receipt.jpg",
+      },
+      { caption, ...buttons },
+    );
+  } catch {
+    console.error("[telegram] supplier receipt notification failed");
   }
 }
 
@@ -618,14 +658,33 @@ export function startBot(): void {
     await sendReceipts(ctx.chat?.id ?? adminId, undefined);
   });
 
-  bot.action(/^rcp_ok_(.+)$/, async (ctx) => {
+  bot.action(/^supplier_buy_([a-z0-9]{1,44})$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    try {
+      const actor = process.env.SUPPLIER_TELEGRAM_ADMIN_USER_ID ?? "";
+      const result = await dispatchManualSupplier(ctx.match[1], actor, liveSupplierRegistry());
+      await ctx.reply("وضعیت تأمین: " + result.state);
+    } catch (error) {
+      await ctx.reply(
+        error instanceof AppError && error.code === "SUPPLIER_COST_INCREASED"
+          ? "قیمت تأمین تغییر کرده است. مبلغ جدید را در پنل بررسی و تأیید کن."
+          : "خرید انجام نشد. وضعیت سفارش و بودجه را در پنل بررسی کن.",
+      );
+    }
+  });
+  bot.action(/^rcp_ok_([a-z0-9]{1,100})$/, async (ctx) => {
     const id = ctx.match[1];
     try {
-      const receipt = await approveReceipt(id, {});
-      await ctx.answerCbQuery("✅ Approved & delivered");
+      const receipt = await approveReceipt(
+        id,
+        {},
+        false,
+        process.env.SUPPLIER_TELEGRAM_ADMIN_USER_ID,
+      );
+      await ctx.answerCbQuery("✅ Approved");
       await ctx.editMessageReplyMarkup(undefined).catch(() => {});
       await ctx.reply(
-        `✅ Approved — order #${receipt.order.id.slice(-8)} is now PAID and delivered.`,
+        `✅ Approved — order #${receipt.order.id.slice(-8)}: ${receipt.order.paymentStatus}.`,
         mainMenu(),
       );
     } catch (error) {
@@ -637,10 +696,10 @@ export function startBot(): void {
     }
   });
 
-  bot.action(/^rcp_no_(.+)$/, async (ctx) => {
+  bot.action(/^rcp_no_([a-z0-9]{1,100})$/, async (ctx) => {
     const id = ctx.match[1];
     try {
-      const receipt = await rejectReceipt(id, {});
+      const receipt = await rejectReceipt(id, {}, process.env.SUPPLIER_TELEGRAM_ADMIN_USER_ID);
       await ctx.answerCbQuery("❌ Rejected");
       await ctx.editMessageReplyMarkup(undefined).catch(() => {});
       await ctx.reply(

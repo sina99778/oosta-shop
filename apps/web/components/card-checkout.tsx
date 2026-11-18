@@ -77,8 +77,9 @@ export function CardCheckout({
   const [additional, setAdditional] = useState(false);
   const submitting = useRef(false);
   const [elapsedDeadline, setElapsedDeadline] = useState<string | null>(null);
-  const deadline = data?.order.bluInvoice?.expiresAt;
-  const remainingMs = data?.order.bluInvoice?.remainingMs;
+  const deadline = data?.order.bluInvoice?.expiresAt ?? data?.order.manualSupplier?.expiresAt;
+  const remainingMs =
+    data?.order.bluInvoice?.remainingMs ?? data?.order.manualSupplier?.remainingMs;
   const orderStatus = data?.order.paymentStatus;
   useEffect(() => {
     if (!deadline || !remainingMs || (orderStatus !== "PENDING" && orderStatus !== "REJECTED"))
@@ -139,9 +140,13 @@ export function CardCheckout({
     order.paymentProvider === "CARD_TO_CARD" &&
     ["PENDING", "PENDING_REVIEW", "REJECTED"].includes(order.paymentStatus);
   const invoice = order.bluInvoice;
-  const invoiceExpired = !!invoice && (invoice.expired || elapsedDeadline === invoice.expiresAt);
+  const invoiceExpired =
+    !!deadline && (invoice?.expired === true || remainingMs === 0 || elapsedDeadline === deadline);
   const transfer = editable && !reviewing && !invoiceExpired;
-  const canUpload = editable && (!reviewing || additional);
+  const canUpload =
+    editable &&
+    (!order.manualSupplier || order.paymentStatus !== "REJECTED") &&
+    (!reviewing || additional);
   const card = order.cardToCard;
   const orderUrl = `/${locale}/dashboard/orders/${order.id}`;
   const statusMap = dict.dashboard.status as Record<string, string>;
@@ -199,7 +204,10 @@ export function CardCheckout({
       setFormError(t.selectFile);
       return;
     }
-    if (invoice?.stockHeld && !/^[0-9۰-۹٠-٩]{4,30}$/.test(reference.trim())) {
+    if (
+      (invoice?.stockHeld || order.manualSupplier) &&
+      !/^[0-9۰-۹٠-٩]{4,30}$/.test(reference.trim())
+    ) {
       setFormError(t.bluReferenceRequired);
       return;
     }
@@ -249,6 +257,18 @@ export function CardCheckout({
           </Badge>
         </div>
       </header>
+      {order.manualSupplier && (
+        <p className="mt-5 rounded-xl border border-border bg-card px-4 py-3 text-sm">
+          {locale === "fa"
+            ? "تحویل پس از بررسی رسید و تهیهٔ محصول توسط فروشگاه انجام می‌شود."
+            : "Delivery follows receipt review and sourcing by the store."}
+          {order.manualSupplier.deliveryHours
+            ? locale === "fa"
+              ? ` زمان معمول تهیه حدود ${order.manualSupplier.deliveryHours.toLocaleString("fa-IR")} ساعت پس از تأیید رسید است.`
+              : ` Typical sourcing time is about ${order.manualSupplier.deliveryHours} hours after approval.`
+            : null}
+        </p>
+      )}
       {invoice?.qaOnly && (
         <p role="status" className="mt-5 rounded-xl border border-border bg-card px-4 py-3 text-sm">
           {invoice.privateStockQa
@@ -446,7 +466,9 @@ export function CardCheckout({
                     aria-describedby="reference-hint"
                   />
                   <p id="reference-hint" className="mt-2 text-xs leading-6 text-muted">
-                    {invoice?.stockHeld ? t.bluReferenceRequired : t.referenceHint}
+                    {invoice?.stockHeld || order.manualSupplier
+                      ? t.bluReferenceRequired
+                      : t.referenceHint}
                   </p>
                 </div>
                 {formError && (

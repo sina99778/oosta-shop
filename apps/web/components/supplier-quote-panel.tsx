@@ -18,6 +18,7 @@ type Quote = {
   id?: string;
   kind: "INDICATIVE" | "FIRM";
   checkoutEnabled: boolean;
+  manualSupplier?: boolean;
   methods?: { online: boolean; cardToCard: boolean };
   fx?: null | {
     source: "NAVASAN_FREE";
@@ -179,13 +180,17 @@ export function SupplierQuotePanel({
   return (
     <section className="mt-5 space-y-3 rounded-xl border border-primary/25 bg-primary/5 p-4">
       <p className="text-sm leading-7">
-        {quote?.kind === "FIRM" && quote.checkoutEnabled
+        {quote?.manualSupplier
           ? fa
-            ? "قیمت برای همین پلن و حساب تو ثبت شده است؛ تأمین و تحویل پس از تأیید پرداخت آغاز می‌شود."
-            : "This price is bound to your account and plan. Fulfillment starts after payment is verified."
-          : fa
-            ? "خرید مستقیم این پلن فعلاً فعال نیست. قیمت و موجودی را می‌توانی استعلام بگیری."
-            : "Direct checkout is currently disabled for this plan. You can check price and stock."}
+            ? "پس از واریز و تأیید رسید، فروشگاه محصول را تهیه و تحویل می‌دهد."
+            : "The store sources and delivers the product after reviewing your receipt."
+          : quote?.kind === "FIRM" && quote.checkoutEnabled
+            ? fa
+              ? "قیمت برای همین پلن و حساب تو ثبت شده است؛ تأمین و تحویل پس از تأیید پرداخت آغاز می‌شود."
+              : "This price is bound to your account and plan. Fulfillment starts after payment is verified."
+            : fa
+              ? "خرید مستقیم این پلن فعلاً فعال نیست. قیمت و موجودی را می‌توانی استعلام بگیری."
+              : "Direct checkout is currently disabled for this plan. You can check price and stock."}
       </p>
       {!token ? (
         <Link
@@ -271,8 +276,12 @@ export function SupplierQuotePanel({
                   ? "در حال ساخت صورتحساب…"
                   : "Preparing invoice…"
                 : fa
-                  ? "کارت‌به‌کارت با مبلغ یکتا"
-                  : "Card transfer with a unique amount"}
+                  ? quote.manualSupplier
+                    ? "کارت‌به‌کارت و ثبت رسید"
+                    : "کارت‌به‌کارت با مبلغ یکتا"
+                  : quote.manualSupplier
+                    ? "Bank transfer and receipt"
+                    : "Card transfer with a unique amount"}
             </Button>
           )}
         </div>

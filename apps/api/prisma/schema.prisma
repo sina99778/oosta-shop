@@ -467,6 +467,22 @@ model SupplierCheckoutQuote {
   @@map("supplier_checkout_quotes")
 }
 
+model EmailOutbox {
+  id String @id @default(cuid())
+  orderId String
+  kind String
+  to String
+  status String @default("PENDING")
+  attempts Int @default(0)
+  lastError String?
+  createdAt DateTime @default(now())
+  nextAt DateTime @default(now())
+  sentAt DateTime?
+  @@unique([orderId, kind])
+  @@index([status, nextAt])
+  @@map("email_outbox")
+}
+
 model SupplierFulfillment {
   id String @id @default(cuid())
   orderId String @unique
@@ -478,6 +494,7 @@ model SupplierFulfillment {
   fingerprint String
   quoteId String
   maximumCost Decimal @db.Decimal(18,6)
+  approvedCost Decimal? @db.Decimal(18,6)
   currency String
   expiresAt DateTime
   state String @default("READY")

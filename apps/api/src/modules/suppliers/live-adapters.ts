@@ -213,14 +213,21 @@ function canbosoResult(raw: unknown, input: { reference: string; externalId: str
 export function walletAdapter(supplier: LiveSupplier): SupplierAdapter {
   return {
     capabilities: { priceCeiling: false, walletExposure: true, idempotency: true, lookup: true },
+    async walletBalance() {
+      return { amount: (await balance(supplier)).toString(), currency: "USD" };
+    },
     async quote(input) {
       if (input.currency !== "USD" || (supplier !== "ventebot" && input.productType !== "ACCOUNT"))
         throw new Error("Unsupported product");
-      const limit = await walletAllowance(supplier, input.currency);
       const offer = await currentOffer(supplier, input.externalId);
       if (offer.fingerprint !== input.fingerprint) throw new Error("Offer changed");
       const { wallet, cost } = await currentPrice(supplier, input.externalId, offer.cost);
-      if (cost.lte(0) || cost.gt(input.maximumCost) || wallet.lt(cost) || wallet.gt(limit))
+      if (
+        cost.lte(0) ||
+        cost.gt(input.maximumCost) ||
+        (!input.estimateWithoutWallet &&
+          (wallet.lt(cost) || wallet.gt(await walletAllowance(supplier, input.currency))))
+      )
         throw new Error("Wallet unavailable");
       // Local customer price validity, not an upstream price lock.
       return {

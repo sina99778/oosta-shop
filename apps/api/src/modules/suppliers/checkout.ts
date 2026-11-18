@@ -11,8 +11,11 @@ import { getPaymentProvider, getPaymentProviderForOrder } from "../payments/prov
 import { getGatewayConfig, isOnlinePaymentBlocked } from "../../lib/gatewayConfig";
 import { readBluInvoice, reserveBluInvoice } from "../orders/blu-invoice";
 import { supplierCardReady } from "./card-checkout";
+import { manualSupplierCardReady, readManualSupplier } from "./manual-payment";
+import { notifyAdmin } from "../../bot";
 import {
   processSupplierFulfillment,
+  dispatchManualSupplier,
   reconcileSupplierFulfillment,
   selectSupplierPurchase,
   type SupplierRegistry,
@@ -69,15 +72,21 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
       !["ACCOUNT", "CODE"].includes(variant.fulfillment)
     )
       throw unavailable();
+    const gateway = await getGatewayConfig();
+    const manualSupplier = manualSupplierCardReady(gateway);
     const selected = await selectSupplierPurchase(
       { ...plan, productType: plan.product.type },
       registry,
+      undefined,
+      manualSupplier,
     );
-    const gateway = await getGatewayConfig();
     const methods = {
       online:
-        !(env.isProduction && gateway.provider === "mock") && !isOnlinePaymentBlocked(gateway),
-      cardToCard: supplierCardReady(gateway) && selected.expiry - Date.now() >= 300000,
+        !manualSupplier &&
+        !(env.isProduction && gateway.provider === "mock") &&
+        !isOnlinePaymentBlocked(gateway),
+      cardToCard:
+        (manualSupplier || supplierCardReady(gateway)) && selected.expiry - Date.now() >= 300000,
     };
     if (!methods.online && !methods.cardToCard)
       throw new AppError(503, "METHOD_UNAVAILABLE", "No safe payment method is available");
@@ -109,6 +118,7 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
             currency: selected.quote.currency,
           },
           snapshot: {
+            manualSupplier,
             source: "SUPPLIER",
             label: plan.label,
             variant,
@@ -117,7 +127,12 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
         },
       });
     });
-    return { ...quoteDTO(saved), methods, fx: selected.fx };
+    return {
+      ...quoteDTO(saved),
+      methods,
+      ...(manualSupplier ? { manualSupplier: true } : {}),
+      fx: selected.fx,
+    };
   }
   async function response(orderId: string) {
     const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
@@ -132,9 +147,11 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
     };
     if (order.paidAt) return summary;
     if (order.paymentProvider === "CARD_TO_CARD") {
-      const invoice = readBluInvoice(order.paymentMetadata);
-      if (!invoice?.supplierCheckout || Date.parse(invoice.expiresAt) <= Date.now())
-        throw expired();
+      const blu = readBluInvoice(order.paymentMetadata);
+      const manual = readManualSupplier(order.paymentMetadata);
+      const invoice = manual ?? (blu?.supplierCheckout ? blu : null);
+      if (manual && order.paymentStatus === "REJECTED") throw expired();
+      if (!invoice || Date.parse(invoice.expiresAt) <= Date.now()) throw expired();
       return {
         ...summary,
         cardToCard: {
@@ -176,7 +193,7 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
       const q = await tx.supplierCheckoutQuote.findFirst({
         where: { id: quoteId, userId },
         include: {
-          plan: { include: { product: { select: { isActive: true } } } },
+          plan: { include: { product: { select: { isActive: true, name: true } } } },
           user: { select: { role: true } },
         },
       });
@@ -203,11 +220,22 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
       )
         throw expired();
       const selected = selectionSchema.parse(q.selection);
+      const manual =
+        typeof q.snapshot === "object" &&
+        q.snapshot !== null &&
+        !Array.isArray(q.snapshot) &&
+        q.snapshot.manualSupplier === true;
+      if (manual && (method !== "card_to_card" || !gateway || !manualSupplierCardReady(gateway)))
+        throw unavailable();
       const adapter = registry.get(selected.supplier);
       if (!supplierSupported(adapter)) throw unavailable();
       let invoice: Awaited<ReturnType<typeof reserveBluInvoice>> | null = null;
       if (method === "card_to_card") {
-        if (!gateway || !supplierCardReady(gateway) || q.expiresAt.getTime() - Date.now() < 60000)
+        if (
+          !gateway ||
+          (!manual && !supplierCardReady(gateway)) ||
+          q.expiresAt.getTime() - Date.now() < 60000
+        )
           throw new AppError(
             409,
             "SUPPLIER_QUOTE_EXPIRED",
@@ -219,7 +247,11 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
             where: {
               userId,
               paymentProvider: "CARD_TO_CARD",
-              paymentStatus: { in: ["PENDING", "PENDING_REVIEW", "REJECTED"] },
+              paymentStatus: {
+                in: manual
+                  ? ["PENDING", "PENDING_REVIEW"]
+                  : ["PENDING", "PENDING_REVIEW", "REJECTED"],
+              },
               supplierCheckoutQuote: { isNot: null },
               OR: [
                 { supplierCheckoutQuote: { expiresAt: { gt: new Date() } } },
@@ -233,7 +265,7 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
             "BLU_STOCK_ORDER_OPEN",
             "An existing card invoice is awaiting payment",
           );
-        invoice = await reserveBluInvoice(tx, gateway, q.amount, "IRR");
+        if (!manual) invoice = await reserveBluInvoice(tx, gateway, q.amount, "IRR");
       }
       const amount = invoice?.totalAmount ?? q.amount;
       const order = await tx.order.create({
@@ -244,13 +276,23 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
           paymentStatus: "PENDING",
           paymentProvider: method === "card_to_card" ? "CARD_TO_CARD" : provider!.name,
           ...(invoice ? { bluInvoiceKey: invoice.bluInvoiceKey } : {}),
-          paymentMetadata: invoice
-            ? {
-                ...invoice.paymentMetadata,
-                supplierCheckout: true,
-                expiresAt: q.expiresAt.toISOString(),
-              }
-            : { purpose: "SUPPLIER_CHECKOUT", quoteId: q.id },
+          paymentMetadata:
+            manual && gateway
+              ? {
+                  manualSupplier: true,
+                  quoteId: q.id,
+                  number: gateway.cardNumber,
+                  holder: gateway.cardHolder,
+                  bank: gateway.cardBank,
+                  expiresAt: q.expiresAt.toISOString(),
+                }
+              : invoice
+                ? {
+                    ...invoice.paymentMetadata,
+                    supplierCheckout: true,
+                    expiresAt: q.expiresAt.toISOString(),
+                  }
+                : { purpose: "SUPPLIER_CHECKOUT", quoteId: q.id },
           items: {
             create: {
               productId: q.plan.productId,
@@ -270,6 +312,7 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
               fingerprint: selected.fingerprint,
               quoteId: selected.quoteId,
               maximumCost: selected.maximumCost,
+              approvedCost: manual ? selected.maximumCost : null,
               currency: selected.currency,
               expiresAt: q.expiresAt,
               state: "AWAITING_PAYMENT",
@@ -278,14 +321,39 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
         },
       });
       await tx.supplierCheckoutQuote.update({ where: { id: q.id }, data: { orderId: order.id } });
-      if (adapter.capabilities.walletExposure) {
+      if (adapter.capabilities.walletExposure && !manual) {
         const job = await tx.supplierFulfillment.findUniqueOrThrow({
           where: { orderId: order.id },
         });
         await reserveWallet(tx, job);
       }
-      return { id: order.id, created: true };
+      return {
+        id: order.id,
+        created: true,
+        manual,
+        supplier: selected.supplier,
+        cost: selected.maximumCost,
+        currency: selected.currency,
+        amount: q.amount.toString(),
+        product: q.plan.product.name,
+        plan: q.plan.label,
+      };
     });
+    if (reserved.created && reserved.manual)
+      void prisma.supplierWalletBudget
+        .findUnique({ where: { supplier: reserved.supplier }, select: { remainingAmount: true } })
+        .then((budget) =>
+          notifyAdmin(
+            [
+              "سفارش تأمین‌کننده " + reserved.id.slice(-8),
+              reserved.product + " · " + reserved.plan,
+              new Prisma.Decimal(reserved.amount).div(10).toString() + " تومان",
+              `تأمین ${reserved.supplier} · ${reserved.cost} ${reserved.currency}`,
+              `بودجهٔ باقیمانده ${budget?.remainingAmount.toString() ?? "0"} ${reserved.currency}`,
+            ].join("\n"),
+          ),
+        )
+        .catch(() => {});
     if (!reserved.created || method === "card_to_card") return response(reserved.id);
     if (!provider) throw unavailable();
     const order = await prisma.order.findUniqueOrThrow({ where: { id: reserved.id } });
@@ -477,7 +545,22 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
     timer.unref();
     return () => clearInterval(timer);
   }
-  return { available, quote, create, verify, sweep, start };
+  return {
+    available,
+    quote,
+    create,
+    verify,
+    sweep,
+    start,
+    dispatchManual: (id: string, adminId: string, acceptedCost?: string) =>
+      dispatchManualSupplier(id, adminId, registry, acceptedCost),
+    reconcile: (id: string) => reconcileSupplierFulfillment(id, registry),
+    walletBalance: (supplier: string) =>
+      registry
+        .get(supplier as (typeof supplierIds)[number])
+        ?.walletBalance?.()
+        .catch(() => null),
+  };
 }
 export type SupplierCheckout = ReturnType<typeof createSupplierCheckout>;
 export function supplierCheckoutRouter(checkout: SupplierCheckout) {

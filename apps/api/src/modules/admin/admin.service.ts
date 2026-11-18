@@ -10,6 +10,9 @@ import { AppError } from "../../utils/httpError";
 import { isSafeRasterMime } from "../../middleware/upload";
 import { deliverOrderInTransaction, lowStockWarning } from "../orders/orders.service";
 import { confirmSupplierCardPayment } from "../suppliers/card-checkout";
+import { confirmManualSupplierPayment, readManualSupplier } from "../suppliers/manual-payment";
+import { queueOrderEmail } from "../../lib/mailer";
+import { requireManualAdmin } from "../suppliers/manual-admin";
 import { notifyAdmin } from "../../bot";
 import { ticketWriteError } from "../tickets/tickets.service";
 import { lockOrder } from "../../lib/orderLock";
@@ -689,7 +692,12 @@ async function loadReceiptForReview(id: string) {
 
 // Approve: deliver the order (atomic inventory claim) and mark the receipt APPROVED.
 // If delivery fails (e.g. out of stock) the receipt stays PENDING so it can be retried.
-export async function approveReceipt(id: string, input: ReviewReceiptInput, automatic = false) {
+export async function approveReceipt(
+  id: string,
+  input: ReviewReceiptInput,
+  automatic = false,
+  adminId?: string,
+) {
   const initial = await loadReceiptForReview(id);
   await prisma.$transaction(async (tx) => {
     await lockOrder(tx, initial.orderId);
@@ -704,7 +712,12 @@ export async function approveReceipt(id: string, input: ReviewReceiptInput, auto
       throw new AppError(409, "ALREADY_PAID", "This order is already paid and delivered");
     }
     const invoice = readBluInvoice(receipt.order.paymentMetadata);
-    if (invoice?.supplierCheckout) {
+    if (readManualSupplier(receipt.order.paymentMetadata)) {
+      if (automatic)
+        throw new AppError(409, "SUPPLIER_MANUAL_APPROVAL_REQUIRED", "Manual approval required");
+      await requireManualAdmin(tx, adminId ?? "");
+      await confirmManualSupplierPayment(tx, receipt);
+    } else if (invoice?.supplierCheckout) {
       await confirmSupplierCardPayment(tx, receipt, automatic);
     } else {
       if (invoice?.stockHeld || automatic) {
@@ -778,7 +791,22 @@ export async function approveReceipt(id: string, input: ReviewReceiptInput, auto
       },
     });
   });
-  if (!readBluInvoice(initial.order.paymentMetadata)?.supplierCheckout)
+  if (readManualSupplier(initial.order.paymentMetadata)) {
+    void prisma.supplierFulfillment
+      .findUnique({ where: { orderId: initial.orderId }, select: { id: true, supplier: true } })
+      .then((job) => {
+        if (job)
+          return notifyAdmin(
+            "رسید سفارش " +
+              initial.orderId.slice(-8) +
+              " تأیید شد. اعتبار " +
+              job.supplier +
+              " را بررسی کن.",
+            { label: "خرید و تحویل", data: "supplier_buy_" + job.id },
+          );
+      })
+      .catch(() => {});
+  } else if (!readBluInvoice(initial.order.paymentMetadata)?.supplierCheckout)
     void lowStockWarning(initial.orderId)
       .then((warning) => (warning ? notifyAdmin(warning) : undefined))
       .catch(() => {});
@@ -786,11 +814,36 @@ export async function approveReceipt(id: string, input: ReviewReceiptInput, auto
 }
 
 // A disclosed credential must never re-enter available stock, even after refund.
-export async function rejectReceipt(id: string, input: ReviewReceiptInput) {
+export async function rejectReceipt(id: string, input: ReviewReceiptInput, adminId?: string) {
   const initial = await loadReceiptForReview(id);
   await prisma.$transaction(async (tx) => {
     await lockOrder(tx, initial.orderId);
     const receipt = await tx.receipt.findUniqueOrThrow({ where: { id }, include: { order: true } });
+    if (readManualSupplier(receipt.order.paymentMetadata)) {
+      await requireManualAdmin(tx, adminId ?? "");
+      if (receipt.status !== "PENDING" || receipt.order.paymentStatus !== "PENDING_REVIEW")
+        throw new AppError(409, "ALREADY_REVIEWED", "This receipt cannot be rejected");
+      const transitioned = await tx.supplierFulfillment.updateMany({
+        where: { orderId: receipt.orderId, state: "AWAITING_PAYMENT" },
+        data: { state: "REJECTED" },
+      });
+      if (transitioned.count !== 1)
+        throw new AppError(409, "ALREADY_REVIEWED", "Order already reviewed");
+      await tx.receipt.updateMany({
+        where: { orderId: receipt.orderId, status: "PENDING" },
+        data: {
+          status: "REJECTED",
+          reviewedAt: new Date(),
+          reviewerNote: input.note ?? null,
+        },
+      });
+      await tx.order.update({
+        where: { id: receipt.orderId },
+        data: { paymentStatus: "REJECTED" },
+      });
+      await queueOrderEmail(tx, receipt.orderId, "ORDER_REJECTED");
+      return;
+    }
     const undo = receipt.status === "APPROVED" && receipt.order.paymentStatus === "PAID";
     await tx.receipt.update({
       where: { id },

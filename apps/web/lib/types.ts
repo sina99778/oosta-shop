@@ -239,6 +239,7 @@ export type ReceiptInfo = {
 };
 
 export type OrderDetail = {
+  manualSupplier?: { expiresAt: string; remainingMs: number; deliveryHours: number | null } | null;
   isSupplierQa?: boolean;
   supplierQaKind?: "API_TEST" | "REAL_STOCK" | null;
   id: string;

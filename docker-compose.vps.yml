@@ -19,6 +19,9 @@ services:
       BLU_STOCK_CHECKOUT_ENABLED: ${BLU_STOCK_CHECKOUT_ENABLED:-false}
       BLU_AUTO_APPROVE_ENABLED: ${BLU_AUTO_APPROVE_ENABLED:-false}
       OOSTA_SUPPLIER_WALLET_PURCHASES: ${OOSTA_SUPPLIER_WALLET_PURCHASES:-false}
+      SUPPLIER_MANUAL_APPROVAL: ${SUPPLIER_MANUAL_APPROVAL:-false}
+      SUPPLIER_MANUAL_DELIVERY_HOURS: ${SUPPLIER_MANUAL_DELIVERY_HOURS:-0}
+      SUPPLIER_TELEGRAM_ADMIN_USER_ID: ${SUPPLIER_TELEGRAM_ADMIN_USER_ID:-}
     volumes:
       - /opt/oostaAI/shared/suppliers.env:/run/secrets/oosta-suppliers.env:ro
       - /var/lib/oosta-blu-status:/run/oosta-blu-status:ro

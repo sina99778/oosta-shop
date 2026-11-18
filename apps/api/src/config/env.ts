@@ -53,6 +53,11 @@ const EnvSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  SUPPLIER_MANUAL_APPROVAL: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  SUPPLIER_MANUAL_DELIVERY_HOURS: z.coerce.number().int().min(0).max(168).default(0),
   BLU_STOCK_CHECKOUT_ENABLED: z
     .enum(["true", "false"])
     .default("false")

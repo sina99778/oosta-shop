@@ -14,7 +14,8 @@ import { AppError } from "../../utils/httpError";
 import { getPaymentProvider, getPaymentProviderForOrder } from "../payments/provider";
 import { getGatewayConfig, isOnlinePaymentBlocked } from "../../lib/gatewayConfig";
 import { lockOrder } from "../../lib/orderLock";
-import { notifyAdmin } from "../../bot";
+import { notifyAdmin, notifySupplierReceipt } from "../../bot";
+import { readManualSupplier } from "../suppliers/manual-payment";
 import type { CreateOrderInput } from "./orders.schemas";
 import { readBluInvoice, reserveBluInvoice } from "./blu-invoice";
 import { claimAvailableStock, releaseExpiredBluStock } from "./blu-stock";
@@ -67,6 +68,7 @@ function credentialOf(item: FulfilledItem) {
 async function serializeOrderDetail(order: OrderWithItems) {
   const paid = order.paymentStatus === "PAID";
   const invoice = order.bluInvoiceKey ? readBluInvoice(order.paymentMetadata) : null;
+  const manual = readManualSupplier(order.paymentMetadata);
   const remainingMs = invoice ? Math.max(0, Date.parse(invoice.expiresAt) - Date.now()) : 0;
   const expired = !!invoice && remainingMs === 0;
   return {
@@ -136,6 +138,13 @@ async function serializeOrderDetail(order: OrderWithItems) {
       reviewedAt: r.reviewedAt,
     })),
     // For an unpaid card-to-card order, surface the destination card so the buyer can pay.
+    manualSupplier: manual
+      ? {
+          expiresAt: manual.expiresAt,
+          remainingMs: Math.max(0, Date.parse(manual.expiresAt) - Date.now()),
+          deliveryHours: env.SUPPLIER_MANUAL_DELIVERY_HOURS || null,
+        }
+      : null,
     cardToCard:
       order.paymentProvider === "CARD_TO_CARD" &&
       ["PENDING", "PENDING_REVIEW", "REJECTED"].includes(order.paymentStatus)
@@ -143,7 +152,11 @@ async function serializeOrderDetail(order: OrderWithItems) {
           ? invoice && !expired
             ? { number: invoice.number, holder: invoice.holder, bank: invoice.bank }
             : null
-          : await cardToCardInfo()
+          : manual
+            ? Date.parse(manual.expiresAt) > Date.now() && order.paymentStatus === "PENDING"
+              ? { number: manual.number, holder: manual.holder, bank: manual.bank }
+              : null
+            : await cardToCardInfo()
         : null,
   };
 }
@@ -614,7 +627,7 @@ export async function uploadReceipt(
     throw new AppError(400, "BAD_FILE_TYPE", "Receipt must be an image (JPG/PNG/WebP) or PDF");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const saved = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
     await lockOrder(tx, orderId);
     const order = await tx.order.findFirst({ where: { id: orderId, userId } });
@@ -629,7 +642,13 @@ export async function uploadReceipt(
       ?.trim()
       .replace(/[۰-۹٠-٩]/g, (digit) => String(digit.charCodeAt(0) % 16));
     const invoice = readBluInvoice(order.paymentMetadata);
-    if ((invoice?.stockHeld || invoice?.supplierCheckout) && !/^\d{4,30}$/.test(normalized ?? ""))
+    const manual = readManualSupplier(order.paymentMetadata);
+    if (manual && order.paymentStatus === "REJECTED")
+      throw new AppError(409, "ALREADY_REVIEWED", "Request a new supplier order");
+    if (
+      (manual || invoice?.stockHeld || invoice?.supplierCheckout) &&
+      !/^\d{4,30}$/.test(normalized ?? "")
+    )
       throw new AppError(
         400,
         "BLU_REFERENCE_REQUIRED",
@@ -652,7 +671,7 @@ export async function uploadReceipt(
         orderId: order.id,
         imageData: new Uint8Array(file.buffer),
         mimeType: file.mimetype,
-        reference: reference?.trim() || null,
+        reference: (manual ? normalized : reference?.trim()) || null,
         status: "PENDING",
       },
     });
@@ -661,8 +680,16 @@ export async function uploadReceipt(
       data: { paymentStatus: "PENDING_REVIEW" },
     });
 
-    return { ok: true, receiptId: receipt.id, paymentStatus: "PENDING_REVIEW" as const };
+    return {
+      ok: true,
+      receiptId: receipt.id,
+      paymentStatus: "PENDING_REVIEW" as const,
+      manual: !!manual,
+    };
   });
+  const { manual, ...response } = saved;
+  if (manual) void notifySupplierReceipt(saved.receiptId, orderId);
+  return response;
 }
 
 // Public payment configuration the storefront uses to decide which methods to offer.

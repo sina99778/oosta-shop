@@ -11,6 +11,7 @@ import type { Locale } from "@/lib/i18n";
 import type { AdminOrderDetail } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 import { AdminReceipts } from "./admin-receipts";
+import { ManualSupplierJobs } from "./manual-supplier-jobs";
 import styles from "./admin.module.css";
 
 export function AdminOrderDetailView({
@@ -52,6 +53,7 @@ export function AdminOrderDetailView({
       ) : order ? (
         <>
           <OrderFacts order={order} locale={locale} dict={dict} />
+          <ManualSupplierJobs locale={locale} orderId={order.id} onUpdated={refetch} />
           {order.paymentProvider === "CARD_TO_CARD" && (
             <AdminReceipts
               locale={locale}
