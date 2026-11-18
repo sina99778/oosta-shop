@@ -8,7 +8,7 @@
 .introInner {
   max-width: 1248px;
   margin: auto;
-  padding: 20px 40px 24px;
+  padding: 14px 40px 18px;
 }
 .breadcrumb {
   display: flex;
@@ -28,59 +28,20 @@
 .breadcrumb a:hover {
   color: var(--c-mint);
 }
-.kicker {
-  font-size: 0.875rem;
-  color: var(--c-mint);
-}
-.introRow {
-  display: flex;
-  justify-content: space-between;
-  gap: 48px;
-  align-items: center;
-  margin-top: 6px;
-}
 .intro h1 {
   font-size: clamp(1.75rem, 3.5vw, 2.5rem);
   font-weight: 800;
   line-height: 1.5;
 }
-.intro h1 em {
-  font-style: normal;
-  color: var(--c-mint);
-}
-.intro p {
-  max-width: 540px;
-  font-size: 0.9375rem;
-  line-height: 2.2;
-  color: #b9c9d4;
-  margin-top: 8px;
-}
-.indexLabel {
-  font:
-    600 40px/0.95 var(--font-geist-sans),
-    sans-serif;
-  letter-spacing: -0.06em;
-  color: #536d7d;
-  direction: ltr;
-  min-width: 240px;
-}
-.indexLabel b {
-  display: block;
-  font-size: 96px;
-  font-weight: 400;
-  color: var(--c-mint);
-  line-height: 1.2;
-  margin-top: 16px;
-}
 .content {
   max-width: 1248px;
-  padding: 28px 40px 40px;
+  padding: 18px 40px 40px;
   margin: auto;
 }
 .directoryControls {
   display: grid;
-  gap: 16px;
-  padding: clamp(0.75rem, 2.4vw, 1.35rem);
+  gap: 8px;
+  padding: 12px 16px;
   border: 1px solid var(--c-border);
   border-block-start: 2px solid var(--c-primary);
   background: var(--c-card);
@@ -88,7 +49,7 @@
 }
 .categoryDisclosure {
   border-block-start: 1px solid var(--c-border);
-  padding-block-start: 12px;
+  padding-block-start: 4px;
 }
 .categoryDisclosure summary {
   display: flex;
@@ -136,7 +97,7 @@
 .searchForm label {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
   font-size: 0.8125rem;
   color: var(--c-muted);
   min-width: 0;
@@ -148,10 +109,10 @@
 .searchForm select {
   background: var(--c-card);
   border: 1px solid var(--c-border);
-  height: 52px;
+  height: 44px;
   font: inherit;
   font-size: 0.9375rem;
-  padding: 12px 16px;
+  padding: 6px 12px;
   color: var(--c-fg);
   min-width: 0;
   width: 100%;
@@ -160,8 +121,11 @@
 .searchForm select {
   min-width: 180px;
 }
+:global([dir="rtl"]) .searchForm input:placeholder-shown {
+  text-align: right;
+}
 .searchForm button {
-  height: 52px;
+  height: 44px;
   padding-inline: 20px;
   font-size: 0.875rem;
 }
@@ -194,8 +158,8 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 20px 0 28px;
-  min-height: 64px;
+  padding: 4px 0;
+  min-height: 44px;
   font-size: 0.875rem;
   color: var(--c-muted);
 }
@@ -205,8 +169,8 @@
 }
 .productGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
 }
 .cardLink {
   display: block;
@@ -241,7 +205,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: clamp(118px, 14vw, 184px);
+  height: clamp(96px, 10vw, 136px);
   background:
     radial-gradient(
       120% 90% at 50% 115%,
@@ -276,9 +240,11 @@
   height: auto !important;
   background: transparent !important;
   color: var(--c-mint);
-  /* Leave room for the availability chip pinned to the top of the visual. */
-  margin-block-start: 1.75rem;
   transition: transform 0.35s;
+}
+.cardVisual[data-kind="LICENSE"] .cardMark,
+.cardVisual[data-kind="GIFTCARD"] .cardMark {
+  color: inherit;
 }
 .sale {
   position: absolute;
@@ -291,27 +257,17 @@
   font-size: 0.75rem;
   font-weight: 750;
 }
-/* Availability sits on the image as a quiet chip, so the body keeps one reading line. */
 .stockBadge {
-  position: absolute;
-  top: 12px;
-  inset-inline-start: 12px;
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
   gap: 6px;
-  max-width: calc(100% - 24px);
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--c-navy) 82%, transparent);
-  border: 1px solid color-mix(in srgb, var(--c-mint) 28%, transparent);
-  color: #e9f6f1;
+  margin-bottom: 6px;
+  color: var(--c-muted);
   font-size: 0.75rem;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.6;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  backdrop-filter: blur(6px);
+  overflow-wrap: anywhere;
 }
 .stockBadge::before {
   content: "";
@@ -319,20 +275,16 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--c-mint);
+  background: var(--c-primary);
 }
 .stockBadge[data-stock="LOCAL_STOCK"]::before {
-  background: #4ade80;
-  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.22);
-}
-.stockBadge[data-stock="OUT_OF_STOCK"] {
-  color: #c9d3d9;
+  background: var(--c-primary);
 }
 .stockBadge[data-stock="OUT_OF_STOCK"]::before {
   background: #8796a0;
 }
 .cardBody {
-  padding: clamp(0.85rem, 2vw, 1.25rem);
+  padding: clamp(0.65rem, 1.5vw, 1rem);
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -367,7 +319,7 @@
 }
 .cardPrice {
   margin-top: auto;
-  padding-top: 14px;
+  padding-top: 8px;
 }
 .cardPrice small {
   font-size: 0.8125rem;
@@ -386,9 +338,9 @@
   align-items: center;
   gap: 6px;
   min-height: 44px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--c-border);
+  margin-top: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--c-border);
   font-size: 0.875rem;
   font-weight: 650;
   color: var(--c-primary);
@@ -610,13 +562,13 @@
   white-space: nowrap;
 }
 .detail :is(a, button, label, input, textarea):focus-visible,
-.shop :is(a, button, input, select):focus-visible {
+.shop :is(a, button, input, select, summary):focus-visible {
   outline: 2px solid var(--c-primary);
   outline-offset: 4px;
 }
 @media (max-width: 1000px) {
   .productGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .intro h1 {
     font-size: 36px;
@@ -633,26 +585,17 @@
 }
 @media (max-width: 640px) {
   .introInner {
-    padding: 16px 20px 20px;
+    padding: 10px 16px 14px;
   }
   .breadcrumb {
-    margin-bottom: 12px;
+    margin-bottom: 2px;
   }
   .intro h1 {
     font-size: 1.75rem;
     line-height: 1.5;
   }
-  .intro p {
-    font-size: 0.875rem;
-  }
-  .indexLabel {
-    display: none;
-  }
-  .introRow {
-    margin-top: 12px;
-  }
   .content {
-    padding: 20px;
+    padding: 12px 16px;
   }
   .searchForm {
     display: grid;
@@ -675,75 +618,33 @@
     font-size: 0.875rem;
   }
   .productGrid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  .productGrid .productCard {
-    display: grid;
-    grid-template-columns: 88px minmax(0, 1fr);
-  }
-  .productGrid .cardVisual {
-    height: 100%;
-    min-height: 164px;
-  }
-  .productGrid .cardVisual img {
-    object-fit: cover;
-  }
-  .productGrid .sale {
-    top: 8px;
-    inset-inline-end: 8px;
-    padding: 4px;
-    font-size: 0.6875rem;
-    max-width: calc(100% - 16px);
-  }
-  .productGrid .cardBody {
-    position: relative;
-    padding: 16px;
-    padding-block-start: 48px;
-  }
-  .productGrid .productCard h3 {
-    font-size: 1.125rem;
-  }
-  .productGrid .cardMeta {
-    font-size: 0.8125rem;
-  }
-  /* The 88px side visual is too narrow for the chip: pin it to the body's top instead. */
-  .productGrid .productCard {
-    position: relative;
-  }
-  .productGrid .cardVisual {
-    position: static;
-  }
-  .productGrid .stockBadge {
-    top: 12px;
-    inset-inline-start: calc(88px + 16px);
-    max-width: calc(100% - 88px - 32px);
-  }
-  .productGrid .sale {
-    top: auto;
-    bottom: 8px;
-    inset-inline-end: auto;
-    inset-inline-start: 8px;
-    max-width: 72px;
-  }
-  .productGrid .cardMark {
-    margin-block-start: 0;
-  }
-  .productGrid .cardAction {
-    margin-top: 8px;
-  }
-  .results {
-    padding: 12px 0;
-    min-height: 48px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
   .cardVisual {
-    height: clamp(115px, 28vw, 165px);
+    height: clamp(72px, 20vw, 112px);
   }
-  .cardBody {
-    padding: 14px;
-  }
+  .cardPrice > small:first-child,
   .cardPrice strong {
-    font-size: 20px;
+    display: inline;
+  }
+  .cardPrice > small:first-child {
+    margin-inline-end: 0.3em;
+  }
+  .productCard h3,
+  .cardPrice strong {
+    font-size: 1rem;
+  }
+  .cardAction {
+    min-height: 32px;
+    margin-top: 4px;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+  .cardAction > span {
+    width: 24px;
+    height: 24px;
+    flex: none;
   }
   .help {
     flex-direction: column;
@@ -797,5 +698,10 @@
 @media (prefers-reduced-motion: reduce) {
   .productCard {
     transition: none;
+  }
+}
+@media (max-width: 359px) {
+  .productGrid {
+    grid-template-columns: 1fr;
   }
 }

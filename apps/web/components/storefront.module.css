@@ -24,10 +24,10 @@
 }
 .heroGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
   gap: clamp(1.5rem, 5vw, 4rem);
   align-items: center;
-  padding-block: clamp(2rem, 5vw, 4.75rem);
+  padding-block: clamp(1.5rem, 3vw, 3rem);
 }
 .heroCopy {
   position: relative;
@@ -43,7 +43,7 @@
   margin-bottom: 20px;
 }
 .heroCopy h1 {
-  font-size: clamp(2.25rem, 5.1vw, 4.4rem);
+  font-size: clamp(2rem, 4.25vw, 3.65rem);
   font-weight: 800;
   line-height: 1.35;
   text-wrap: balance;
@@ -57,7 +57,7 @@
 }
 .heroCopy p {
   max-width: 450px;
-  margin-top: 24px;
+  margin-top: 12px;
   color: #bdc8d3;
   font-size: 1rem;
   line-height: 2.2;
@@ -76,7 +76,7 @@
   display: flex;
   gap: 0.5rem;
   max-width: 34rem;
-  margin-block-start: 1.6rem;
+  margin-block-start: 1rem;
 }
 .heroSearch input {
   flex: 1;
@@ -173,6 +173,12 @@
 .catalog {
   padding: 72px 0 0;
   scroll-margin-top: 110px;
+}
+.catalog {
+  padding-top: clamp(1.5rem, 3vw, 2.5rem);
+}
+.catalog .sectionHeading {
+  margin-bottom: 12px;
 }
 .sectionHeading {
   display: flex;
@@ -352,17 +358,7 @@
   flex-wrap: wrap;
   margin-bottom: 22px;
 }
-.catalogSort {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 20px;
-  font-size: 0.9375rem;
-}
-.filters a,
-.catalogSort select,
-.catalogSort button {
+.filters a {
   display: inline-flex;
   align-items: center;
   color: var(--c-muted);
@@ -373,8 +369,7 @@
   border-radius: 0.65rem;
   background: var(--c-card);
 }
-.filters a:hover,
-.catalogSort button {
+.filters a:hover {
   color: var(--c-fg);
   border-color: var(--c-primary);
   background: color-mix(in srgb, var(--c-primary) 9%, var(--c-card));
@@ -565,18 +560,29 @@
     margin-inline: 20px;
   }
   .heroGrid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
-    padding-block: 32px 22px;
+    grid-template-columns: minmax(0, 1fr) clamp(52px, 15vw, 80px);
+    gap: 10px;
+    padding-block: 20px;
+  }
+  .heroCopy {
+    display: contents;
+  }
+  .heroCopy p,
+  .heroSearch {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+  .heroCopy .heroActions,
+  .heroCopy .shortcuts {
+    display: none;
   }
   .heroCopy h1 {
-    font-size: clamp(2rem, 7.5vw, 3.2rem);
+    font-size: clamp(1.55rem, 5.7vw, 2.4rem);
     line-height: 1.35;
   }
   .heroCopy p {
     font-size: 0.9375rem;
-    line-height: 2.1;
-    margin-top: 20px;
+    line-height: 1.8;
     max-width: 430px;
   }
   .heroActions {
@@ -591,13 +597,14 @@
     margin-bottom: 16px;
   }
   .brandPanel {
-    min-height: 0;
+    grid-area: 1 / 2;
+    align-self: center;
   }
   .brandStage {
-    width: 160px;
+    width: 100%;
+    max-width: none;
   }
-  .learning,
-  .catalog {
+  .learning {
     padding-top: 44px;
   }
   .sectionHeading {
@@ -607,7 +614,7 @@
     margin-bottom: 24px;
   }
   .sectionHeading h2 {
-    font-size: 30px;
+    font-size: clamp(1.3rem, 5vw, 1.875rem);
   }
   .sectionHeading .textLink {
     font-size: 0.8125rem;
@@ -715,7 +722,7 @@
 }
 @media (max-width: 359px) {
   .heroCopy h1 {
-    font-size: 2.65rem;
+    font-size: 1.45rem;
   }
   .products {
     grid-template-columns: 1fr;

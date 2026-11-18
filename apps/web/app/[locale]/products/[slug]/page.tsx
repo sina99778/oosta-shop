@@ -75,11 +75,15 @@ export async function generateMetadata({
 
 export default async function ProductDetailPage({
   params,
+  searchParams,
 }: {
+  searchParams: Promise<{ plan?: string | string[] }>;
   params: Promise<{ locale: string; slug: string }>;
 }) {
   const { locale, slug } = await params;
   if (!isLocale(locale)) notFound();
+  const rawPlan = (await searchParams)?.plan;
+  const requestedPlanId = Array.isArray(rawPlan) ? "" : rawPlan;
   const [dict, p] = await Promise.all([getDictionary(locale), loadProduct(slug)]);
   // A missing/inactive product must be a real 404 (matches blog/[slug] and p/[slug]),
   // not a 200 soft-404 that search engines penalize.
@@ -170,7 +174,8 @@ export default async function ProductDetailPage({
         />
       )}
       <ProductDetailView
-        key={p.id}
+        key={JSON.stringify([p.id, requestedPlanId])}
+        requestedPlanId={requestedPlanId}
         locale={locale}
         product={p}
         payment={payment ? { online: payment.online, cardToCard: payment.cardToCard } : null}

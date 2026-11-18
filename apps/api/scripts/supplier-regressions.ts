@@ -165,6 +165,14 @@ async function main() {
       count: publicPlan.availableStock,
     });
     assert(!(await getStats()).lowStock.some((item) => item.id === product.id));
+    await prisma.productPlan.create({
+      data: { productId: product.id, label: "Sold-out local alternative", price: 10000000 },
+    });
+    const catalog = await call("GET", "/products?category=supplier-fixtures", undefined, null);
+    assert.equal(catalog.statusCode, 200);
+    assert.equal(catalog.json().items[0].priceFrom, null);
+    assert.equal(catalog.json().items[0].pricePlanId, null);
+    assert.equal(catalog.json().items[0].quoteRequired, true);
     assert(!detail.body.includes("supplierMappings"));
     assert(!detail.body.includes(offer1.fingerprint));
     assert(!detail.body.includes("Fixture source"));
@@ -235,6 +243,8 @@ async function main() {
     }
     const stale = await call("GET", "/products/supplier-fixture", undefined, null);
     assert.equal(stale.json().product.plans[0].availability, "OUT_OF_STOCK");
+    assert.equal(stale.json().product.quoteRequired, false);
+    assert.equal(stale.json().product.priceFrom, null);
     for (const id of ["canboso", "canboso2"]) {
       await replaceCatalog(id, (c) => {
         c.fetchedAt = new Date().toISOString();

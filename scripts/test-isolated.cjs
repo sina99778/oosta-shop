@@ -108,6 +108,16 @@ async function main() {
     console.log(
       run(
         process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/storefront-metrics-regressions.ts",
+        ],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
         [path.join(root, "node_modules/tsx/dist/cli.mjs"), "apps/api/prisma/seed.ts"],
         env,
       ),

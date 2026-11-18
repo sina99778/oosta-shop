@@ -25,6 +25,8 @@ export type ProductSummary = {
   category: CategoryRef;
   quoteRequired?: boolean;
   priceFrom: number | null;
+  pricePlanId?: string | null;
+  priceDurationDays?: number | null;
   originalPriceFrom: number | null;
   discountPercent: number;
   currency: string;

@@ -92,7 +92,12 @@ async function main() {
     if (sort) query.set("sort", sort);
     const result = await inject(app, { method: "GET", url: "/products?" + query });
     assert.equal(result.statusCode, 200, result.body);
-    return result.json().items as { id: string; availability: string; availableStock: number }[];
+    return result.json().items as {
+      id: string;
+      availability: string;
+      availableStock: number;
+      priceFrom: number | null;
+    }[];
   }
   assert.equal(listProductsQuery.parse({}).sort, "recommended");
   const recommended = await items();
@@ -108,14 +113,55 @@ async function main() {
   assert.equal((await items("popular", 1, 1))[0].id, obscure.id);
   assert.equal((await items("popular", 2, 1))[0].id, known.id);
   assert.equal((await items("bestselling"))[0].id, obscure.id);
-  assert.deepEqual(
-    (await items("price_asc")).map((p) => p.id),
-    [known.id, obscure.id, quote.id],
-  );
-  assert.deepEqual(
-    (await items("price_desc")).map((p) => p.id),
-    [obscure.id, known.id, quote.id],
-  );
+  for (const sort of ["price_asc", "price_desc"]) {
+    const sorted = await items(sort);
+    assert.equal(sorted[0].id, obscure.id, "An obtainable price ranks before unavailable prices");
+    assert.equal(sorted.find((item) => item.id === known.id)?.priceFrom, null);
+    assert.equal(sorted.find((item) => item.id === quote.id)?.priceFrom, null);
+  }
+  // 19 tomans = 190 rials. The 100-rial plan is sold out and the stocked
+  // 192-rial alternative is more expensive.
+  const selected = await prisma.productPlan.create({
+    data: {
+      productId: known.id,
+      label: "Monthly",
+      durationDays: 30,
+      price: 25,
+      salePrice: 19,
+      currency: "IRT",
+    },
+  });
+  const alternate = await prisma.productPlan.create({
+    data: { productId: known.id, label: "Other", price: 192, currency: "IRR" },
+  });
+  await prisma.inventoryItem.createMany({
+    data: [selected, alternate].map((p) => ({
+      productId: known.id,
+      planId: p.id,
+      type: "ACCOUNT" as const,
+    })),
+  });
+  const rival = await prisma.productPlan.update({
+    where: { id: obscure.plans[0].id },
+    data: { price: 185, currency: "IRR" },
+  });
+  assert.equal((await items("price_asc", 1, 1))[0].id, obscure.id);
+  assert.equal((await items("price_desc", 1, 1))[0].id, known.id);
+  const detail = await inject(app, { method: "GET", url: "/products/" + known.slug });
+  assert.equal(detail.statusCode, 200);
+  for (const summary of [detail.json().product, (await items("price_asc", 2, 1))[0]]) {
+    assert.equal(summary.pricePlanId, selected.id);
+    assert.equal(summary.priceDurationDays, 30);
+    assert.equal(summary.priceFrom, 19);
+    assert.equal(summary.originalPriceFrom, 25);
+    assert.equal(summary.currency, "IRT");
+  }
+  await prisma.productPlan.update({ where: { id: rival.id }, data: { price: 200 } });
+  assert.equal((await items("price_asc", 1, 1))[0].id, known.id);
+  await prisma.productPlan.update({ where: { id: alternate.id }, data: { price: 180 } });
+  const cheaperRialPlan = (await items("price_asc", 1, 1))[0];
+  assert.equal(cheaperRialPlan.id, known.id);
+  assert.equal(cheaperRialPlan.priceFrom, 180, "180 rials cost less than 19 tomans");
   assert.equal((await items("bestselling", 1, 1))[0].id, obscure.id);
   assert.equal((await items("bestselling", 2, 1)).length, 1);
   const originalFindMany = prisma.product.findMany;

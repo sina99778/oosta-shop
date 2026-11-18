@@ -92,7 +92,7 @@
     "signupTitle": "Create your account",
     "emailOrPhone": "Email or phone",
     "email": "Email",
-    "phone": "Phone (optional)",
+    "phone": "Phone number",
     "password": "Password",
     "name": "Name",
     "loginCta": "Log in",
@@ -100,7 +100,7 @@
     "haveAccount": "Already have an account?",
     "noAccount": "Don't have an account?",
     "submitting": "Please wait…",
-    "contactHint": "Provide an email or a phone number.",
+    "contactHint": "Enter either an email or a phone number",
     "panelEyebrow": "Oosta account",
     "panelTitle": "Your purchases and deliveries, in one place",
     "panelPoints": [

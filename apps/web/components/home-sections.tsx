@@ -55,7 +55,7 @@ export async function HomeSections({
         ],
         [
           "برای انتخاب ابزار چطور کمک بگیرم؟",
-          "کاربرد موردنظرت را در بخش پشتیبانی یا برای ادمین تلگرام اوستا بنویس. پیش از خرید، نوع دسترسی و شرایط پلن را بررسی کن.",
+          "کاربرد موردنظرت را برای پشتیبانی تلگرام اوستا بنویس. پیش از خرید، نوع دسترسی و شرایط پلن را بررسی کن.",
         ],
       ]
     : [
@@ -69,7 +69,7 @@ export async function HomeSections({
         ],
         [
           "How can I get help choosing?",
-          "Describe your needs through support or Oosta's Telegram support. Review access type and plan terms before buying.",
+          "Describe your needs to Oosta’s Telegram support. Review access type and plan terms before buying.",
         ],
       ];
   return (
@@ -153,7 +153,7 @@ export async function HomeSections({
                 }
                 fetchPriority="high"
                 className={styles.brandImage}
-                sizes="(max-width: 700px) 160px, (max-width: 900px) 260px, (max-width: 1250px) 320px, 400px"
+                sizes="(max-width: 700px) 80px, (max-width: 900px) 260px, (max-width: 1250px) 320px, 400px"
               />
             </div>
           </figure>
@@ -232,11 +232,11 @@ export async function HomeSections({
             rel="noopener noreferrer"
             className={styles.textLink}
           >
-            {fa ? "گفت‌وگو با پشتیبانی تلگرام" : "Talk to Telegram support"}
+            {fa ? "مشاورهٔ پیش از خرید در تلگرام" : "Ask on Telegram before buying"}
             <span aria-hidden="true">↗</span>
           </a>
           <Link prefetch={false} href={`/${locale}/support`} className={styles.supportLink}>
-            {fa ? "یا ثبت تیکت در حساب کاربری" : "Or open a support ticket"}
+            {fa ? "پیگیری سفارش با تیکت در حساب کاربری" : "Track an order with a support ticket"}
           </Link>
         </div>
         <div className={styles.questions}>

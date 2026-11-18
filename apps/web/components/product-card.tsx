@@ -38,7 +38,10 @@ export function ProductCard({
     : {};
   return (
     <Link
-      href={`/${locale}/products/${product.slug}`}
+      href={{
+        pathname: `/${locale}/products/${product.slug}`,
+        query: product.pricePlanId ? { plan: product.pricePlanId } : undefined,
+      }}
       prefetch={false}
       className={styles.cardLink}
       aria-label={`${fa ? "مشاهدهٔ محصول" : "View product"} ${product.name}`}
@@ -57,16 +60,16 @@ export function ProductCard({
           ) : (
             <ProductMark type={product.type} className={styles.cardMark} />
           )}
-          <span className={styles.stockBadge} data-stock={availability}>
-            {availabilityLabel(product, locale)}
-          </span>
-          {product.discountPercent > 0 && (
+          {availability === "LOCAL_STOCK" && product.discountPercent > 0 && (
             <span className={styles.sale}>
               {product.discountPercent.toLocaleString(fa ? "fa" : "en")}% {labels.off}
             </span>
           )}
         </div>
         <div className={styles.cardBody}>
+          <span className={styles.stockBadge} data-stock={availability}>
+            {availabilityLabel(product, locale)}
+          </span>
           <p className={styles.cardMeta}>
             {categoryNames[product.category.slug] ?? product.category.name}
           </p>
@@ -87,7 +90,7 @@ export function ProductCard({
                 {product.availableStock.toLocaleString(fa ? "fa" : "en")} {labels.left}
               </p>
             )}
-            {!onRequest && product.priceFrom !== null && (
+            {availability === "LOCAL_STOCK" && product.priceFrom !== null && (
               <>
                 <small>
                   {labels.from}{" "}
@@ -100,6 +103,17 @@ export function ProductCard({
                 <strong>
                   <bdi>{formatPrice(product.priceFrom, product.currency, locale)}</bdi>
                 </strong>
+                {product.pricePlanId && (
+                  <small>
+                    {product.priceDurationDays == null
+                      ? fa
+                        ? "بدون انقضا"
+                        : "No expiry"
+                      : fa
+                        ? `${product.priceDurationDays.toLocaleString("fa")} روز`
+                        : `${product.priceDurationDays} ${product.priceDurationDays === 1 ? "day" : "days"}`}
+                  </small>
+                )}
               </>
             )}
             <span className={styles.cardAction}>

@@ -16,12 +16,13 @@ const categories = [
   },
   { id: "preview-gift", slug: "gift-cards", name: "گیفت‌کارت", productCount: 1 },
 ];
-const products = [
+const sampleProducts = [
   ["chatgpt-plus", "ChatGPT Plus", "ACCOUNT", 0, 4990000, true],
   ["claude-pro", "Claude Pro", "ACCOUNT", 0, 12900000, true],
   ["windows-11-pro", "Windows 11 Pro", "LICENSE", 1, 7950000, true],
   ["google-play", "Google Play Gift Card", "GIFTCARD", 2, 12000000, false],
-].map(([slug, name, type, categoryIndex, price, inStock]) => ({
+];
+const products = sampleProducts.map(([slug, name, type, categoryIndex, price, inStock]) => ({
   id: `preview-${slug}`,
   slug,
   name,
@@ -29,7 +30,11 @@ const products = [
   category: categories[categoryIndex],
   image: null,
   hasImage: false,
-  priceFrom: price,
+  priceFrom: !supplierVariants && inStock ? price : null,
+  pricePlanId: !supplierVariants && inStock ? `plan-preview-${slug}` : null,
+  priceDurationDays: !supplierVariants && inStock ? 30 : null,
+  quoteRequired: supplierVariants && inStock,
+  availability: !inStock ? "OUT_OF_STOCK" : supplierVariants ? "SUPPLIER_STOCK" : "LOCAL_STOCK",
   originalPriceFrom: null,
   discountPercent: 0,
   currency: "IRR",
@@ -71,8 +76,8 @@ const server = http.createServer((req, res) => {
         (!search || p.name.toLowerCase().includes(search)),
     );
     const sort = url.searchParams.get("sort");
-    if (sort === "price_asc") selected.sort((a, b) => a.priceFrom - b.priceFrom);
-    if (sort === "price_desc") selected.sort((a, b) => b.priceFrom - a.priceFrom);
+    if (sort === "price_asc") selected.sort((a, b) => (a.priceFrom ?? Infinity) - (b.priceFrom ?? Infinity));
+    if (sort === "price_desc") selected.sort((a, b) => (b.priceFrom ?? -Infinity) - (a.priceFrom ?? -Infinity));
     const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
     const pageSize = Math.max(1, Math.min(50, Number(url.searchParams.get("pageSize")) || 12));
     body = {
@@ -104,9 +109,9 @@ const server = http.createServer((req, res) => {
               id: `plan-${product.id}`,
               label: "پلن نمونه",
               durationDays: 30,
-              price: product.priceFrom,
+              price: sampleProducts.find(([slug]) => slug === product.slug)[4],
               salePrice: null,
-              effectivePrice: product.priceFrom,
+              effectivePrice: sampleProducts.find(([slug]) => slug === product.slug)[4],
               onSale: false,
               discountPercent: 0,
               currency: "IRR",
@@ -126,9 +131,9 @@ const server = http.createServer((req, res) => {
       .end(
         JSON.stringify({ error: { code: "NOT_FOUND", message: "Preview endpoint unavailable" } }),
       );
-  if (supplierVariants && body.product) {
+  if (body.product?.quoteRequired) {
     body.product.quoteRequired = true;
-    body.product.priceFrom = 0;
+    body.product.priceFrom = null;
     body.product.plans = [
       [
         "personal-none",

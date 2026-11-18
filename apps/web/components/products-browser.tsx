@@ -97,16 +97,7 @@ export async function ProductsBrowser({
             <span>/</span>
             <span>{dict.products.title}</span>
           </div>
-          <div className={styles.introRow}>
-            <div>
-              <h1 id="shop-title">{fa ? "اشتراک‌ها و ابزارها" : "Subscriptions and tools"}</h1>
-              <p>
-                {fa
-                  ? "ابزارت را پیدا کن؛ پلن‌ها و شرایط خرید را کنار هم ببین."
-                  : "Find your tool and compare subscription plans and purchase terms."}
-              </p>
-            </div>
-          </div>
+          <h1 id="shop-title">{fa ? "اشتراک‌ها و ابزارها" : "Subscriptions and tools"}</h1>
         </div>
       </section>
       <div className={styles.content}>
@@ -140,7 +131,7 @@ export async function ProductsBrowser({
               </select>
             </label>
             <Button type="submit" size="lg">
-              {fa ? "جست‌وجو" : "Search"}
+              {fa ? "اعمال" : "Apply"}
             </Button>
           </ProductSearchForm>
           {sort.startsWith("price_") && (
@@ -258,7 +249,7 @@ export async function ProductsBrowser({
                 : "Try a shorter name or a different category."}
             </p>
             <Link prefetch={false} href={`/${locale}/products`}>
-              {fa ? "نمایش همهٔ محصولات" : "Browse all products"} ←
+              {fa ? "نمایش همهٔ محصولات ←" : "Browse all products →"}
             </Link>
           </div>
         )}
@@ -271,9 +262,9 @@ export async function ProductsBrowser({
                 : "Tell us what you want to do. The right choice starts with your needs."}
             </p>
           </div>
-          <Link prefetch={false} href={`/${locale}/support`}>
-            {fa ? "راهنمایی برای انتخاب" : "Help me choose"} ↗
-          </Link>
+          <a href="https://t.me/oostaAiSupport" target="_blank" rel="noopener noreferrer">
+            {fa ? "مشاورهٔ پیش از خرید در تلگرام" : "Ask on Telegram before buying"} ↗
+          </a>
         </aside>
       </div>
     </div>

@@ -47,18 +47,6 @@ export function HomeCatalog({
           <span aria-hidden="true">{fa ? "←" : "→"}</span>
         </Link>
       </div>
-      <form action={catalogHref} method="get" className={styles.catalogSort}>
-        <label htmlFor="home-catalog-sort">{fa ? "ترتیب نمایش" : "Sort by"}</label>
-        <select id="home-catalog-sort" name="sort" defaultValue="recommended">
-          <option value="recommended">{fa ? "پیشنهاد اوستا" : "Oosta picks"}</option>
-          <option value="available">{fa ? "موجودها اول" : "Available first"}</option>
-          <option value="popular">{fa ? "محبوب‌ترین‌ها" : "Top rated"}</option>
-          <option value="bestselling">{fa ? "پرفروش‌ترین‌ها" : "Best sellers"}</option>
-          <option value="price_asc">{fa ? "قیمت از کم به زیاد" : "Price low to high"}</option>
-          <option value="price_desc">{fa ? "قیمت از زیاد به کم" : "Price high to low"}</option>
-        </select>
-        <button type="submit">{fa ? "نمایش نتایج" : "Show results"}</button>
-      </form>
       <nav className={styles.filters} aria-label={fa ? "دسته‌بندی محصولات" : "Product categories"}>
         {categories
           .filter((item) => item.productCount > 0)

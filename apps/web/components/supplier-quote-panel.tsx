@@ -1,7 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
+import { trackStorefrontStep } from "@/lib/storefront-metrics";
 import { Button } from "@/components/ui/button";
 import { formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
@@ -66,12 +68,12 @@ export function SupplierQuotePanel({
   plan,
   token,
   locale,
-  onLogin,
+  loginPath,
 }: {
   plan: PlanDetail;
   token: string | null;
   locale: Locale;
-  onLogin: () => void;
+  loginPath: string;
 }) {
   const fa = locale === "fa";
   const router = useRouter();
@@ -102,11 +104,7 @@ export function SupplierQuotePanel({
     return () => clearTimeout(timeout);
   }, [quote, fa]);
   async function inquire() {
-    if (inFlight.current) return;
-    if (!token) {
-      onLogin();
-      return;
-    }
+    if (inFlight.current || !token) return;
     inFlight.current = true;
     setBusy(true);
     setError("");
@@ -118,8 +116,11 @@ export function SupplierQuotePanel({
         token,
       );
       if (!active.current) return;
-      if (Date.parse(result.quote.expiresAt) > Date.now()) setQuote(result.quote);
-      else setError(fa ? "استعلام منقضی شد؛ دوباره تلاش کن" : "Quote expired. Please retry.");
+      if (result.quote.planId === plan.id && Date.parse(result.quote.expiresAt) > Date.now()) {
+        setQuote(result.quote);
+        if (Number.isSafeInteger(result.quote.amount) && result.quote.amount > 0)
+          trackStorefrontStep("quote_received");
+      } else setError(fa ? "استعلام منقضی شد؛ دوباره تلاش کن" : "Quote expired. Please retry.");
     } catch (e) {
       if (active.current) setError(quoteErrorMessage(e, fa));
     } finally {
@@ -186,19 +187,30 @@ export function SupplierQuotePanel({
             ? "خرید مستقیم این پلن فعلاً فعال نیست. قیمت و موجودی را می‌توانی استعلام بگیری."
             : "Direct checkout is currently disabled for this plan. You can check price and stock."}
       </p>
-      <Button type="button" onClick={inquire} disabled={busy} className="w-full">
-        {busy
-          ? fa
-            ? "در حال استعلام…"
-            : "Checking…"
-          : availabilityOf(plan) === "OUT_OF_STOCK"
+      {!token ? (
+        <Link
+          href={loginPath}
+          onClick={() => trackStorefrontStep("plan_login_started")}
+          className="oosta-button inline-flex min-h-11 w-full items-center justify-center px-5 text-sm"
+          data-button-variant="primary"
+        >
+          {fa ? "ورود برای استعلام قیمت" : "Sign in to request a quote"}
+        </Link>
+      ) : (
+        <Button type="button" onClick={inquire} disabled={busy} className="w-full">
+          {busy
             ? fa
-              ? "بررسی دوبارهٔ موجودی و قیمت"
-              : "Recheck stock and price"
-            : fa
-              ? "استعلام قیمت"
-              : "Check price"}
-      </Button>
+              ? "در حال استعلام…"
+              : "Checking…"
+            : availabilityOf(plan) === "OUT_OF_STOCK"
+              ? fa
+                ? "بررسی دوبارهٔ موجودی و قیمت"
+                : "Recheck stock and price"
+              : fa
+                ? "استعلام قیمت"
+                : "Check price"}
+        </Button>
+      )}
       {error && (
         <p role="alert" className="text-sm leading-6 text-danger">
           {error}

@@ -148,6 +148,8 @@ type ProductSummary = {
   type: ProductWithRelations["type"];
   category: { id: string; name: string; slug: string };
   priceFrom: number | null;
+  pricePlanId: string | null;
+  priceDurationDays: number | null;
   originalPriceFrom: number | null;
   discountPercent: number;
   currency: string;
@@ -163,18 +165,32 @@ type ProductSummary = {
   updatedAt: Date;
 };
 
+// Compare hundredths of a rial in integer arithmetic (prices are Decimal(12, 2)).
+function comparablePrice(amount: number, currency: string) {
+  return Math.round(amount * 100) * (currency === "IRT" ? 10 : 1);
+}
+
 function toSummary(
   product: ProductWithRelations,
-  availableStock: number,
+  stock: Map<string, number> | undefined,
   rating: Rating | undefined,
   supplierStates: Awaited<ReturnType<typeof sourceStates>>,
 ): ProductSummary {
-  const views = product.plans.filter((p) => p.source !== "SUPPLIER").map(priceView);
-  // The "from" badge follows the cheapest *effective* plan.
-  const cheapest = views.reduce<(typeof views)[number] | null>(
-    (best, v) => (best === null || v.effectivePrice < best.effectivePrice ? v : best),
-    null,
-  );
+  let cheapest: (ReturnType<typeof priceView> & { plan: PlanRow; amount: number }) | null = null;
+  let availableStock = 0;
+  for (const plan of product.plans) {
+    const count = stock?.get(plan.id) ?? 0;
+    if (plan.source === "SUPPLIER" || count === 0) continue;
+    availableStock += count;
+    const view = priceView(plan);
+    const amount = comparablePrice(view.effectivePrice, plan.currency);
+    if (
+      !cheapest ||
+      amount < cheapest.amount ||
+      (amount === cheapest.amount && plan.id < cheapest.plan.id)
+    )
+      cheapest = { ...view, plan, amount };
+  }
   const availability = bestAvailability([
     planAvailability(availableStock),
     ...product.plans.map((p) => planAvailability(0, supplierStates.get(p.id))),
@@ -193,14 +209,16 @@ function toSummary(
       slug: product.category.slug,
     },
     priceFrom: cheapest ? cheapest.effectivePrice : null,
+    pricePlanId: cheapest?.plan.id ?? null,
+    priceDurationDays: cheapest?.plan.durationDays ?? null,
     originalPriceFrom: cheapest?.onSale ? cheapest.price : null,
     discountPercent: cheapest?.discountPercent ?? 0,
-    currency: product.plans[0]?.currency ?? "IRR",
+    currency: cheapest?.plan.currency ?? "IRR",
     availableStock,
     availability,
     inStock: availability !== "OUT_OF_STOCK",
     lowStock: availableStock > 0 && availableStock <= LOW_STOCK_THRESHOLD,
-    quoteRequired: product.plans.length > 0 && product.plans.every((p) => p.source === "SUPPLIER"),
+    quoteRequired: availability === "SUPPLIER_STOCK" || availability === "ON_REQUEST",
     isFeatured: product.isFeatured,
     ratingAverage: rating ? Math.round(rating.average * 10) / 10 : 0,
     ratingCount: rating?.count ?? 0,
@@ -209,10 +227,11 @@ function toSummary(
   };
 }
 
-async function availableCountByProduct(productIds: string[]): Promise<Map<string, number>> {
-  if (productIds.length === 0) return new Map();
+async function availableCountByProduct(productIds: string[]) {
+  const counts = new Map<string, Map<string, number>>();
+  if (productIds.length === 0) return counts;
   const rows = await prisma.inventoryItem.groupBy({
-    by: ["productId"],
+    by: ["productId", "planId"],
     where: {
       status: "AVAILABLE",
       productId: { in: productIds },
@@ -220,7 +239,13 @@ async function availableCountByProduct(productIds: string[]): Promise<Map<string
     },
     _count: { _all: true },
   });
-  return new Map(rows.map((row) => [row.productId, row._count._all]));
+  for (const row of rows) {
+    if (!row.planId) continue;
+    const plans = counts.get(row.productId) ?? new Map<string, number>();
+    plans.set(row.planId, row._count._all);
+    counts.set(row.productId, plans);
+  }
+  return counts;
 }
 
 async function ratingByProduct(productIds: string[]): Promise<Map<string, Rating>> {
@@ -315,13 +340,22 @@ export async function listProducts(query: ListProductsQuery) {
     ratingByProduct(ids),
   ]);
   const summaries = products.map((product) =>
-    toSummary(product, availMap.get(product.id) ?? 0, ratingMap.get(product.id), sourceStatus),
+    toSummary(product, availMap.get(product.id), ratingMap.get(product.id), sourceStatus),
   );
 
-  if (query.sort === "price_asc") {
-    summaries.sort((a, b) => (a.priceFrom ?? Infinity) - (b.priceFrom ?? Infinity));
-  } else if (query.sort === "price_desc") {
-    summaries.sort((a, b) => (b.priceFrom ?? -Infinity) - (a.priceFrom ?? -Infinity));
+  if (query.sort === "price_asc" || query.sort === "price_desc") {
+    const direction = query.sort === "price_asc" ? 1 : -1;
+    summaries.sort((a, b) => {
+      if (a.priceFrom === null || b.priceFrom === null)
+        return (
+          Number(a.priceFrom === null) - Number(b.priceFrom === null) || a.id.localeCompare(b.id)
+        );
+      return (
+        direction *
+          (comparablePrice(a.priceFrom, a.currency) - comparablePrice(b.priceFrom, b.currency)) ||
+        a.id.localeCompare(b.id)
+      );
+    });
   } else if (query.sort === "available") {
     summaries.sort(
       (a, b) =>
@@ -364,7 +398,7 @@ export async function getBestselling(limit: number) {
     .map((product) => ({
       summary: toSummary(
         product,
-        availMap.get(product.id) ?? 0,
+        availMap.get(product.id),
         ratingMap.get(product.id),
         sourceStatus,
       ),
@@ -394,17 +428,15 @@ export async function getProductBySlug(slug: string) {
     throw new AppError(404, "NOT_FOUND", "Product not found");
   }
 
-  const counts = await prisma.inventoryItem.groupBy({
-    by: ["planId"],
-    where: { productId: product.id, status: "AVAILABLE" },
-    _count: { _all: true },
-  });
-  const planAvail = new Map(counts.map((row) => [row.planId, row._count._all]));
-  const external = await sourceStates(product.plans);
+  const [counts, external] = await Promise.all([
+    availableCountByProduct([product.id]),
+    sourceStates(product.plans),
+  ]);
+  const planAvail = counts.get(product.id);
 
   const plans = product.plans.map((plan) => {
     const source = external.get(plan.id);
-    const localStock = plan.source === "SUPPLIER" ? 0 : (planAvail.get(plan.id) ?? 0);
+    const localStock = plan.source === "SUPPLIER" ? 0 : (planAvail?.get(plan.id) ?? 0);
     const availableStock = source?.availableStock ?? localStock;
     const availability = planAvailability(localStock, source);
     const view = priceView(plan);
@@ -441,12 +473,6 @@ export async function getProductBySlug(slug: string) {
       plans.sort((a, b) => Number(b.id === preferred.id) - Number(a.id === preferred.id));
   }
 
-  const totalAvailable = plans.reduce(
-    (sum, plan) => sum + (plan.availability === "LOCAL_STOCK" ? plan.availableStock : 0),
-    0,
-  );
-  const effectivePrices = plans.filter((p) => !p.quoteRequired).map((p) => p.effectivePrice);
-
   // Approved reviews + rating, and related products from the same category.
   const [reviews, ratingAgg, related] = await Promise.all([
     prisma.review.findMany({
@@ -463,37 +489,20 @@ export async function getProductBySlug(slug: string) {
     getRelated(product.id, product.categoryId, 4),
   ]);
 
+  const rating = { average: ratingAgg._avg.rating ?? 0, count: ratingAgg._count._all };
+  const summary = toSummary(product, planAvail, rating, external);
   return {
-    id: product.id,
-    name: product.name,
-    slug: product.slug,
+    ...summary,
     shortDescription: product.shortDescription,
     description: product.description,
     metaTitle: product.metaTitle,
     metaDescription: product.metaDescription,
     specs: specsOf(product.specs),
-    isFeatured: product.isFeatured,
-    image: product.image,
-    hasImage: product.imageMimeType != null,
-    imageVersion: String(product.updatedAt.getTime()),
     galleryImageIds: product.images.map((img) => img.id),
-    type: product.type,
-    category: {
-      id: product.category.id,
-      name: product.category.name,
-      slug: product.category.slug,
-    },
-    priceFrom: effectivePrices.length ? Math.min(...effectivePrices) : null,
-    quoteRequired: plans.length > 0 && plans.every((p) => p.quoteRequired),
-    currency: plans[0]?.currency ?? "IRR",
-    availableStock: totalAvailable,
-    availability: bestAvailability(plans.map((p) => p.availability)),
-    inStock: plans.some((p) => p.inStock),
-    lowStock: totalAvailable > 0 && totalAvailable <= LOW_STOCK_THRESHOLD,
     plans,
     rating: {
-      average: Math.round((ratingAgg._avg.rating ?? 0) * 10) / 10,
-      count: ratingAgg._count._all,
+      average: summary.ratingAverage,
+      count: summary.ratingCount,
     },
     reviews: reviews.map((r) => ({
       id: r.id,
@@ -503,8 +512,6 @@ export async function getProductBySlug(slug: string) {
       createdAt: r.createdAt,
     })),
     related,
-    createdAt: product.createdAt,
-    updatedAt: product.updatedAt,
   };
 }
 
@@ -522,9 +529,7 @@ async function getRelated(productId: string, categoryId: string, limit: number) 
     availableCountByProduct(ids),
     ratingByProduct(ids),
   ]);
-  return selected.map((p) =>
-    toSummary(p, availMap.get(p.id) ?? 0, ratingMap.get(p.id), sourceStatus),
-  );
+  return selected.map((p) => toSummary(p, availMap.get(p.id), ratingMap.get(p.id), sourceStatus));
 }
 
 // Public: raw bytes of a product's primary image (the only query that selects imageData).

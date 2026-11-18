@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { latinDigits, safeReturnPath } from "@/lib/navigation";
+import { rememberPlanReturn } from "@/lib/storefront-metrics";
 import { Container } from "@/components/ui/container";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -45,12 +46,21 @@ export function AuthForm({
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [contactMissing, setContactMissing] = useState(false);
+  const emailInput = useRef<HTMLInputElement>(null);
+  const showContactError = contactMissing && !email.trim() && !phone.trim();
 
   const next = searchParams.get("next");
   const destination = safeReturnPath(next, `/${locale}/dashboard`);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    if (mode === "signup" && !email.trim() && !phone.trim()) {
+      setContactMissing(true);
+      setError(null);
+      emailInput.current?.focus();
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -60,12 +70,6 @@ export function AuthForm({
           password,
         );
       } else {
-        if (!email.trim() && !phone.trim())
-          throw new Error(
-            locale === "fa"
-              ? "ایمیل یا شماره موبایل را وارد کنید."
-              : "Enter an email or phone number.",
-          );
         if (new TextEncoder().encode(password).length > 72)
           throw new Error(
             locale === "fa"
@@ -79,6 +83,7 @@ export function AuthForm({
           password,
         });
       }
+      rememberPlanReturn(destination);
       router.replace(destination);
     } catch (err) {
       setError(err instanceof Error ? err.message : dict.common.somethingWrong);
@@ -103,7 +108,12 @@ export function AuthForm({
           <form onSubmit={onSubmit} className="mt-6 space-y-3">
             {mode === "signup" && (
               <Field label={a.name}>
-                <Input value={name} onChange={(e) => setName(e.target.value)} required />
+                <Input
+                  autoComplete="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                />
               </Field>
             )}
 
@@ -117,13 +127,27 @@ export function AuthForm({
                 />
               </Field>
             ) : (
-              <>
+              <fieldset
+                className="space-y-2"
+                aria-describedby={showContactError ? "contact-error" : undefined}
+              >
+                <legend className="text-sm font-medium">{a.contactHint}</legend>
                 <Field label={a.email}>
-                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <Input
+                    ref={emailInput}
+                    type="email"
+                    autoComplete="email"
+                    aria-invalid={showContactError || undefined}
+                    aria-describedby={showContactError ? "contact-error" : undefined}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
                 </Field>
                 <Field label={a.phone}>
                   <Input
                     type="tel"
+                    aria-invalid={showContactError || undefined}
+                    aria-describedby={showContactError ? "contact-error" : undefined}
                     inputMode="tel"
                     autoComplete="tel"
                     maxLength={20}
@@ -131,8 +155,14 @@ export function AuthForm({
                     onChange={(e) => setPhone(e.target.value)}
                   />
                 </Field>
-                <p className="text-xs text-muted">{a.contactHint}</p>
-              </>
+                {showContactError && (
+                  <p id="contact-error" role="alert" className="text-sm text-danger">
+                    {locale === "fa"
+                      ? "یک راه تماس برای ساخت حساب وارد کنید."
+                      : "Enter a contact method to create your account."}
+                  </p>
+                )}
+              </fieldset>
             )}
 
             <div>

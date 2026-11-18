@@ -88,6 +88,7 @@ const p = {
 };
 const load = Module._load;
 let publishedPosts = [];
+let signedIn = true;
 let viewedProduct = p;
 let paymentOptions = { online: false, cardToCard: false, card: null };
 let requestedCatalog = "";
@@ -106,7 +107,10 @@ Module._load = function (request, ...args) {
       },
     };
   if (request === "@/lib/auth")
-    return { useAuth: () => ({ user: { id: "synthetic" }, token: "synthetic" }) };
+    return {
+      useAuth: () =>
+        signedIn ? { user: { id: "synthetic" }, token: "synthetic" } : { user: null, token: null },
+    };
   if (request === "next/navigation")
     return { useRouter: () => ({ push: () => {} }), useParams: () => ({ locale: "fa" }) };
   if (request === "@/lib/use-api")
@@ -190,6 +194,44 @@ assert(html.includes("موجود نزد تأمین‌کننده"));
 assert(html.includes("خرید مستقیم این پلن فعلاً فعال نیست"));
 assert(html.includes("۲ عدد نزد تأمین‌کننده"), "Render the count for a fresh matching supplier");
 assert(!html.includes("۷۷۷٬۷۷۷"), "Stored placeholder price must never appear for supplier offers");
+function renderReturn(requestedPlanId, product = p) {
+  return renderToStaticMarkup(
+    React.createElement(ProductDetailView, {
+      locale: "en",
+      product,
+      payment: paymentOptions,
+      dict,
+      requestedPlanId,
+    }),
+  );
+}
+assert.match(
+  renderReturn(p.plans[1].id),
+  /checked="" value="fixture-manual"|value="fixture-manual" checked=""/,
+  "Restore the exact non-default plan after sign-in",
+);
+for (const id of ["missing-id", "", "sold-out"]) {
+  const stale = renderReturn(id, {
+    ...p,
+    plans: [
+      ...p.plans,
+      {
+        ...p.plans[0],
+        id: "sold-out",
+        inStock: false,
+        availability: "OUT_OF_STOCK",
+      },
+    ],
+  });
+  assert.match(stale, /role="alert"/);
+  assert.doesNotMatch(stale, /checked=""|>Check price<|>Recheck stock and price</);
+}
+signedIn = false;
+const guest = renderReturn(p.plans[1].id, { ...p, hasImage: false });
+assert.match(guest, /Sign in to request a quote/);
+assert.match(guest, /href="\/en\/login\?next=%2Fen%2Fproducts%2Ffixture%3Fplan%3Dfixture-manual"/);
+assert.match(guest, /<h1[^>]*><span[^>]*data-kind="ACCOUNT"/);
+signedIn = true;
 const home = renderToStaticMarkup(
   React.createElement(HomeCatalog, {
     locale: "fa",
@@ -206,8 +248,7 @@ assert(home.includes("قیمت با استعلام"));
 assert(home.includes("موجود نزد تأمین‌کننده"));
 assert(home.includes("مشاهدهٔ پلن‌ها"));
 assert.match(home, /href="\/fa\/products\?category=fixture"/);
-assert.match(home, /<form[^>]+action="\/fa\/products"/);
-assert.match(home, /<select[^>]+name="sort"/);
+assert.doesNotMatch(home, /<select[^>]+name="sort"/);
 assert(!home.includes("Empty category"));
 assert(!home.includes("اشتراک و حساب کاربری"));
 const renderProduct = () =>
@@ -271,6 +312,7 @@ async function checkHomepage() {
   assert(empty.includes('href="#prompt-lab"'));
   assert.match(empty, /<form[^>]*action="\/fa\/products"/);
   assert(empty.includes('name="q"'));
+  assert(empty.includes("پیگیری سفارش"), "Explain which support link is for existing orders");
   assert(empty.includes("/brand/oosta-hero-v2-320.webp 320w"));
   assert(!empty.includes("/_next/image?url=%2Fbrand%2Foosta-ai-mark.png"));
   assert(empty.indexOf('id="home-catalog"') < empty.indexOf('id="prompt-lab"'));
@@ -310,6 +352,9 @@ async function checkHomepage() {
     "Keep the category disclosure collapsed on first render",
   );
   assert(catalog.includes("دسته‌بندی محصولات"));
+  assert.match(catalog, /<button[^>]*type="submit"[^>]*>اعمال<\/button>/);
+  assert.match(catalog, /<select[^>]+name="sort"/);
+  assert(catalog.includes('href="https://t.me/oostaAiSupport"'));
   const parsed = new URL(requestedCatalog, "https://example.invalid");
   assert.equal(parsed.searchParams.get("q"), "ChatGPT");
   assert.equal(parsed.searchParams.get("page"), "2");
@@ -321,6 +366,20 @@ async function checkHomepage() {
     await ProductsBrowser({ locale: "fa", dict, params: { ...params, page: "4" } }),
   );
   assert(pastEnd.includes("بازگشت به صفحهٔ اول نتایج"));
+  const detailSource = require("node:fs").readFileSync(
+    path.resolve(__dirname, "../apps/web/components/product-detail-view.tsx"),
+    "utf8",
+  );
+  // Summary, price and the main action come before the plan picker once a plan is chosen.
+  assert(
+    detailSource.indexOf("layout.terms") < detailSource.indexOf("layout.change"),
+    "Show the selected plan summary above the plan picker",
+  );
+  assert(detailSource.indexOf('buy("online")') < detailSource.indexOf("layout.change"));
+  assert(
+    !detailSource.includes("href={`/${locale}/support`}"),
+    "Pre-purchase help must not need login",
+  );
   console.log("PASS: localized variants, supplier pricing and published homepage journal");
 }
 checkHomepage().catch((error) => {

@@ -281,6 +281,15 @@ model Visit {
   @@map("visits")
 }
 
+model StorefrontStepCount {
+  day   DateTime
+  step  String
+  count Int      @default(0)
+
+  @@id([day, step])
+  @@map("storefront_step_counts")
+}
+
 // Small named binary assets (e.g. the Enamad e-trust badge image in the footer).
 model SiteAsset {
   key       String   @id

@@ -61,6 +61,7 @@ Module._load = function (request, ...args) {
   if (request === "next/navigation")
     return {
       useRouter: () => ({ push: () => {} }),
+      useSearchParams: () => new URLSearchParams(),
       useParams: () => ({ locale: "fa" }),
       usePathname: () => pathname,
     };
@@ -74,8 +75,37 @@ const { TicketThread } = require("../apps/web/components/tickets/ticket-thread.t
 const { DashboardOrders } = require("../apps/web/components/dashboard-orders.tsx");
 const { Button } = require("../apps/web/components/ui/button.tsx");
 const { Header } = require("../apps/web/components/layout/header.tsx");
+const { AuthForm } = require("../apps/web/components/auth-form.tsx");
 const { Footer } = require("../apps/web/components/layout/footer.tsx");
+const { ProductCard } = require("../apps/web/components/product-card.tsx");
 Module._load = originalLoad;
+const card = (availability) =>
+  renderToStaticMarkup(
+    React.createElement(ProductCard, {
+      locale: "en",
+      labels: { from: "From", left: "left", off: "off" },
+      product: {
+        name: "Fixture",
+        slug: "fixture",
+        type: "ACCOUNT",
+        category: { name: "Fixture" },
+        availability,
+        currency: "IRT",
+        priceFrom: 19,
+        originalPriceFrom: 25,
+        pricePlanId: availability === "LOCAL_STOCK" ? "monthly" : null,
+        priceDurationDays: 30,
+      },
+    }),
+  );
+assert.match(card("LOCAL_STOCK"), /href="\/en\/products\/fixture\?plan=monthly"/);
+assert.match(card("LOCAL_STOCK"), /19 IRT/);
+assert.match(card("LOCAL_STOCK"), /30 days/);
+assert.match(card("ON_REQUEST"), /Price on request/);
+assert.doesNotMatch(card("OUT_OF_STOCK"), /19 IRT|Price on request/);
+const { formatPrice } = require("../apps/web/lib/format.ts");
+assert.equal(formatPrice(190, "IRR", "fa"), "۱۹ تومان");
+assert.equal(formatPrice(19, "IRT", "fa"), "۱۹ تومان");
 const disabledButton = renderToStaticMarkup(
   React.createElement(
     Button,
@@ -94,6 +124,13 @@ assert.match(disabledButton, /type="submit"/);
 assert.match(disabledButton, /disabled=""/);
 assert.match(disabledButton, /aria-busy="true"/);
 const dict = require("../apps/web/app/[locale]/dictionaries/fa.json");
+const signup = renderToStaticMarkup(
+  React.createElement(AuthForm, { mode: "signup", locale: "fa", dict }),
+);
+assert.match(
+  signup,
+  /<fieldset[^>]*>\s*<legend[^>]*>[^<]+<\/legend>[\s\S]*?type="email"[\s\S]*?type="tel"[\s\S]*?<\/fieldset>/,
+);
 const header = () =>
   renderToStaticMarkup(
     React.createElement(Header, { locale: "fa", dict: dict.nav, themeLabel: "تم" }),
