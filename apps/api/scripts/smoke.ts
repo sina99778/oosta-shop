@@ -1129,7 +1129,13 @@ async function testBlog(): Promise<void> {
   // Create as DRAFT
   const create = await post(
     "/admin/blog",
-    { title: "How to buy", slug, content: "# Guide\n\nSome **content**.", status: "DRAFT" },
+    {
+      title: "How to buy",
+      slug,
+      content: "# Guide\n\nSome **content**.",
+      coverAlt: "Synthetic cover description",
+      status: "DRAFT",
+    },
     adminToken,
   );
   record("create blog post -> 201", create.statusCode === 201, `status=${create.statusCode}`);
@@ -1158,6 +1164,19 @@ async function testBlog(): Promise<void> {
     "public published post -> 200 with content",
     detail.statusCode === 200 && typeof obj(body(detail).post).content === "string",
     `status=${detail.statusCode}`,
+  );
+  const published = obj(body(detail).post);
+  record(
+    "public post exposes cover alt text and last update time",
+    published.coverAlt === "Synthetic cover description" &&
+      !Number.isNaN(Date.parse(String(published.updatedAt))),
+    JSON.stringify({ coverAlt: published.coverAlt, updatedAt: published.updatedAt }),
+  );
+  const tooLongAlt = await patch(`/admin/blog/${id}`, { coverAlt: "x".repeat(201) }, adminToken);
+  record(
+    "cover alt over 200 chars -> 400",
+    tooLongAlt.statusCode === 400,
+    `status=${tooLongAlt.statusCode}`,
   );
   const pubList = body(await get("/blog")).posts as Array<{ slug: string }> | undefined;
   record(

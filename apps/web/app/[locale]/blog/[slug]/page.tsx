@@ -43,6 +43,7 @@ export async function generateMetadata({
       url: alternates.canonical as string,
       type: "article",
       publishedTime: post.publishedAt ?? undefined,
+      modifiedTime: post.updatedAt ?? undefined,
       images: image ? [{ url: image }] : [DEFAULT_SHARE_IMAGE],
     },
   };
@@ -71,6 +72,7 @@ export default async function BlogPostPage({
     description: post.excerpt ?? undefined,
     image: cover ? [cover] : undefined,
     datePublished: post.publishedAt ?? undefined,
+    dateModified: post.updatedAt ?? undefined,
     inLanguage: "fa-IR",
     author: { "@id": `${siteUrl()}/#organization` },
     publisher: organizationJsonLd(),

@@ -17,6 +17,7 @@ const post = {
   content: "## شروع\n\nراهنمای آزمایشی",
   status: "DRAFT",
   hasCover: true,
+  coverAlt: "کوله‌پشتی با ابزارهای برنامه‌نویسی",
   publishedAt: null,
   createdAt: new Date().toISOString(),
 };
@@ -129,6 +130,12 @@ assert(article.includes("راهنمای آزمایشی"));
 // The page title is the only h1; a post's "##" sections are h2 (not h4), so the
 // outline is h1 > h2 > h3 for readers and search engines.
 assert.match(article, /<h2[^>]*>شروع<\/h2>/);
+// The cover carries the editor's alt text; a post without one stays decorative.
+assert.match(article, /<img[^>]+alt="کوله‌پشتی با ابزارهای برنامه‌نویسی"[^>]*class="articleCover"/);
+assert.match(
+  screen(JournalArticle, { post: { ...live, coverAlt: null }, back: fa.blog.back }),
+  /<img[^>]+alt=""[^>]*class="articleCover"/,
+);
 assert(!/<h[456][^>]*>شروع</.test(article));
 // A Persian title that starts with a Latin product name must stay RTL;
 // dir="auto" would pick LTR from the first letter and scramble the line.

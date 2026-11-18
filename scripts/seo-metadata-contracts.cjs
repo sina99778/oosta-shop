@@ -23,6 +23,7 @@ const post = {
   excerpt: "A synthetic excerpt",
   hasCover: false,
   publishedAt: "2026-11-17T10:00:00.000Z",
+  updatedAt: "2026-11-18T09:30:00.000Z",
   content: "## Body",
 };
 const cmsPage = {
@@ -168,6 +169,7 @@ async function main() {
     assert.equal(meta.alternates.languages.en, undefined);
     assert.equal(meta.openGraph.url, canonicalPost);
     assert.equal(meta.openGraph.publishedTime, post.publishedAt);
+    assert.equal(meta.openGraph.modifiedTime, post.updatedAt);
     const pageMeta = await cms.generateMetadata(params(locale, { slug: cmsPage.slug }));
     assert.equal(pageMeta.alternates.canonical, `${SITE}/fa/p/about`);
   }
@@ -177,6 +179,7 @@ async function main() {
   assert.equal(article["@type"], "BlogPosting");
   assert.equal(article.mainEntityOfPage, canonicalPost);
   assert.equal(article.datePublished, post.publishedAt);
+  assert.equal(article.dateModified, post.updatedAt);
   assert.equal(article.inLanguage, "fa-IR");
   assert.equal(article.publisher["@type"], "Organization");
   assert.equal(article.author["@id"], article.publisher["@id"]);
@@ -195,6 +198,8 @@ async function main() {
 
   const urls = (await sitemap()).map((entry) => entry.url);
   assert(urls.includes(canonicalPost));
+  const postEntry = (await sitemap()).find((entry) => entry.url === canonicalPost);
+  assert.equal(postEntry.lastModified.toISOString(), post.updatedAt);
   assert(urls.includes(`${SITE}/fa/p/about`));
   assert(urls.includes(`${SITE}/en/products`) && urls.includes(`${SITE}/en/blog`));
   assert(!urls.some((url) => /\/en\/(blog|p|products)\/./.test(url)));

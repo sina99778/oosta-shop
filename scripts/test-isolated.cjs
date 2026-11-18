@@ -44,6 +44,8 @@ async function main() {
   const env = {
     NODE_ENV: "test",
     DATABASE_URL: `postgresql://audit@127.0.0.1:${port}/postgres?schema=public`,
+    // The disposable database is the only one the demo seed may reset.
+    OOSTA_SEED_RESET: `127.0.0.1:${port}/postgres`,
     JWT_SECRET: "isolated-test-secret-not-for-deployment",
     PAYMENT_PROVIDER: "mock",
     ZARINPAL_SANDBOX: "true",

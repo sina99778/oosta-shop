@@ -16,7 +16,9 @@ export async function listPublished() {
       title: true,
       excerpt: true,
       coverMime: true,
+      coverAlt: true,
       publishedAt: true,
+      updatedAt: true,
     },
   });
   return {
@@ -26,7 +28,9 @@ export async function listPublished() {
       title: p.title,
       excerpt: p.excerpt,
       hasCover: p.coverMime != null,
+      coverAlt: p.coverAlt,
       publishedAt: p.publishedAt,
+      updatedAt: p.updatedAt,
     })),
   };
 }
@@ -41,7 +45,9 @@ export async function getPublishedBySlug(slug: string) {
       excerpt: true,
       content: true,
       coverMime: true,
+      coverAlt: true,
       publishedAt: true,
+      updatedAt: true,
     },
   });
   if (!post) throw new AppError(404, "NOT_FOUND", "Post not found");
@@ -52,7 +58,9 @@ export async function getPublishedBySlug(slug: string) {
     excerpt: post.excerpt,
     content: post.content,
     hasCover: post.coverMime != null,
+    coverAlt: post.coverAlt,
     publishedAt: post.publishedAt,
+    updatedAt: post.updatedAt,
   };
 }
 
@@ -112,6 +120,7 @@ export async function getById(id: string) {
       content: true,
       status: true,
       coverMime: true,
+      coverAlt: true,
       publishedAt: true,
     },
   });
@@ -124,6 +133,7 @@ export async function getById(id: string) {
     content: post.content,
     status: post.status,
     hasCover: post.coverMime != null,
+    coverAlt: post.coverAlt,
     publishedAt: post.publishedAt,
   };
 }
@@ -135,6 +145,7 @@ export async function createPost(input: CreatePostInput) {
       title: input.title,
       slug: input.slug,
       excerpt: input.excerpt ?? null,
+      coverAlt: input.coverAlt || null,
       content: input.content,
       status,
       publishedAt: status === "PUBLISHED" ? new Date() : null,
@@ -155,6 +166,7 @@ export async function updatePost(id: string, input: UpdatePostInput) {
   if (input.title !== undefined) data.title = input.title;
   if (input.slug !== undefined) data.slug = input.slug;
   if (input.excerpt !== undefined) data.excerpt = input.excerpt;
+  if (input.coverAlt !== undefined) data.coverAlt = input.coverAlt || null;
   if (input.content !== undefined) data.content = input.content;
   if (input.status !== undefined) {
     data.status = input.status;

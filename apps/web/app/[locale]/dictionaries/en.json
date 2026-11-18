@@ -283,6 +283,8 @@
       "draft": "Draft",
       "published": "Published",
       "cover": "Cover image",
+      "coverAlt": "Cover image description (alt)",
+      "coverAltHint": "For screen readers and search; leave empty if the image is decorative.",
       "uploadCover": "Set cover",
       "changeCover": "Change cover",
       "uploadMedia": "Upload media",

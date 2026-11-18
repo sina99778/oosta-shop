@@ -92,7 +92,7 @@ export function JournalArticle({ post, locale, back }: { post: BlogPostDetail; l
       </header>
       {post.hasCover && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={assetUrl(`/blog-cover/${post.id}`)} alt="" className={styles.articleCover} decoding="async" />
+        <img src={assetUrl(`/blog-cover/${post.id}`)} alt={post.coverAlt ?? ""} className={styles.articleCover} decoding="async" />
       )}
       {/* The title is the page h1, so "##" in the article is h2 (matches .prose h2/h3). */}
       <Markdown text={post.content} className={styles.prose} headingOffset={0} />

@@ -40,10 +40,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     });
   }
 
-  const blog = await fetchJson<{ posts: { slug: string }[] }>("/blog", 0);
+  const blog = await fetchJson<{ posts: { slug: string; updatedAt?: string }[] }>("/blog", 0);
   for (const post of blog?.posts ?? []) {
+    const updatedAt = post.updatedAt ? new Date(post.updatedAt) : undefined;
     entries.push({
       url: `${site}/${CONTENT_LOCALE}/blog/${encodeURIComponent(post.slug)}`,
+      lastModified: updatedAt && Number.isFinite(updatedAt.getTime()) ? updatedAt : undefined,
       changeFrequency: "weekly",
       priority: 0.6,
     });

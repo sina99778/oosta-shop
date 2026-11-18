@@ -195,6 +195,21 @@ async function main(): Promise<void> {
       "Demo seed is forbidden in production. Use db:bootstrap to create an administrator without deleting data.",
     );
   }
+  // reset() deletes every row. Require the caller to name the exact database
+  // (host:port/db) so a missing env file or the default .env never wipes it.
+  const url = new URL(process.env.DATABASE_URL ?? "");
+  const target = `${url.hostname}:${url.port || "5432"}${url.pathname}`;
+  const confirmed = process.env.OOSTA_SEED_RESET;
+  if (!confirmed) {
+    throw new Error(
+      `Refusing to reset ${target}. This seed deletes all data; to confirm, set OOSTA_SEED_RESET=${target}`,
+    );
+  }
+  if (confirmed !== target) {
+    throw new Error(
+      `Refusing to reset ${target}: OOSTA_SEED_RESET (${confirmed}) does not match the target database.`,
+    );
+  }
   await reset();
   await seedUsers();
   await seedCatalog();

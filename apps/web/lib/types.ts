@@ -138,7 +138,9 @@ export type BlogPostSummary = {
   title: string;
   excerpt: string | null;
   hasCover: boolean;
+  coverAlt?: string | null;
   publishedAt: string | null;
+  updatedAt?: string;
 };
 export type BlogPostDetail = BlogPostSummary & { content: string };
 export type AdminBlogPost = {
@@ -158,6 +160,7 @@ export type AdminBlogPostDetail = {
   content: string;
   status: "DRAFT" | "PUBLISHED";
   hasCover: boolean;
+  coverAlt?: string | null;
   publishedAt: string | null;
 };
 

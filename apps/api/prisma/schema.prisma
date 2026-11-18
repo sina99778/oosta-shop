@@ -232,6 +232,7 @@ model BlogPost {
   content     String // Markdown
   coverData   Bytes?
   coverMime   String?
+  coverAlt    String? // Alt text for the cover image (empty = decorative)
   status      PostStatus @default(DRAFT)
   publishedAt DateTime?
   createdAt   DateTime   @default(now())

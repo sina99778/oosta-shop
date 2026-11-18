@@ -85,6 +85,7 @@ function Editor({
   const [slug, setSlug] = useState(post?.slug ?? "");
   const [slugTouched, setSlugTouched] = useState(!!post);
   const [excerpt, setExcerpt] = useState(post?.excerpt ?? "");
+  const [coverAlt, setCoverAlt] = useState(post?.coverAlt ?? "");
   const [content, setContent] = useState(post?.content ?? "");
   const [status, setStatus] = useState<AdminBlogPostDetail["status"]>(post?.status ?? "DRAFT");
   const [storedPublicSlug, setStoredPublicSlug] = useState(
@@ -128,7 +129,14 @@ function Editor({
       });
       return;
     }
-    const payload = { title, slug, excerpt: excerpt.trim() || null, content, status };
+    const payload = {
+      title,
+      slug,
+      excerpt: excerpt.trim() || null,
+      coverAlt: coverAlt.trim() || null,
+      content,
+      status,
+    };
     void run(async (auth) => {
       if (post) {
         const result = await api.patch<{ post: AdminBlogPostDetail }>(endpoint, payload, auth);
@@ -244,6 +252,15 @@ function Editor({
                 maxLength={500}
                 rows={2}
                 onChange={(e) => setExcerpt(e.target.value)}
+              />
+            </label>
+            <label>
+              <span>{t.coverAlt}</span>
+              <input
+                value={coverAlt}
+                maxLength={200}
+                placeholder={t.coverAltHint}
+                onChange={(e) => setCoverAlt(e.target.value)}
               />
             </label>
           </div>
