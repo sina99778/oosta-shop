@@ -13,6 +13,7 @@ const run = promisify(execFile);
   let contentIndexed = false;
   let leak = null;
   let ownershipFile = true;
+  let trackingReady = false;
   const content = /^\/(?:fa|en)(?:\/products|\/blog(?:\/[a-z0-9][a-z0-9-]{0,119})?)?$/;
   const server = createServer((req, res) => {
     const asset = req.url.startsWith("/_next/");
@@ -27,25 +28,29 @@ const run = promisify(execFile);
         : "noindex, nofollow",
     );
     res.statusCode =
-      walletReady && req.method === "POST" && req.url === "/api/auth/signup"
-        ? 400
-        : walletReady &&
-            req.method === "POST" &&
-            [
-              "/api/supplier-checkout/quotes",
-              "/api/supplier-checkout/orders",
-              "/api/orders/synthetic/receipt",
-            ].includes(req.url)
-          ? 401
-          : req.method === "POST"
-            ? req.url === "/api/auth/login"
-              ? 400
-              : 503
-            : ["/api/orders", "/api/tickets", "/api/admin/stats"].includes(req.url)
-              ? 401
-              : req.url === "/.env.production"
-                ? 404
-                : 200;
+      req.url === "/api/track" && trackingReady
+        ? req.method === "POST"
+          ? 204
+          : 405
+        : walletReady && req.method === "POST" && req.url === "/api/auth/signup"
+          ? 400
+          : walletReady &&
+              req.method === "POST" &&
+              [
+                "/api/supplier-checkout/quotes",
+                "/api/supplier-checkout/orders",
+                "/api/orders/synthetic/receipt",
+              ].includes(req.url)
+            ? 401
+            : req.method === "POST"
+              ? req.url === "/api/auth/login"
+                ? 400
+                : 503
+              : ["/api/orders", "/api/tickets", "/api/admin/stats"].includes(req.url)
+                ? 401
+                : req.url === "/.env.production"
+                  ? 404
+                  : 200;
     res.end(
       req.url === "/fa"
         ? '<script src="/_next/static/synthetic.js"></script>'
@@ -79,6 +84,14 @@ const run = promisify(execFile);
       /\/fa\/dashboard robots/,
     );
     leak = null;
+    // Visit beacon: blocked (503) until the tracking location is installed.
+    await assert.rejects(
+      run(process.execPath, [...args, "--content-indexed", "--tracking-ready"]),
+      /POST \/api\/track/,
+    );
+    trackingReady = true;
+    await run(process.execPath, [...args, "--content-indexed", "--tracking-ready"]);
+    trackingReady = false;
     ownershipFile = false;
     await assert.rejects(
       run(process.execPath, [...args, "--content-indexed"]),
@@ -92,7 +105,7 @@ const run = promisify(execFile);
     staticCache = "private, no-store";
     await assert.rejects(run(process.execPath, args), /immutable/);
     console.log(
-      "PASS: preview accepts immutable assets, indexes only home/catalog/blog when opened, and rejects public caching of private routes or uncached fingerprinted assets",
+      "PASS: preview accepts immutable assets, indexes only home/catalog/blog when opened, accepts the visit beacon only when enabled, and rejects public caching of private routes or uncached fingerprinted assets",
     );
   } finally {
     server.closeAllConnections();

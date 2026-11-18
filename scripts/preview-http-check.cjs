@@ -87,6 +87,16 @@ async function main() {
         body: "{}",
       });
   }
+  // --tracking-ready: the page-view beacon (oosta-visit-tracking.conf) accepts POST
+  // and answers 204 (invalid bodies too); other methods never reach the API.
+  if (process.argv.includes("--tracking-ready")) {
+    await check("/api/track", 204, {
+      method: "POST",
+      headers: { "content-type": "application/json", "user-agent": "preview-http-check bot" },
+      body: "{}",
+    });
+    await check("/api/track", 405);
+  }
   // Without --login-ready, expect credentials to remain blocked pending CDN origin TLS.
   await check("/api/auth/login", process.argv.includes("--login-ready") ? 400 : 503, {
     method: "POST",
