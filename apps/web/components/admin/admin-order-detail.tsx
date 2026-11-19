@@ -53,7 +53,12 @@ export function AdminOrderDetailView({
       ) : order ? (
         <>
           <OrderFacts order={order} locale={locale} dict={dict} />
-          <ManualSupplierJobs locale={locale} orderId={order.id} onUpdated={refetch} />
+          <ManualSupplierJobs
+            key={order.id + ":" + order.paymentStatus}
+            locale={locale}
+            orderId={order.id}
+            onUpdated={refetch}
+          />
           {order.paymentProvider === "CARD_TO_CARD" && (
             <AdminReceipts
               locale={locale}
