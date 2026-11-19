@@ -1,0 +1,197 @@
+.articleRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 16px;
+  padding-block: 10px;
+  border-bottom: 1px solid var(--c-border);
+}
+.articleRow:last-child {
+  border-bottom: 0;
+}
+.articleRow > div {
+  min-width: 0;
+}
+.articleRow small,
+.articleRow time {
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+.articleRow small {
+  display: block;
+}
+.articleTitle {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.articleTitle:hover {
+  color: var(--c-primary);
+}
+.articleRow [data-tone] {
+  justify-self: end;
+}
+.articleRow > :last-child {
+  justify-self: end;
+}
+.editorGrid {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+.editorRail {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.editorRail section {
+  display: grid;
+  gap: 12px;
+}
+.editorRail h2,
+.editorBar h2 {
+  font-weight: 750;
+  font-size: 1rem;
+}
+.fields {
+  display: grid;
+  gap: 16px;
+}
+.fields label,
+.fileField {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.fields label > span,
+.fileField > span {
+  color: var(--c-fg);
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+.fields small,
+.wordCount {
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+}
+.fields :is(textarea, select),
+.body {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-bg);
+  padding: 8px 12px;
+  color: var(--c-fg);
+}
+.fields :is(textarea, select):focus-visible,
+.body:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+.fields select {
+  min-height: 44px;
+  font-size: 0.875rem;
+}
+.body {
+  min-height: 360px;
+  resize: vertical;
+  line-height: 1.9;
+}
+.editorBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding-block: 24px 12px;
+}
+.formatBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+.formatBar button,
+.deleteButton {
+  min-height: 44px;
+  padding-inline: 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+.formatBar button:hover {
+  color: var(--c-primary);
+  border-color: var(--c-primary);
+}
+.deleteButton {
+  color: var(--color-danger);
+}
+.save {
+  justify-content: center;
+  cursor: pointer;
+}
+.save:disabled,
+.formatBar button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.notice {
+  color: var(--c-muted);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+.notice[role="alert"] {
+  color: var(--color-danger);
+}
+.preview {
+  min-height: 360px;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+.preview img {
+  max-width: 100%;
+  height: auto;
+}
+.cover {
+  width: 100%;
+  aspect-ratio: 16/9;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.fileField input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  font-size: 0.8125rem;
+  color: var(--c-muted);
+}
+.fileField input::file-selector-button {
+  min-height: 44px;
+  padding-inline: 8px;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  color: var(--c-fg);
+  background: var(--c-surface);
+  margin-inline-end: 6px;
+}
+@media (min-width: 640px) {
+  .articleRow {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 0.85fr) minmax(0, 1fr) auto;
+  }
+  .articleRow [data-tone] {
+    justify-self: start;
+  }
+}
+@media (min-width: 1080px) {
+  .editorGrid {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 0.42fr);
+  }
+}

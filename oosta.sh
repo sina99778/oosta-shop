@@ -39,7 +39,7 @@ read_tty() {
 
 dc() { docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"; }
 
-gen_secret() { openssl rand -base64 "${1:-36}" | tr -d '\n'; }
+gen_secret() { openssl rand -hex "${1:-36}" | tr -d '\n'; }
 
 get_env() { [ -f "$ENV_FILE" ] && grep -E "^$1=" "$ENV_FILE" 2>/dev/null | head -n1 | cut -d= -f2-; }
 set_env() {
@@ -235,14 +235,14 @@ server {
 
   ssl_certificate     /etc/nginx/certs/fullchain.pem;
   ssl_certificate_key /etc/nginx/certs/privkey.pem;
-  client_max_body_size 2m;
+  client_max_body_size 6m;
 
   location /api/ {
     proxy_pass http://api:4000/;
     proxy_http_version 1.1;
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-For \$remote_addr;
     proxy_set_header X-Forwarded-Proto \$scheme;
   }
   location / {
@@ -250,7 +250,7 @@ server {
     proxy_http_version 1.1;
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-For \$remote_addr;
     proxy_set_header X-Forwarded-Proto \$scheme;
     proxy_set_header Upgrade \$http_upgrade;
     proxy_set_header Connection "upgrade";

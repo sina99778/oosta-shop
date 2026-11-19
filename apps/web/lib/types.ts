@@ -1,6 +1,8 @@
+import type { ProductVariant } from "./product-variant";
 // Shared API response types for the storefront.
 
 export type ProductType = "ACCOUNT" | "LICENSE" | "GIFTCARD";
+export type Availability = "LOCAL_STOCK" | "SUPPLIER_STOCK" | "ON_REQUEST" | "OUT_OF_STOCK";
 
 export type Category = {
   id: string;
@@ -17,13 +19,19 @@ export type ProductSummary = {
   slug: string;
   image: string | null;
   hasImage: boolean;
+  imageVersion?: string;
+  updatedAt?: string;
   type: ProductType;
   category: CategoryRef;
+  quoteRequired?: boolean;
   priceFrom: number | null;
+  pricePlanId?: string | null;
+  priceDurationDays?: number | null;
   originalPriceFrom: number | null;
   discountPercent: number;
   currency: string;
   availableStock: number;
+  availability?: Availability;
   inStock: boolean;
   lowStock: boolean;
   isFeatured: boolean;
@@ -36,6 +44,9 @@ export type PlanDetail = {
   id: string;
   label: string;
   durationDays: number | null;
+  variant?: ProductVariant | null;
+  source?: "INTERNAL" | "SUPPLIER";
+  quoteRequired?: boolean;
   price: number;
   salePrice: number | null;
   effectivePrice: number;
@@ -43,6 +54,7 @@ export type PlanDetail = {
   discountPercent: number;
   currency: string;
   availableStock: number;
+  availability?: Availability;
   inStock: boolean;
 };
 
@@ -128,7 +140,9 @@ export type BlogPostSummary = {
   title: string;
   excerpt: string | null;
   hasCover: boolean;
+  coverAlt?: string | null;
   publishedAt: string | null;
+  updatedAt?: string;
 };
 export type BlogPostDetail = BlogPostSummary & { content: string };
 export type AdminBlogPost = {
@@ -148,6 +162,7 @@ export type AdminBlogPostDetail = {
   content: string;
   status: "DRAFT" | "PUBLISHED";
   hasCover: boolean;
+  coverAlt?: string | null;
   publishedAt: string | null;
 };
 
@@ -194,12 +209,18 @@ export type Credential = {
   accountPassword: string | null;
   licenseKey: string | null;
   giftCardCode: string | null;
+  deliveryInstructions?: string | null;
 };
 
 export type OrderItemDetail = {
   id: string;
   product: { id: string; name: string; slug: string; type: ProductType };
-  plan: { id: string; label: string };
+  plan: {
+    id: string;
+    label: string;
+    variant?: ProductVariant | null;
+    durationDays?: number | null;
+  };
   quantity: number;
   unitPrice: number;
   lineTotal: number;
@@ -218,6 +239,9 @@ export type ReceiptInfo = {
 };
 
 export type OrderDetail = {
+  manualSupplier?: { expiresAt: string; remainingMs: number; deliveryHours: number | null } | null;
+  isSupplierQa?: boolean;
+  supplierQaKind?: "API_TEST" | "REAL_STOCK" | null;
   id: string;
   totalAmount: number;
   currency: string;
@@ -229,6 +253,16 @@ export type OrderDetail = {
   items: OrderItemDetail[];
   receipts: ReceiptInfo[];
   cardToCard: CardInfo | null;
+  bluInvoice?: {
+    baseAmount: number;
+    discount: number;
+    expiresAt: string;
+    expired: boolean;
+    remainingMs: number;
+    qaOnly?: boolean;
+    stockHeld?: boolean;
+    privateStockQa?: boolean;
+  } | null;
 };
 
 export type PaymentMethod = "online" | "card_to_card";
@@ -246,7 +280,29 @@ export type CreateOrderResponse = {
 };
 
 // Admin receipt review (queue + history)
+export type AdminOrderDetail = {
+  id: string;
+  totalAmount: number;
+  currency: string;
+  paymentStatus: string;
+  paymentProvider: string | null;
+  paymentRefId: string | null;
+  user: { name: string; email: string | null; phone: string | null };
+  createdAt: string;
+  paidAt: string | null;
+  items: {
+    id: string;
+    product: { name: string };
+    plan: { label: string };
+    quantity: number;
+    lineTotal: number;
+    fulfilledCount: number;
+    reservedCount: number;
+  }[];
+};
+
 export type AdminReceipt = {
+  bankEvidence?: "matched" | "waiting" | "review" | null;
   id: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
   reference: string | null;

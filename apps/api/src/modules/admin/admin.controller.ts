@@ -174,11 +174,20 @@ export async function getReceiptImage(req: Request, res: Response): Promise<void
 }
 export async function approveReceipt(req: Request, res: Response): Promise<void> {
   res.json({
-    receipt: await admin.approveReceipt(String(req.params.id), req.body as ReviewReceiptInput),
+    receipt: await admin.approveReceipt(
+      String(req.params.id),
+      req.body as ReviewReceiptInput,
+      false,
+      req.authMethod === "api-key" ? undefined : req.user?.id,
+    ),
   });
 }
 export async function rejectReceipt(req: Request, res: Response): Promise<void> {
   res.json({
-    receipt: await admin.rejectReceipt(String(req.params.id), req.body as ReviewReceiptInput),
+    receipt: await admin.rejectReceipt(
+      String(req.params.id),
+      req.body as ReviewReceiptInput,
+      req.authMethod === "api-key" ? undefined : req.user?.id,
+    ),
   });
 }

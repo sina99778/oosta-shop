@@ -6,6 +6,8 @@ declare global {
   namespace Express {
     interface Request {
       user?: { id: string; role: Role };
+      // How `authenticate` identified the caller (API keys cannot manage sessions).
+      authMethod?: "bearer" | "cookie" | "api-key";
     }
   }
 }

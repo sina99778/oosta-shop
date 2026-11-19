@@ -14,49 +14,138 @@
   --color-border: var(--c-border);
   --color-primary: var(--c-primary);
   --color-primary-hover: var(--c-primary-hover);
-  --color-primary-foreground: #ffffff;
+  --color-primary-foreground: var(--c-on-primary);
   --color-accent: var(--c-accent);
   --color-success: #16a34a;
   --color-danger: #ef4444;
 
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-fa: var(--font-vazirmatn), Tahoma, sans-serif;
+  --font-fa: var(--font-estedad), Tahoma, sans-serif;
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
 }
 
 /* ---- Light theme (default) ---- */
 :root {
-  --c-bg: #f4f0e7;
-  --c-surface: #fffaf0;
+  /* Brand constants shared by both themes: the navy stage and its mint highlight. */
+  --c-navy: #101d2e;
+  --c-mint: #b7ecd8;
+  --c-on-primary: #ffffff;
+  --c-bg: #f8fbfc;
+  --c-surface: #eef4f6;
   --c-card: #ffffff;
-  --c-fg: #151515;
-  --c-muted: #6d685f;
-  --c-border: #d8d1c4;
-  --c-primary: #ff4d00;
-  --c-primary-hover: #df3d00;
-  --c-accent: #ffd500;
-  --shadow-card: 0 16px 45px -30px rgba(28, 20, 10, 0.35);
-  --shadow-glow: 0 12px 34px -18px rgba(255, 77, 0, 0.58);
+  --c-fg: #173342;
+  --c-muted: #5c717e;
+  --c-border: #dce7eb;
+  --c-primary: #176c80;
+  --c-primary-hover: #11586a;
+  --c-accent: #36b9c6;
+  --c-danger-text: #b91c1c;
+  --shadow-card: 0 2px 8px -5px rgba(18, 59, 66, 0.12);
+  --shadow-glow: none;
 }
 
 /* ---- Dark theme ---- */
 .dark {
-  --c-bg: #0c0c0c;
-  --c-surface: #111111;
-  --c-card: #151515;
-  --c-fg: #f7f3ea;
-  --c-muted: #aaa49a;
-  --c-border: #393939;
-  --c-primary: #ff4d00;
-  --c-primary-hover: #ff6a2b;
-  --c-accent: #ffd500;
+  --c-on-primary: #102c2d;
+  --c-bg: #101e20;
+  --c-surface: #142629;
+  --c-card: #182d30;
+  --c-fg: #e7f2ef;
+  --c-muted: #a0b6b3;
+  --c-border: #31494b;
+  --c-primary: #55cebd;
+  --c-primary-hover: #80dfd0;
+  --c-accent: #36b9c6;
+  --c-danger-text: #fca5a5;
   --shadow-card: 0 22px 60px -35px rgba(0, 0, 0, 0.9);
-  --shadow-glow: 0 12px 36px -18px rgba(255, 77, 0, 0.8);
+  --shadow-glow: none;
 }
 
 html,
 body {
   height: 100%;
+}
+
+/* Convex face, a quiet lower edge, and tactile feedback for real actions. */
+.oosta-button {
+  --button-fill: var(--c-primary);
+  --button-ink: var(--c-on-primary);
+  --button-line: color-mix(in srgb, var(--button-fill) 82%, var(--c-navy));
+  --button-hover: var(--c-primary-hover);
+  --button-light: rgb(255 255 255 / 15%);
+  --button-depth: 0 2px 0 rgb(9 20 32 / 23%), 0 3px 9px -5px rgb(9 20 32 / 40%);
+  background: var(--button-fill);
+  color: var(--button-ink);
+  border: 1px solid var(--button-line);
+  border-radius: 0.75rem;
+  box-shadow:
+    inset 0 1px 0 var(--button-light),
+    var(--button-depth);
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    translate 130ms ease;
+}
+.oosta-button[data-button-variant="outline"],
+.oosta-button[data-button-variant="ghost"],
+.oosta-button[data-button-variant="soft"] {
+  --button-fill: var(--c-card);
+  --button-ink: var(--c-fg);
+  --button-line: var(--c-border);
+  --button-hover: var(--c-surface);
+  --button-light: rgb(255 255 255 / 8%);
+  --button-depth: 0 1px 2px rgb(9 20 32 / 13%);
+}
+.oosta-button[data-button-variant="ghost"] {
+  --button-fill: transparent;
+  --button-line: transparent;
+  --button-ink: var(--c-muted);
+  --button-light: transparent;
+  --button-depth: 0 0 transparent;
+}
+.oosta-button[data-button-variant="soft"] {
+  --button-fill: color-mix(in srgb, var(--c-primary) 10%, var(--c-card));
+  --button-ink: var(--c-primary);
+  --button-hover: color-mix(in srgb, var(--c-primary) 16%, var(--c-card));
+}
+.oosta-button[data-button-variant="danger"] {
+  --button-fill: #a9233a;
+  --button-hover: #951c32;
+  --button-ink: #fff;
+}
+@media (hover: hover) {
+  .oosta-button:not(:disabled):hover {
+    background: var(--button-hover);
+    border-color: color-mix(in srgb, var(--button-line) 55%, var(--c-primary));
+  }
+}
+.oosta-button:not(:disabled):active {
+  translate: 0 1px;
+  box-shadow: inset 0 2px 4px rgb(9 20 32 / 20%);
+}
+.oosta-button:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 3px;
+}
+.oosta-button:disabled {
+  opacity: 0.52;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+@media (prefers-reduced-motion: reduce) {
+  .oosta-button:not(:disabled):active {
+    translate: none;
+  }
+}
+
+/* The authenticated admin workspace has its own navigation and storefront link. */
+body:has([data-admin-shell]) > :is(.oosta-header, .oosta-footer, .oosta-announcement) {
+  display: none;
 }
 body {
   background-color: var(--color-background);
@@ -64,6 +153,12 @@ body {
   transition:
     background-color 0.25s ease,
     color 0.25s ease;
+}
+:lang(fa) body {
+  line-height: 1.75;
+}
+:lang(fa) :is(h1, h2, h3, h4, h5, h6, bdi) {
+  letter-spacing: normal;
 }
 ::selection {
   background: color-mix(in oklab, var(--c-primary) 30%, transparent);
@@ -77,7 +172,8 @@ body {
   color: transparent;
 }
 .bg-brand-gradient {
-  background-image: linear-gradient(115deg, var(--c-primary), #ff7a00);
+  background-color: #123b42;
+  background-image: none;
 }
 .shadow-card {
   box-shadow: var(--shadow-card);
@@ -218,4 +314,103 @@ body {
 }
 .animate-fade-in {
   animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.oosta-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-estedad), Tahoma, sans-serif;
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  line-height: 1.5;
+}
+.oosta-wordmark svg {
+  color: #239b98;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Owner-supplied Oosta AI identity. */
+.oosta-wordmark {
+  gap: 10px;
+  font-size: 26px;
+  letter-spacing: -0.04em;
+}
+.oosta-wordmark img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+.oosta-ai-label {
+  display: block;
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--c-primary);
+}
+@media (max-width: 640px) {
+  .oosta-wordmark {
+    gap: 8px;
+    font-size: 23px;
+  }
+  .oosta-wordmark img {
+    width: 36px;
+    height: 36px;
+  }
+}
+.skip-link {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-start: 16px;
+  z-index: 60;
+  transform: translateY(-200%);
+  background: var(--c-mint);
+  color: #102b28;
+  padding: 12px 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.skip-link:focus {
+  transform: translateY(0);
+  outline: 2px solid #102b28;
+  outline-offset: 2px;
+}
+.oosta-product-mark {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  background: #e1ede5;
+  color: #29463a;
+  font:
+    750 24px var(--font-geist-sans),
+    sans-serif;
+}
+.oosta-product-mark[data-kind="LICENSE"] {
+  background: #dfeaf0;
+  color: #254a60;
+}
+.oosta-product-mark[data-kind="GIFTCARD"] {
+  background: #eee5d9;
+  color: #5d4834;
+}
+.oosta-product-mark[aria-hidden="true"] {
+  user-select: none;
+}
+
+/* Estedad's tabular figures widen the Persian thousands separator (٬) to a digit-wide gap;
+   its Persian digits already share one width, so tabular-nums is dropped in Persian. */
+:lang(fa) .tabular-nums {
+  font-variant-numeric: normal;
 }

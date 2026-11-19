@@ -5,8 +5,16 @@
 .git
 .gitignore
 **/.env
+**/.env.*
+!**/.env.example
+!**/.env.production.example
 **/.env.local
 **/.env.*.local
 *.log
 **/*.tsbuildinfo
 coverage
+ChatExport*
+**/*.pem
+**/*.key
+backups
+docs

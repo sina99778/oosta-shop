@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "./api";
 
 type State<T> = { data: T | null; error: ApiError | null; loading: boolean };
 
 // Fetch a GET endpoint on mount. Pass `path = null` to skip (e.g. while inputs aren't ready).
-export function useApi<T>(path: string | null, token?: string): State<T> {
+export function useApi<T>(path: string | null, token?: string): State<T> & { refetch: () => void } {
+  const [attempt, setAttempt] = useState(0);
+  const refetch = useCallback(() => setAttempt((value) => value + 1), []);
   const [state, setState] = useState<State<T>>({
     data: null,
     error: null,
@@ -36,7 +38,7 @@ export function useApi<T>(path: string | null, token?: string): State<T> {
     return () => {
       active = false;
     };
-  }, [path, token]);
+  }, [path, token, attempt]);
 
-  return state;
+  return { ...state, refetch };
 }

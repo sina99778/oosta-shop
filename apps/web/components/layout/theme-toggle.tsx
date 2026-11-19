@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import styles from "./site-chrome.module.css";
 
 export function ThemeToggle({ label }: { label: string }) {
-  const [dark, setDark] = useState(true);
+  const [dark, setDark] = useState(false);
 
   useEffect(() => {
     queueMicrotask(() => setDark(document.documentElement.classList.contains("dark")));
@@ -25,13 +26,16 @@ export function ThemeToggle({ label }: { label: string }) {
       type="button"
       onClick={toggle}
       aria-label={label}
+      aria-pressed={dark}
       title={label}
-      className="inline-flex size-10 items-center justify-center border border-border text-muted transition-colors hover:border-primary hover:text-primary"
+      className={`oosta-button ${styles.tool}`}
+      data-button-variant="outline"
     >
       {dark ? (
         // moon
         <svg
           width="18"
+          aria-hidden="true"
           height="18"
           viewBox="0 0 24 24"
           fill="none"
@@ -46,6 +50,7 @@ export function ThemeToggle({ label }: { label: string }) {
         // sun
         <svg
           width="18"
+          aria-hidden="true"
           height="18"
           viewBox="0 0 24 24"
           fill="none"

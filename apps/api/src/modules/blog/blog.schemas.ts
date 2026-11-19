@@ -11,6 +11,7 @@ export const createPostSchema = z.object({
   title: z.string().trim().min(1).max(200),
   slug,
   excerpt: z.string().trim().max(500).nullable().optional(),
+  coverAlt: z.string().trim().max(200).nullable().optional(),
   content: z.string().trim().min(1).max(100000),
   status: z.enum(["DRAFT", "PUBLISHED"]).optional(),
 });

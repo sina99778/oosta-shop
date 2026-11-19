@@ -1,0 +1,17 @@
+# Storefront release readiness
+
+The Blu status dashboard is deployed in release `20261114-blu-admin-status`. Its systemd runner records only an allowlisted state and timestamp in an atomic file under `/var/lib/oosta-blu-status`. The API mounts that directory read-only and exposes the two fields through the existing current-role admin middleware and private no-store policy. Reports older than ten minutes become stale. The bilingual card refreshes every minute while visible.
+
+The isolated regression reproduced the missing endpoint. It then verified anonymous denial, regular-user denial, live-role revocation, no-store, disabled and missing reports, enrollment-required, stale and malformed input. Synthetic shell cases on Linux exercised idle, matched, pending, review, re-enrollment and transport failure. Full verify, lint, local and Docker production builds passed. Both npm audits reported zero findings. The live admin endpoint reported idle, returned 401 to anonymous requests and 403 with the ordinary QA profile. The dashboard route and public preview smoke passed. The card was not interactively checked in an authenticated browser.
+
+The HTTPS Nginx catalog exception allows the current admin to create or edit products and plans, add inventory or product images, create categories, and update supplier prices or catalogs. It does not open product deletion, public checkout, registration or arbitrary administrative writes. Anonymous and ordinary-user POSTs returned 401 and 403. Invalid admin bodies reached schema validation and returned 400. The public preview checker verified the route restrictions. Nginx passed its configuration check.
+
+Four inactive catalog drafts were created for ChatGPT, Gemini, CapCut and Canva. Five inactive variants were mapped to individual observed supplier offers, including separate six- and twelve-month Gemini Plus entries. The supplier mappings and draft privacy were verified through the database and public API. The five catalog connections and Navasan snapshot were available. The stored supplier markup is 30 percent. The listings and starter mappings are drafts based on the supplier catalog, with no real customer delivery test for these variants.
+
+The private backup `ready-preview-drafts-20261114.dump` includes the drafts and the retained real Blu match. Its archive listing was read successfully. No release changes reset or seeded the working database.
+
+## Sale activation
+
+The deployed database has zero enabled products and zero deliverable internal inventory. The regular checkout accepts internal stock only. For a stock-based launch, load actual sellable inventory and activate its listing, configure a live payment method, then run a real customer-order trace. The real Blu scheduler trace was on a private payment-only invoice and establishes provisional reconciliation. The current bank feed has no independently verified final settlement field. The deployed Blu matches do not trigger approval or delivery.
+
+The supplier purchase route remains a bounded operator QA flow. Current documented purchase payloads do not establish a maximum charge for the mapped customer offers. A read-only quote or successful QA purchase cannot enforce the next debit or fulfill these drafts. Public supplier checkout needs an authorized funding and fulfillment contract or real stock acquired in advance. Public checkout stays closed at this checkpoint. No additional supplier funds were spent.

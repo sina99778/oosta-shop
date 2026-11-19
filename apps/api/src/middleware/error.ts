@@ -58,7 +58,14 @@ export function errorHandler(
       message = "Database request error";
     }
   } else if (err instanceof Error && err.message) {
-    message = err.message;
+    const parserError = err as Error & { status?: number; type?: string };
+    if ([400, 413, 415].includes(parserError.status ?? 0)) {
+      statusCode = parserError.status!;
+      code = "INVALID_REQUEST_BODY";
+      message = "Request body is invalid, too large, or uses an unsupported encoding";
+    } else {
+      message = err.message;
+    }
   }
 
   if (statusCode >= 500) {

@@ -6,6 +6,7 @@
 
 import { env } from "../config/env";
 import { ZodError } from "zod";
+import { randomBytes } from "node:crypto";
 import * as adminSvc from "../modules/admin/admin.service";
 import * as blogSvc from "../modules/blog/blog.service";
 import * as pagesSvc from "../modules/pages/pages.service";
@@ -42,7 +43,30 @@ import {
 import { getAgentModels, parseModelHints } from "./agentPrefs";
 
 export type PendingImage = { buffer: Buffer; mimeType: string };
-type ToolCtx = { image?: PendingImage; imageModel?: string };
+type ToolCtx = { image?: PendingImage; imageModel?: string; approvals?: Set<string> };
+const pendingActions = new Map<
+  string,
+  { tool: string; args: Record<string, unknown>; ctx: ToolCtx; expires: number }
+>();
+
+// Model output is never sufficient permission to mutate the store. Approval is
+// bound to one concrete operation and can only be consumed once by the admin bot.
+export async function approveAgentAction(id: string): Promise<string> {
+  const action = pendingActions.get(id);
+  pendingActions.delete(id);
+  if (!action || action.expires < Date.now()) throw new Error("Action approval expired");
+  const tool = TOOLS.find((item) => item.name === action.tool);
+  if (!tool) throw new Error("Unknown action");
+  await tool.run(action.args, action.ctx);
+  return `Completed: ${action.tool}`;
+}
+
+export function pendingAgentActions(ids: Set<string>) {
+  return [...ids].flatMap((id) => {
+    const action = pendingActions.get(id);
+    return action ? [{ id, description: `${action.tool}\n${JSON.stringify(action.args)}` }] : [];
+  });
+}
 
 type JsonSchema = Record<string, unknown>;
 type Tool = {
@@ -444,7 +468,16 @@ const TOOLS: Tool[] = [
       planId: str(),
       status: { type: "string", enum: ["AVAILABLE", "RESERVED", "SOLD"] },
     }),
-    run: (a) => adminSvc.listInventory(inventoryQuerySchema.parse(a)),
+    run: async (a) => {
+      const inventory = await adminSvc.listInventory(inventoryQuerySchema.parse(a));
+      return {
+        ...inventory,
+        items: inventory.items.map(
+          ({ accountPassword: _password, licenseKey: _license, giftCardCode: _gift, ...item }) =>
+            item,
+        ),
+      };
+    },
   },
   {
     name: "list_orders",
@@ -649,6 +682,19 @@ async function runTool(
 ): Promise<Record<string, unknown>> {
   const tool = TOOLS.find((t) => t.name === name);
   if (!tool) return { error: `Unknown tool: ${name}` };
+  if (!name.startsWith("get_") && !name.startsWith("list_")) {
+    for (const [id, action] of pendingActions)
+      if (action.expires < Date.now()) pendingActions.delete(id);
+    if (pendingActions.size >= 20)
+      return { error: "Too many pending actions; review them before requesting more" };
+    const id = randomBytes(12).toString("hex");
+    pendingActions.set(id, { tool: name, args, ctx, expires: Date.now() + 120000 });
+    ctx.approvals?.add(id);
+    return {
+      approvalRequired: true,
+      note: "Stop here. The administrator must approve the displayed operation before it runs.",
+    };
+  }
   try {
     const result = await tool.run(args ?? {}, ctx);
     return { result: result ?? { ok: true } };
@@ -753,13 +799,13 @@ async function runOpenRouterLoop(
 // to the image tools; opts.onStep is called with each tool name (for progress UI).
 export async function runAgent(
   instruction: string,
-  opts: { image?: PendingImage; onStep?: (note: string) => void } = {},
+  opts: { image?: PendingImage; onStep?: (note: string) => void; approvals?: Set<string> } = {},
 ): Promise<string> {
   if (!isAgentEnabled()) {
     return "هوش مصنوعی تنظیم نشده است (OPENROUTER_API_KEY یا GEMINI_API_KEY).";
   }
 
-  const ctx: ToolCtx = { image: opts.image };
+  const ctx: ToolCtx = { image: opts.image, approvals: opts.approvals };
   const notes: string[] = [];
   if (opts.image) notes.push("A photo is attached to this message.");
   if (lastProductId) notes.push(`Most recent product id: ${lastProductId}.`);

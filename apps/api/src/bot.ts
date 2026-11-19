@@ -1,17 +1,15 @@
 // Telegram admin bot (Telegraf). Disabled unless TELEGRAM_BOT_TOKEN and
 // TELEGRAM_ADMIN_ID are set. Access is restricted strictly to the admin id.
-// Features: stats, recent orders, on-demand + scheduled DB backups, and restore
-// (admin sends a backup file captioned "restore"). Fully button-driven; /start opens the menu.
+// Features: stats, recent orders, and on-demand + scheduled encrypted backups.
 
 import { Telegraf, Markup } from "telegraf";
 import { message } from "telegraf/filters";
-import { unlink, writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { env } from "./config/env";
 import { prisma } from "./lib/prisma";
-import { createBackup, restoreFromFile } from "./lib/backup";
-import { isAgentEnabled, runAgent } from "./lib/agent";
+import { isMaintenance } from "./lib/maintenance";
+import { createEncryptedBackup } from "./lib/backup";
+import { approveAgentAction, pendingAgentActions, isAgentEnabled, runAgent } from "./lib/agent";
 import { isOpenRouterEnabled } from "./lib/openrouter";
 import { getVisitStats } from "./modules/analytics/analytics.service";
 import {
@@ -30,18 +28,38 @@ import {
   rejectReceipt,
 } from "./modules/admin/admin.service";
 import { getGatewayConfig, maskCard, patchGatewayConfig } from "./lib/gatewayConfig";
+import { readBluPollStatus } from "./modules/orders/blu-poll-status";
+import { dispatchManualSupplier } from "./modules/suppliers/fulfillment";
+import { liveSupplierRegistry } from "./modules/suppliers/live-adapters";
+import { AppError } from "./utils/httpError";
 
 let bot: Telegraf | undefined;
 let backupTimer: ReturnType<typeof setInterval> | undefined;
+let backupInProgress = false;
+
+const shortcuts = {
+  orders: "🧾 سفارش‌های اخیر",
+  blu: "💳 وضعیت بلو",
+  receipts: "📥 رسیدهای در انتظار",
+  tools: "⚙️ همه ابزارها",
+};
+
+const quickKeyboard = Markup.keyboard([
+  [shortcuts.orders, shortcuts.blu],
+  [shortcuts.receipts, shortcuts.tools],
+])
+  .resize()
+  .persistent();
 
 function mainMenu() {
   return Markup.inlineKeyboard([
     [
       Markup.button.callback("📊 آمار فروش", "stats"),
-      Markup.button.callback("🧾 سفارش‌های اخیر", "orders"),
+      Markup.button.callback(shortcuts.orders, "orders"),
     ],
+    [Markup.button.callback(shortcuts.blu, "blu_status")],
     [
-      Markup.button.callback("🧾 رسیدهای در انتظار", "receipts"),
+      Markup.button.callback(shortcuts.receipts, "receipts"),
       Markup.button.callback("🗂 تاریخچه رسیدها", "receipts_history"),
     ],
     [
@@ -60,6 +78,35 @@ function mainMenu() {
 }
 
 const fmtAmount = (n: number) => new Intl.NumberFormat("fa-IR").format(Math.round(n));
+
+async function bluStatusMessage(): Promise<string> {
+  const { state, checkedAt } = await readBluPollStatus();
+  const labels: Record<string, string> = {
+    disabled: "جمع‌آوری وضعیت تنظیم نشده",
+    waiting: "در انتظار اولین بررسی",
+    idle: "رسیدی در صف بررسی نیست",
+    matched: "آخرین بررسی، واریز مطابق رسید پیدا کرد",
+    pending: "هنوز واریزی مطابق رسید پیدا نشده",
+    review: "آخرین نتیجه نیاز به بررسی مدیر دارد",
+    enrollmentRequired: "ورود مجدد به بلو لازم است",
+    unavailable: "وضعیت بررسی در دسترس نیست",
+    stale: "بیش از ۱۰ دقیقه از آخرین بررسی گذشته",
+  };
+  const lines = [
+    "💳 وضعیت بلو",
+    `تأیید خودکار: ${env.BLU_AUTO_APPROVE_ENABLED ? "روشن" : "خاموش"}`,
+    `بررسی رسید: ${labels[state] ?? labels.unavailable}`,
+  ];
+  if (checkedAt) {
+    const lastCheck = new Intl.DateTimeFormat("fa-IR", {
+      dateStyle: "short",
+      timeStyle: "short",
+      timeZone: "Asia/Tehran",
+    }).format(new Date(checkedAt));
+    lines.push(`آخرین بررسی به وقت تهران: ${lastCheck}`);
+  }
+  return lines.join("\n");
+}
 
 // Gateway status + one-tap toggles. Card details change via the AI agent in chat.
 async function gatewaysView() {
@@ -140,6 +187,18 @@ async function visitsMessage(): Promise<string> {
       );
     }
   }
+  if (s.stepsWeek.length) {
+    lines.push("", "مراحل انتخاب و استعلام در ۷ روز اخیر (تعداد رخداد)");
+    const counts = new Map(s.stepsWeek.map(({ step, count }) => [step, count]));
+    for (const [step, label] of Object.entries({
+      product_viewed: "مشاهدهٔ محصول",
+      plan_selected: "انتخاب دستی پلن",
+      quote_received: "دریافت استعلام",
+      plan_login_started: "رفتن به ورود از پلن",
+      plan_restored: "بازگشت به همان پلن پس از ورود",
+    }))
+      lines.push(`${label}: ${counts.get(step) ?? 0}`);
+  }
   if (s.month.views === 0) {
     lines.push(
       "",
@@ -175,12 +234,10 @@ function receiptCaption(r: {
     user: { name: string; email: string | null; phone: string | null };
   };
 }): string {
-  const who = r.order.user.email ?? r.order.user.phone ?? r.order.user.name;
   const when = new Date(r.createdAt).toISOString().replace("T", " ").slice(0, 16);
   const statusIcon = r.status === "APPROVED" ? "✅" : r.status === "REJECTED" ? "❌" : "🕒";
   return [
     `🧾 Receipt — order #${r.order.id.slice(-8)}`,
-    `👤 ${r.order.user.name} (${who})`,
     `💰 ${r.order.totalAmount} ${r.order.currency}`,
     `🏷 Note: ${r.reference ?? "—"}`,
     `${statusIcon} Status: ${r.status}`,
@@ -195,7 +252,7 @@ async function sendReceipts(chatId: number, status: "PENDING" | undefined): Prom
   if (items.length === 0) {
     await bot.telegram.sendMessage(
       chatId,
-      status === "PENDING" ? "✅ No receipts awaiting review." : "No receipts yet.",
+      status === "PENDING" ? "✅ رسیدی در انتظار بررسی نیست." : "هنوز رسیدی ثبت نشده.",
       mainMenu(),
     );
     return;
@@ -203,8 +260,8 @@ async function sendReceipts(chatId: number, status: "PENDING" | undefined): Prom
   await bot.telegram.sendMessage(
     chatId,
     status === "PENDING"
-      ? `🧾 ${pendingCount} receipt(s) awaiting review:`
-      : `🗂 Showing ${items.length} most recent receipt(s):`,
+      ? `🧾 ${fmtAmount(pendingCount)} رسید در انتظار بررسی`
+      : `🗂 ${fmtAmount(items.length)} رسید اخیر`,
   );
   for (const r of items) {
     const caption = receiptCaption(r);
@@ -268,24 +325,43 @@ async function statsMessage(): Promise<string> {
 async function ordersMessage(): Promise<string> {
   const orders = await prisma.order.findMany({
     take: 8,
-    orderBy: { createdAt: "desc" },
-    include: { user: { select: { email: true, phone: true } } },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: {
+      id: true,
+      paymentStatus: true,
+      totalAmount: true,
+      currency: true,
+      items: {
+        take: 3,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { quantity: true, product: { select: { name: true } } },
+      },
+    },
   });
   if (orders.length === 0) return "هنوز سفارشی ثبت نشده.";
-  const icon: Record<string, string> = {
-    PAID: "✅",
-    PENDING: "🕒",
-    PENDING_REVIEW: "🧾",
-    FAILED: "❌",
-    REJECTED: "🚫",
-    REFUNDED: "↩️",
-    EXPIRED: "⌛",
+  const status = {
+    PAID: "✅ تحویل‌شده",
+    PENDING: "🕒 در انتظار پرداخت",
+    PENDING_REVIEW: "🧾 در انتظار بررسی رسید",
+    PAID_PENDING_FULFILLMENT: "📦 پرداخت شده، در انتظار تحویل",
+    FAILED: "❌ پرداخت ناموفق",
+    REJECTED: "🚫 رسید رد شده",
+    REFUNDED: "↩️ سفارش بازگشت داده شده",
+    EXPIRED: "⌛ مهلت گذشته",
   };
+  const money = new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 3 });
   const lines = orders.map((order) => {
-    const who = order.user.email ?? order.user.phone ?? "ناشناس";
-    return `${icon[order.paymentStatus] ?? "•"} #${order.id.slice(-8)} · ${who} · ${fmtAmount(Number(order.totalAmount))} ${order.currency}`;
+    const amount = Number(order.totalAmount) / (order.currency === "IRR" ? 10 : 1);
+    const currency = ["IRR", "IRT"].includes(order.currency) ? "تومان" : order.currency;
+    const products = order.items.slice(0, 2).map(({ product, quantity }) => {
+      const name = product.name.replace(/\s+/g, " ").trim().slice(0, 80);
+      return `${name} × ${fmtAmount(quantity)}`;
+    });
+    if (order.items.length > 2) products.push("و موارد دیگر");
+    const summary = `${status[order.paymentStatus]} · #${order.id.slice(-8)} · ${money.format(amount)} ${currency}`;
+    return products.length ? `${summary}\n${products.join("، ")}` : summary;
   });
-  return `🧾 ${orders.length} سفارش اخیر\n\n${lines.join("\n")}`;
+  return `🧾 ${fmtAmount(orders.length)} سفارش اخیر\n\n${lines.join("\n\n")}`;
 }
 
 async function ticketsMessage(): Promise<string> {
@@ -308,27 +384,71 @@ async function ticketsMessage(): Promise<string> {
 }
 
 async function sendBackup(chatId: number): Promise<void> {
-  if (!bot) return;
-  const { file, cleanup } = await createBackup();
+  if (!bot || backupInProgress) return;
+  backupInProgress = true;
   try {
-    await bot.telegram.sendDocument(
-      chatId,
-      { source: file, filename: path.basename(file) },
-      { caption: "🗄️ oostaAI database backup" },
-    );
+    const { file, cleanup } = await createEncryptedBackup(env.BACKUP_AGE_RECIPIENT);
+    try {
+      await bot.telegram.sendDocument(
+        chatId,
+        { source: file, filename: path.basename(file) },
+        { caption: "بکاپ رمزنگاری‌شدهٔ اوستا" },
+      );
+    } finally {
+      await cleanup();
+    }
   } finally {
-    await cleanup();
+    backupInProgress = false;
   }
 }
 
 // Fire-and-forget notification to the admin (used by e.g. the tickets module).
-export async function notifyAdmin(text: string): Promise<void> {
+export async function notifyAdmin(
+  text: string,
+  button?: { label: string; data: string },
+): Promise<void> {
   const adminId = env.TELEGRAM_ADMIN_ID;
   if (!bot || !adminId) return;
   try {
-    await bot.telegram.sendMessage(adminId, text);
-  } catch (error) {
-    console.error("[telegram] notifyAdmin failed", error);
+    await bot.telegram.sendMessage(
+      adminId,
+      text,
+      button
+        ? Markup.inlineKeyboard([Markup.button.callback(button.label, button.data)])
+        : undefined,
+    );
+  } catch {
+    console.error("[telegram] notifyAdmin failed");
+  }
+}
+
+export async function notifySupplierReceipt(receiptId: string, orderId: string) {
+  const chatId = env.TELEGRAM_ADMIN_ID;
+  if (!bot || !chatId) return;
+  try {
+    const { data, mimeType } = await getReceiptImage(receiptId);
+    const caption = "رسید سفارش تأمین‌کننده " + orderId.slice(-8);
+    const buttons = Markup.inlineKeyboard([
+      [
+        Markup.button.callback("تأیید رسید", "rcp_ok_" + receiptId),
+        Markup.button.callback("رد رسید", "rcp_no_" + receiptId),
+      ],
+    ]);
+    await bot.telegram.sendDocument(
+      chatId,
+      {
+        source: data,
+        filename:
+          mimeType === "application/pdf"
+            ? "receipt.pdf"
+            : mimeType === "image/png"
+              ? "receipt.png"
+              : "receipt.jpg",
+      },
+      { caption, ...buttons },
+    );
+  } catch {
+    console.error("[telegram] supplier receipt notification failed");
   }
 }
 
@@ -347,8 +467,12 @@ export function startBot(): void {
 
   // Restrict every incoming update (messages AND button taps) strictly to the admin.
   bot.use(async (ctx, next) => {
-    if (ctx.from?.id !== adminId) {
+    if (ctx.from?.id !== adminId || ctx.chat?.type !== "private" || ctx.chat.id !== adminId) {
       await ctx.reply("⛔ Unauthorized.");
+      return;
+    }
+    if (isMaintenance()) {
+      await ctx.reply("A database restore is in progress. Please retry shortly.");
       return;
     }
     return next();
@@ -363,13 +487,20 @@ export function startBot(): void {
       .catch(() => {});
   });
 
-  // /start opens the button menu. Plain text messages go to the AI agent.
-  bot.start((ctx) =>
-    ctx.reply(
-      "👋 پنل ادمین oostaAI\n\nیک گزینه را انتخاب کن، یا همین‌جا فارسی دستور بده تا دستیار هوش مصنوعی انجامش بده — مثلاً:\n«یک محصول اکانت اسپاتیفای با قیمت ۱۵۰۰۰۰ بساز» یا «یک پست وبلاگ درباره‌ی خرید امن بنویس».\n\n🧠 از دکمه‌ی «مدل‌ها» مدل هوش مصنوعی را عوض کن، یا در خود دستور بگو: «با کلود …»، «با جی‌پی‌تی …»، «با جمنای …».",
-      mainMenu(),
-    ),
+  // Register keyboard labels before the generic AI text handler.
+  bot.command(["start", "menu"], (ctx) =>
+    ctx.reply("پنل مدیریت اوستا\nیکی از دکمه‌های پایین را انتخاب کن.", quickKeyboard),
   );
+  bot.command("blu", async (ctx) => ctx.reply(await bluStatusMessage(), mainMenu()));
+  bot.command("orders", async (ctx) => ctx.reply(await ordersMessage(), mainMenu()));
+  bot.hears(shortcuts.blu, async (ctx) => ctx.reply(await bluStatusMessage()));
+  bot.hears(shortcuts.orders, async (ctx) => ctx.reply(await ordersMessage()));
+  bot.hears(shortcuts.receipts, async (ctx) => sendReceipts(ctx.chat.id, "PENDING"));
+  bot.hears(shortcuts.tools, (ctx) => ctx.reply("ابزارهای مدیریت اوستا", mainMenu()));
+  bot.action("blu_status", async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.reply(await bluStatusMessage(), mainMenu());
+  });
 
   bot.action("stats", async (ctx) => {
     await ctx.answerCbQuery();
@@ -380,13 +511,27 @@ export function startBot(): void {
     await ctx.reply(await ordersMessage(), mainMenu());
   });
   bot.action("backup", async (ctx) => {
-    await ctx.answerCbQuery("Creating backup…");
-    await sendBackup(ctx.chat?.id ?? adminId);
+    if (!env.BACKUP_AGE_RECIPIENT) {
+      await ctx.answerCbQuery();
+      await ctx.reply("کلید عمومی بکاپ تنظیم نشده است.", mainMenu());
+      return;
+    }
+    if (backupInProgress) {
+      await ctx.answerCbQuery("بکاپ در حال آماده‌سازی است.");
+      return;
+    }
+    await ctx.answerCbQuery("آماده‌سازی بکاپ رمزنگاری‌شده…");
+    try {
+      await sendBackup(adminId);
+    } catch {
+      console.error("[telegram] encrypted backup failed");
+      await ctx.reply("تهیه یا ارسال بکاپ انجام نشد. وضعیت سرور را بررسی کن.", mainMenu());
+    }
   });
   bot.action("restore", async (ctx) => {
     await ctx.answerCbQuery();
     await ctx.reply(
-      "♻️ To restore, send me a backup file (.sql or .sql.gz) with the caption: restore",
+      "بازیابی از تلگرام غیرفعال است. فایل بکاپ را با کلید بازیابی باز کن و طبق راهنمای سرور پیش برو.",
       mainMenu(),
     );
   });
@@ -513,14 +658,33 @@ export function startBot(): void {
     await sendReceipts(ctx.chat?.id ?? adminId, undefined);
   });
 
-  bot.action(/^rcp_ok_(.+)$/, async (ctx) => {
+  bot.action(/^supplier_buy_([a-z0-9]{1,44})$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    try {
+      const actor = process.env.SUPPLIER_TELEGRAM_ADMIN_USER_ID ?? "";
+      const result = await dispatchManualSupplier(ctx.match[1], actor, liveSupplierRegistry());
+      await ctx.reply("وضعیت تأمین: " + result.state);
+    } catch (error) {
+      await ctx.reply(
+        error instanceof AppError && error.code === "SUPPLIER_COST_INCREASED"
+          ? "قیمت تأمین تغییر کرده است. مبلغ جدید را در پنل بررسی و تأیید کن."
+          : "خرید انجام نشد. وضعیت سفارش و بودجه را در پنل بررسی کن.",
+      );
+    }
+  });
+  bot.action(/^rcp_ok_([a-z0-9]{1,100})$/, async (ctx) => {
     const id = ctx.match[1];
     try {
-      const receipt = await approveReceipt(id, {});
-      await ctx.answerCbQuery("✅ Approved & delivered");
+      const receipt = await approveReceipt(
+        id,
+        {},
+        false,
+        process.env.SUPPLIER_TELEGRAM_ADMIN_USER_ID,
+      );
+      await ctx.answerCbQuery("✅ Approved");
       await ctx.editMessageReplyMarkup(undefined).catch(() => {});
       await ctx.reply(
-        `✅ Approved — order #${receipt.order.id.slice(-8)} is now PAID and delivered.`,
+        `✅ Approved — order #${receipt.order.id.slice(-8)}: ${receipt.order.paymentStatus}.`,
         mainMenu(),
       );
     } catch (error) {
@@ -532,10 +696,10 @@ export function startBot(): void {
     }
   });
 
-  bot.action(/^rcp_no_(.+)$/, async (ctx) => {
+  bot.action(/^rcp_no_([a-z0-9]{1,100})$/, async (ctx) => {
     const id = ctx.match[1];
     try {
-      const receipt = await rejectReceipt(id, {});
+      const receipt = await rejectReceipt(id, {}, process.env.SUPPLIER_TELEGRAM_ADMIN_USER_ID);
       await ctx.answerCbQuery("❌ Rejected");
       await ctx.editMessageReplyMarkup(undefined).catch(() => {});
       await ctx.reply(
@@ -551,30 +715,14 @@ export function startBot(): void {
     }
   });
 
-  // Restore: admin sends a .sql/.sql.gz dump with the caption "restore".
   bot.on(message("document"), async (ctx) => {
-    const caption = ctx.message.caption ?? "";
-    if (!/restore/i.test(caption)) {
-      await ctx.reply('📥 To restore this backup, resend the file with the caption: "restore"');
-      return;
-    }
-    await ctx.reply("⏳ Restoring database… the site may be briefly unavailable.");
-    try {
-      const link = await ctx.telegram.getFileLink(ctx.message.document.file_id);
-      const response = await fetch(link.href);
-      const buffer = Buffer.from(await response.arrayBuffer());
-      const name = ctx.message.document.file_name ?? "restore.sql.gz";
-      const tmp = path.join(os.tmpdir(), `oosta-restore-${name}`);
-      await writeFile(tmp, buffer);
-      await restoreFromFile(tmp);
-      await unlink(tmp).catch(() => {});
-      await ctx.reply("✅ Restore complete.");
-    } catch (error) {
-      await ctx.reply(
-        `❌ Restore failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    if ((ctx.message.caption ?? "").trim().toLowerCase() === "restore") {
+      await ctx.reply("بازیابی از تلگرام غیرفعال است.", mainMenu());
     }
   });
+  bot.action(/^restore_confirm_[a-f0-9]{24}$/, (ctx) =>
+    ctx.answerCbQuery("بازیابی از تلگرام غیرفعال است."),
+  );
 
   // Run the agent for a chat message (optionally with an attached photo) and reply.
   async function runAgentForChat(
@@ -594,7 +742,9 @@ export function startBot(): void {
     await bot.telegram.sendChatAction(chatId, "typing").catch(() => {});
     const thinking = await bot.telegram.sendMessage(chatId, "🤖 در حال انجام…").catch(() => null);
     try {
+      const approvals = new Set<string>();
       const result = await runAgent(instruction, {
+        approvals,
         image,
         onStep: (note) => {
           void bot?.telegram.sendChatAction(chatId, "typing").catch(() => {});
@@ -602,7 +752,26 @@ export function startBot(): void {
         },
       });
       if (thinking) await bot.telegram.deleteMessage(chatId, thinking.message_id).catch(() => {});
-      await bot.telegram.sendMessage(chatId, result.slice(0, 3800), mainMenu());
+      await bot.telegram.sendMessage(
+        chatId,
+        approvals.size
+          ? "تغییرات پیشنهادی آماده‌اند و فقط پس از تأیید عملیات مشخص توسط شما اجرا می‌شوند."
+          : result.slice(0, 3800),
+        mainMenu(),
+      );
+      for (const action of pendingAgentActions(approvals)) {
+        const chunks = Array.from(action.description);
+        for (let offset = 0; offset < chunks.length; offset += 1800) {
+          await bot.telegram.sendMessage(chatId, chunks.slice(offset, offset + 1800).join(""));
+        }
+        await bot.telegram.sendMessage(
+          chatId,
+          "Approve only the operation shown above (expires in 2 minutes).",
+          Markup.inlineKeyboard([
+            [Markup.button.callback("Approve this operation", `agent_confirm_${action.id}`)],
+          ]),
+        );
+      }
     } catch (error) {
       await bot.telegram.sendMessage(
         chatId,
@@ -611,6 +780,15 @@ export function startBot(): void {
       );
     }
   }
+
+  bot.action(/^agent_confirm_([a-f0-9]{24})$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    try {
+      await ctx.reply(await approveAgentAction(ctx.match[1]));
+    } catch (error) {
+      await ctx.reply(error instanceof Error ? error.message : String(error));
+    }
+  });
 
   // AI agent: any plain text message (not a command) is treated as an instruction.
   bot.on(message("text"), async (ctx) => {
@@ -636,11 +814,11 @@ export function startBot(): void {
   });
 
   // Scheduled automatic backups.
-  if (env.BACKUP_INTERVAL_HOURS > 0) {
+  if (env.BACKUP_INTERVAL_HOURS > 0 && env.BACKUP_AGE_RECIPIENT) {
     backupTimer = setInterval(
       () => {
-        sendBackup(adminId).catch((error) =>
-          console.error("[telegram] scheduled backup failed", error),
+        sendBackup(adminId).catch(() =>
+          console.error("[telegram] scheduled encrypted backup failed"),
         );
       },
       env.BACKUP_INTERVAL_HOURS * 60 * 60 * 1000,

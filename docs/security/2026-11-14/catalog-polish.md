@@ -1,0 +1,7 @@
+# Catalog design and copy revision
+
+Released the web polish in `20261114-catalog-polish`. The catalog heading explains what can be compared. Product cards no longer carry a generic AI badge. Variant summaries remove duplicate product titles and internal UNSPECIFIED values. The revised Persian copy is stored in `scripts/storefront-product-copy.fa.json`. Copy changes update the active catalog only and retain the ChatGPT warranty section.
+
+All 97 covers were replaced with 840-by-576 WebP images. 52 use available Simple Icons brand marks. The remaining 45 use product initials. Covers are stored in the existing database image field. The storefront keeps the existing routes, supplier mappings, warranty fields, auth checks and quote behavior. Connectivity pages identify the service as VPN and explain the dependence of latency on network conditions.
+
+The pre-change database backup was captured. Full verify, lint, production web build, Docker web build, both npm audits and the public preview smoke passed. The initial typecheck caught a summary field not returned by the API and the card was corrected to use the existing summary contract. Database checks covered distinct copy and image format for all products. Six public sample covers matched the stored bytes and three standard image URLs were checked without a cache-busting query. Authenticated browser interactions were outside this verification.

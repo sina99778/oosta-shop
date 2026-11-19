@@ -7,8 +7,9 @@ function tag(locale: Locale): string {
 export function formatPrice(amount: number, currency: string, locale: Locale): string {
   // Persian shoppers think in Toman, but IRR amounts are stored in Rial — so when
   // we relabel to تومان we MUST divide by 10, otherwise every price reads 10x high.
-  if (locale === "fa" && currency === "IRR") {
-    return `${new Intl.NumberFormat("fa-IR").format(amount / 10)} تومان`;
+  if (locale === "fa" && (currency === "IRR" || currency === "IRT")) {
+    const tomans = currency === "IRR" ? amount / 10 : amount;
+    return `${new Intl.NumberFormat("fa-IR").format(tomans)} تومان`;
   }
   return `${new Intl.NumberFormat(tag(locale)).format(amount)} ${currency}`;
 }

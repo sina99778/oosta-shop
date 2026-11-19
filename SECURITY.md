@@ -22,7 +22,7 @@ A summary of the security measures in the oostaAI platform and how they're verif
 - **helmet** sets secure headers (`X-Content-Type-Options: nosniff`, frame options, HSTS over TLS, etc.).
 - `x-powered-by` disabled.
 - **CORS** restricted to the configured `CORS_ORIGIN` allow-list.
-- `trust proxy` set to 1 so client IPs are correct behind the reverse proxy (accurate rate limiting).
+- `trust proxy` uses explicit proxy CIDRs; Nginx overwrites forwarded IP headers and trusts only listed CDN edges.
 
 ## Payments & the delivery engine
 
@@ -55,3 +55,14 @@ The in-process suite (`npm run smoke -w @oosta/api`) asserts these behaviours, i
 - Rotate `JWT_SECRET` and database credentials for production.
 - Serve only over HTTPS (terminate TLS at Nginx) so HSTS and secure cookies are effective.
 - Keep dependencies patched (`npm audit`).
+
+## Regression fixes (2026-11-04)
+
+- Order-row locks serialize delivery and receipt transitions; refunded disclosed units stay SOLD.
+- Captured payments without stock retain `PAID_PENDING_FULFILLMENT` and their payment reference.
+- Receipt uploads are limited per order and per buyer/day; multipart parser limits are explicit.
+- Production placeholders, short JWT keys, and sandbox/mock verification are rejected.
+- Telegram management is private-chat-only; restore filenames are generated locally and require an expiring confirmation. Restores use a single SQL transaction with request maintenance gating.
+- Agent mutations require single-use approval; inventory secrets are omitted from model tool results.
+- Backups check pg_dump separately from compression; corrupt gzip is rejected before restoration.
+- Use `npm run test:isolated` for the smoke suite and real PostgreSQL race regressions.

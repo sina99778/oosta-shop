@@ -15,7 +15,7 @@ export default async function CardCheckoutPage({
 
   return (
     <RequireAuth locale={locale}>
-      <CardCheckout locale={locale} orderId={orderId} dict={dict} />
+      <CardCheckout key={orderId} locale={locale} orderId={orderId} dict={dict} />
     </RequireAuth>
   );
 }

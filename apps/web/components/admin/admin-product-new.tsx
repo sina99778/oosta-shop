@@ -65,6 +65,10 @@ export function AdminProductNew({ locale, dict }: { locale: Locale; dict: Dictio
   const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
 
   const [busy, setBusy] = useState(false);
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const [completedPlans, setCompletedPlans] = useState(0);
+  const [primaryUploaded, setPrimaryUploaded] = useState(false);
+  const [completedGallery, setCompletedGallery] = useState(0);
   const [err, setErr] = useState<string | null>(null);
 
   function onName(v: string) {
@@ -87,42 +91,52 @@ export function AdminProductNew({ locale, dict }: { locale: Locale; dict: Dictio
     setBusy(true);
     setErr(null);
     try {
-      const { product } = await api.post<{ product: { id: string } }>(
-        "/admin/products",
-        {
-          name,
-          slug,
-          shortDescription: shortDesc.trim() || null,
-          description: desc,
-          metaTitle: metaTitle.trim() || null,
-          metaDescription: metaDescription.trim() || null,
-          specs: specs.filter((s) => s.label.trim() || s.value.trim()),
-          isFeatured: featured,
-          type,
-          categoryId: catId,
-          isActive: active,
-        },
-        token,
-      );
-      const id = product.id;
+      let id = createdId;
+      if (!id) {
+        const { product } = await api.post<{ product: { id: string } }>(
+          "/admin/products",
+          {
+            name,
+            slug,
+            shortDescription: shortDesc.trim() || null,
+            description: desc,
+            metaTitle: metaTitle.trim() || null,
+            metaDescription: metaDescription.trim() || null,
+            specs: specs.filter((s) => s.label.trim() || s.value.trim()),
+            isFeatured: featured,
+            type,
+            categoryId: catId,
+            isActive: false,
+          },
+          token,
+        );
+        id = product.id;
+        setCreatedId(id);
+      }
 
-      for (const p of validPlans) {
+      for (const [index, p] of validPlans.entries()) {
+        if (index < completedPlans) continue;
         const payload: Record<string, unknown> = { label: p.label, price: Number(p.price) };
         if (p.sale.trim()) payload.salePrice = Number(p.sale);
         await api.post(`/admin/products/${id}/plans`, payload, token);
+        setCompletedPlans(index + 1);
       }
 
-      if (primaryFile) {
+      if (primaryFile && !primaryUploaded) {
         const form = new FormData();
         form.append("image", primaryFile);
         await api.upload(`/admin/products/${id}/image`, form, token);
+        setPrimaryUploaded(true);
       }
-      for (const file of galleryFiles) {
+      for (const [index, file] of galleryFiles.entries()) {
+        if (index < completedGallery) continue;
         const form = new FormData();
         form.append("image", file);
         await api.upload(`/admin/products/${id}/images`, form, token);
+        setCompletedGallery(index + 1);
       }
 
+      await api.patch(`/admin/products/${id}`, { isActive: active }, token);
       router.push(`/${locale}/admin/products/${id}`);
     } catch (e2) {
       setErr(e2 instanceof ApiError ? e2.message : dict.common.somethingWrong);
@@ -132,286 +146,315 @@ export function AdminProductNew({ locale, dict }: { locale: Locale; dict: Dictio
 
   return (
     <Container className="max-w-3xl space-y-6 py-8">
-      <Link href={`/${locale}/admin`} className="text-sm text-muted hover:text-foreground">
+      <Link href={`/${locale}/admin/products`} className="text-sm text-muted hover:text-foreground">
         ← {t.back}
       </Link>
       <h1 className="text-2xl font-bold">{t.newProduct}</h1>
 
+      {createdId && (
+        <p role="status" className="text-sm text-muted">
+          {locale === "fa"
+            ? "پیش‌نویس ذخیره شده است؛ تلاش دوباره مراحل باقی‌مانده را ادامه می‌دهد."
+            : "Draft saved. Retry resumes the remaining steps."}{" "}
+          <Link className="underline" href={`/${locale}/admin/products/${createdId}`}>
+            {t.back}
+          </Link>
+        </p>
+      )}
       <form onSubmit={submit} className="space-y-6">
-        <SectionCard title={t.basicInfo}>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm text-muted">{t.name}</label>
-              <Input value={name} onChange={(e) => onName(e.target.value)} required />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm text-muted">{t.slug}</label>
-              <div className="flex gap-2">
-                <Input
-                  value={slug}
-                  onChange={(e) => {
-                    setSlug(e.target.value);
-                    setSlugTouched(true);
-                  }}
-                  required
-                  dir="ltr"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setSlug(slugify(name))}
-                >
-                  {t.slugFromName}
-                </Button>
+        <fieldset disabled={Boolean(createdId)} className="space-y-6">
+          <SectionCard title={t.basicInfo}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block">
+                  <span className="mb-1 block text-sm text-muted">{t.name}</span>
+                  <Input value={name} onChange={(e) => onName(e.target.value)} required />
+                </label>
               </div>
-              <p className="mt-1 text-xs text-muted">{t.slugHint}</p>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm text-muted">{t.category}</label>
-              <select
-                value={catId}
-                onChange={(e) => setCatId(e.target.value)}
-                required
-                className={selectClass}
-              >
-                <option value="" disabled>
-                  {t.category}
-                </option>
-                {categories.data?.categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm text-muted">{t.type}</label>
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value as ProductType)}
-                className={selectClass}
-              >
-                {productTypes.map((tp) => (
-                  <option key={tp} value={tp}>
-                    {tp}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={active}
-                onChange={(e) => setActive(e.target.checked)}
-                className="accent-primary"
-              />
-              {t.active}
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={featured}
-                onChange={(e) => setFeatured(e.target.checked)}
-                className="accent-primary"
-              />
-              {t.featured}
-            </label>
-          </div>
-        </SectionCard>
-
-        <SectionCard title={t.descriptions}>
-          <div>
-            <label className="mb-1 block text-sm text-muted">{t.shortDescription}</label>
-            <Input value={shortDesc} onChange={(e) => setShortDesc(e.target.value)} />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm text-muted">{t.description}</label>
-            <textarea
-              value={desc}
-              onChange={(e) => setDesc(e.target.value)}
-              rows={6}
-              required
-              className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
-            />
-            <p className="mt-1 text-xs text-muted">{t.markdownHint}</p>
-          </div>
-        </SectionCard>
-
-        <SectionCard title={t.plansPricing}>
-          <div className="space-y-2">
-            {plans.map((p, i) => (
-              <div key={i} className="flex flex-wrap items-center gap-2">
-                <Input
-                  placeholder={t.planLabel}
-                  value={p.label}
-                  onChange={(e) =>
-                    setPlans((arr) =>
-                      arr.map((r, j) => (j === i ? { ...r, label: e.target.value } : r)),
-                    )
-                  }
-                  className="min-w-32 flex-1"
-                />
-                <Input
-                  type="number"
-                  placeholder={t.price}
-                  value={p.price}
-                  onChange={(e) =>
-                    setPlans((arr) =>
-                      arr.map((r, j) => (j === i ? { ...r, price: e.target.value } : r)),
-                    )
-                  }
-                  className="w-28"
-                />
-                <Input
-                  type="number"
-                  placeholder={`${t.salePrice} (${t.optional})`}
-                  value={p.sale}
-                  onChange={(e) =>
-                    setPlans((arr) =>
-                      arr.map((r, j) => (j === i ? { ...r, sale: e.target.value } : r)),
-                    )
-                  }
-                  className="w-36"
-                />
-                {plans.length > 1 && (
+              <div>
+                <label className="mb-1 block text-sm text-muted">{t.slug}</label>
+                <div className="flex gap-2">
+                  <Input
+                    value={slug}
+                    onChange={(e) => {
+                      setSlug(e.target.value);
+                      setSlugTouched(true);
+                    }}
+                    required
+                    dir="ltr"
+                  />
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => setPlans((arr) => arr.filter((_, j) => j !== i))}
+                    onClick={() => setSlug(slugify(name))}
+                  >
+                    {t.slugFromName}
+                  </Button>
+                </div>
+                <p className="mt-1 text-xs text-muted">{t.slugHint}</p>
+              </div>
+              <div>
+                <label className="block">
+                  <span className="mb-1 block text-sm text-muted">{t.category}</span>
+                  <select
+                    value={catId}
+                    onChange={(e) => setCatId(e.target.value)}
+                    required
+                    className={selectClass}
+                  >
+                    <option value="" disabled>
+                      {t.category}
+                    </option>
+                    {categories.data?.categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div>
+                <label className="block">
+                  <span className="mb-1 block text-sm text-muted">{t.type}</span>
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value as ProductType)}
+                    className={selectClass}
+                  >
+                    {productTypes.map((tp) => (
+                      <option key={tp} value={tp}>
+                        {tp}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={active}
+                  onChange={(e) => setActive(e.target.checked)}
+                  className="accent-primary"
+                />
+                {t.active}
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={featured}
+                  onChange={(e) => setFeatured(e.target.checked)}
+                  className="accent-primary"
+                />
+                {t.featured}
+              </label>
+            </div>
+          </SectionCard>
+
+          <SectionCard title={t.descriptions}>
+            <div>
+              <label className="block">
+                <span className="mb-1 block text-sm text-muted">{t.shortDescription}</span>
+                <Input value={shortDesc} onChange={(e) => setShortDesc(e.target.value)} />
+              </label>
+            </div>
+            <div>
+              <label className="block">
+                <span className="mb-1 block text-sm text-muted">{t.description}</span>
+                <textarea
+                  value={desc}
+                  onChange={(e) => setDesc(e.target.value)}
+                  rows={6}
+                  required
+                  className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+                />
+              </label>
+              <p className="mt-1 text-xs text-muted">{t.markdownHint}</p>
+            </div>
+          </SectionCard>
+
+          <SectionCard title={t.plansPricing}>
+            <div className="space-y-2">
+              {plans.map((p, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-2">
+                  <Input
+                    placeholder={t.planLabel}
+                    value={p.label}
+                    onChange={(e) =>
+                      setPlans((arr) =>
+                        arr.map((r, j) => (j === i ? { ...r, label: e.target.value } : r)),
+                      )
+                    }
+                    className="min-w-32 flex-1"
+                  />
+                  <Input
+                    type="number"
+                    placeholder={t.price}
+                    value={p.price}
+                    onChange={(e) =>
+                      setPlans((arr) =>
+                        arr.map((r, j) => (j === i ? { ...r, price: e.target.value } : r)),
+                      )
+                    }
+                    className="w-28"
+                  />
+                  <Input
+                    type="number"
+                    placeholder={`${t.salePrice} (${t.optional})`}
+                    value={p.sale}
+                    onChange={(e) =>
+                      setPlans((arr) =>
+                        arr.map((r, j) => (j === i ? { ...r, sale: e.target.value } : r)),
+                      )
+                    }
+                    className="w-36"
+                  />
+                  {plans.length > 1 && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPlans((arr) => arr.filter((_, j) => j !== i))}
+                    >
+                      ✕
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setPlans((arr) => [...arr, { label: "", price: "", sale: "" }])}
+            >
+              + {t.addPlan}
+            </Button>
+          </SectionCard>
+
+          <SectionCard title={t.specifications}>
+            <div className="space-y-2">
+              {specs.map((row, i) => (
+                <div key={i} className="flex gap-2">
+                  <Input
+                    placeholder={t.specLabel}
+                    value={row.label}
+                    onChange={(e) =>
+                      setSpecs((s) =>
+                        s.map((r, j) => (j === i ? { ...r, label: e.target.value } : r)),
+                      )
+                    }
+                    className="w-1/3"
+                  />
+                  <Input
+                    placeholder={t.specValue}
+                    value={row.value}
+                    onChange={(e) =>
+                      setSpecs((s) =>
+                        s.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)),
+                      )
+                    }
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setSpecs((s) => s.filter((_, j) => j !== i))}
                   >
                     ✕
                   </Button>
-                )}
-              </div>
-            ))}
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => setPlans((arr) => [...arr, { label: "", price: "", sale: "" }])}
-          >
-            + {t.addPlan}
-          </Button>
-        </SectionCard>
+                </div>
+              ))}
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setSpecs((s) => [...s, { label: "", value: "" }])}
+            >
+              + {t.addSpec}
+            </Button>
+          </SectionCard>
 
-        <SectionCard title={t.specifications}>
-          <div className="space-y-2">
-            {specs.map((row, i) => (
-              <div key={i} className="flex gap-2">
-                <Input
-                  placeholder={t.specLabel}
-                  value={row.label}
-                  onChange={(e) =>
-                    setSpecs((s) =>
-                      s.map((r, j) => (j === i ? { ...r, label: e.target.value } : r)),
-                    )
-                  }
-                  className="w-1/3"
+          <SectionCard title={t.media}>
+            <div>
+              <label className="mb-1 block text-sm text-muted">{t.primaryImage}</label>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={(e) => setPrimaryFile(e.target.files?.[0] ?? null)}
+                className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm text-muted">{t.galleryImages}</label>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                multiple
+                onChange={onGallery}
+                className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-surface file:px-3 file:py-2 file:text-sm hover:file:opacity-90"
+              />
+              {galleryFiles.length > 0 && (
+                <p className="mt-1 text-xs text-muted">{galleryFiles.length} ✓</p>
+              )}
+            </div>
+            <p className="text-xs text-muted">{t.imageHint}</p>
+          </SectionCard>
+
+          <SectionCard title={t.seo}>
+            <p className="text-xs text-muted">{t.seoHint}</p>
+            <div>
+              <label className="block">
+                <span className="mb-1 block text-sm text-muted">{t.metaTitle}</span>
+                <Input value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} />
+              </label>
+            </div>
+            <div>
+              <label className="block">
+                <span className="mb-1 block text-sm text-muted">{t.metaDescription}</span>
+                <textarea
+                  value={metaDescription}
+                  onChange={(e) => setMetaDescription(e.target.value)}
+                  rows={2}
+                  className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
                 />
-                <Input
-                  placeholder={t.specValue}
-                  value={row.value}
-                  onChange={(e) =>
-                    setSpecs((s) =>
-                      s.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)),
-                    )
-                  }
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setSpecs((s) => s.filter((_, j) => j !== i))}
-                >
-                  ✕
-                </Button>
-              </div>
-            ))}
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => setSpecs((s) => [...s, { label: "", value: "" }])}
-          >
-            + {t.addSpec}
-          </Button>
-        </SectionCard>
+              </label>
+            </div>
+          </SectionCard>
 
-        <SectionCard title={t.media}>
-          <div>
-            <label className="mb-1 block text-sm text-muted">{t.primaryImage}</label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setPrimaryFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm text-muted">{t.galleryImages}</label>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={onGallery}
-              className="block w-full text-sm text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-surface file:px-3 file:py-2 file:text-sm hover:file:opacity-90"
-            />
-            {galleryFiles.length > 0 && (
-              <p className="mt-1 text-xs text-muted">{galleryFiles.length} ✓</p>
-            )}
-          </div>
-          <p className="text-xs text-muted">{t.imageHint}</p>
-        </SectionCard>
-
-        <SectionCard title={t.seo}>
-          <p className="text-xs text-muted">{t.seoHint}</p>
-          <div>
-            <label className="mb-1 block text-sm text-muted">{t.metaTitle}</label>
-            <Input value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm text-muted">{t.metaDescription}</label>
-            <textarea
-              value={metaDescription}
-              onChange={(e) => setMetaDescription(e.target.value)}
-              rows={2}
-              className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-        </SectionCard>
-
-        <SeoAssistant
-          locale={locale}
-          dict={dict}
-          token={token ?? undefined}
-          values={{
-            name,
-            slug,
-            shortDescription: shortDesc,
-            description: desc,
-            metaTitle,
-            metaDescription,
-            hasImage: primaryFile != null,
-            planCount: plans.filter((p) => p.label.trim() && Number(p.price) > 0).length,
-            specCount: specs.filter((s) => s.label.trim() || s.value.trim()).length,
-            category: categories.data?.categories.find((c) => c.id === catId)?.name ?? "",
-            type,
-          }}
-          onApply={(r) => {
-            setMetaTitle(r.metaTitle);
-            setMetaDescription(r.metaDescription);
-            if (r.shortDescription) setShortDesc(r.shortDescription);
-          }}
-        />
-
-        {err && <p className="text-sm text-danger">{err}</p>}
+          <SeoAssistant
+            locale={locale}
+            dict={dict}
+            token={token ?? undefined}
+            values={{
+              name,
+              slug,
+              shortDescription: shortDesc,
+              description: desc,
+              metaTitle,
+              metaDescription,
+              hasImage: primaryFile != null,
+              planCount: plans.filter((p) => p.label.trim() && Number(p.price) > 0).length,
+              specCount: specs.filter((s) => s.label.trim() || s.value.trim()).length,
+              category: categories.data?.categories.find((c) => c.id === catId)?.name ?? "",
+              type,
+            }}
+            onApply={(r) => {
+              setMetaTitle(r.metaTitle);
+              setMetaDescription(r.metaDescription);
+              if (r.shortDescription) setShortDesc(r.shortDescription);
+            }}
+          />
+        </fieldset>
+        {err && (
+          <p role="alert" className="text-sm text-danger">
+            {err}
+          </p>
+        )}
         <div className="flex justify-end">
           <Button type="submit" size="lg" disabled={busy}>
             {busy ? (

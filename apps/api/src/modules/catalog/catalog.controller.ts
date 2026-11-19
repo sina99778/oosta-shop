@@ -28,6 +28,7 @@ export async function productBySlug(req: Request, res: Response): Promise<void> 
 const IMAGE_CACHE = "public, max-age=3600, stale-while-revalidate=86400";
 
 export async function productImage(req: Request, res: Response): Promise<void> {
+  res.setHeader("Cache-Control", "private, no-store");
   const { data, mimeType } = await catalog.getProductImage(String(req.params.id));
   res.setHeader("Content-Type", mimeType);
   res.setHeader("Cache-Control", IMAGE_CACHE);
@@ -35,6 +36,7 @@ export async function productImage(req: Request, res: Response): Promise<void> {
 }
 
 export async function galleryImage(req: Request, res: Response): Promise<void> {
+  res.setHeader("Cache-Control", "private, no-store");
   const { data, mimeType } = await catalog.getGalleryImage(String(req.params.id));
   res.setHeader("Content-Type", mimeType);
   res.setHeader("Cache-Control", IMAGE_CACHE);

@@ -1,0 +1,641 @@
+import type { SupplierId } from "./catalog";
+import { randomUUID } from "node:crypto";
+import { Prisma, type SupplierFulfillment } from "@prisma/client";
+import { z } from "zod";
+import { prisma } from "../../lib/prisma";
+import { lockOrder } from "../../lib/orderLock";
+import { env } from "../../config/env";
+import { readBluInvoice } from "../orders/blu-invoice";
+import { matchesBluReceipt } from "../orders/blu-events";
+import { AppError } from "../../utils/httpError";
+import {
+  catalogs,
+  getPricing,
+  matchingOffers,
+  syncCatalog,
+  type SourcePlan,
+} from "./suppliers.service";
+import { supplierEndpoints } from "./catalog";
+import { readMappings } from "./variant";
+import { quotePricing } from "./fx.service";
+import { indicativePrice } from "./pricing";
+import { readVariant, variantKey } from "./variant";
+import { reserveWallet, settleWallet } from "./wallet-budget";
+import { readManualSupplier } from "./manual-payment";
+import { queueOrderEmail } from "../../lib/mailer";
+import { notifyAdmin } from "../../bot";
+
+type PurchaseInput = {
+  reference: string;
+  externalId: string;
+  quantity: 1;
+  quoteId: string;
+  maximumCost: string;
+  currency: "USD" | "USDT";
+  productType?: "ACCOUNT" | "LICENSE" | "GIFTCARD";
+  fingerprint?: string;
+  estimateWithoutWallet?: boolean;
+};
+export type SupplierAdapter = {
+  capabilities: {
+    priceCeiling: boolean;
+    walletExposure?: boolean;
+    idempotency: boolean;
+    lookup: boolean;
+  };
+  quote(input: Omit<PurchaseInput, "reference" | "quoteId">): Promise<unknown>;
+  purchase(input: PurchaseInput): Promise<unknown>;
+  lookup(input: {
+    reference: string;
+    externalId: string;
+    supplierOrderId?: string;
+  }): Promise<unknown>;
+  walletBalance?(): Promise<{ amount: string; currency: string }>;
+};
+// Only trusted server code registers adapters. Wallet risk is separate from a vendor price ceiling.
+type Registry = ReadonlyMap<SupplierId, SupplierAdapter>;
+export type SupplierRegistry = Registry;
+const live: Registry = new Map();
+export const supplierSupported = (a: SupplierAdapter | undefined): a is SupplierAdapter =>
+  !!a &&
+  (a.capabilities.priceCeiling === true || a.capabilities.walletExposure === true) &&
+  a.capabilities.idempotency === true &&
+  a.capabilities.lookup === true;
+const positive = z
+  .string()
+  .regex(/^\d{1,12}(\.\d{1,6})?$/)
+  .refine((s) => new Prisma.Decimal(s).gt(0));
+const identifier = z.string().min(1).max(120);
+const quoteSchema = z
+  .object({
+    quoteId: identifier,
+    externalId: identifier,
+    quantity: z.literal(1),
+    currency: z.enum(["USD", "USDT"]),
+    cost: positive,
+    expiresAt: z.iso.datetime(),
+  })
+  .strict();
+const credentialSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("ACCOUNT"),
+      accountEmail: z.string().min(1).max(1000),
+      accountPassword: z.string().min(1).max(10000),
+      deliveryInstructions: z.string().max(10000).optional(),
+    })
+    .strict(),
+  z.object({ type: z.literal("LICENSE"), licenseKey: z.string().min(1).max(10000) }).strict(),
+  z.object({ type: z.literal("GIFTCARD"), giftCardCode: z.string().min(1).max(10000) }).strict(),
+]);
+const identity = { reference: identifier, externalId: identifier };
+const paid = {
+  ...identity,
+  quantity: z.literal(1),
+  currency: z.enum(["USD", "USDT"]),
+  amount: positive,
+  supplierOrderId: identifier,
+};
+const resultSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("COMPLETE"), ...paid, credential: credentialSchema }).strict(),
+  z.object({ state: z.literal("PENDING"), ...paid }).strict(),
+  z.object({ state: z.literal("NO_CHARGE"), ...identity }).strict(),
+  z.object({ state: z.literal("NOT_FOUND") }).strict(),
+]);
+function summary(job: SupplierFulfillment) {
+  return { id: job.id, state: job.state, chargedCost: job.chargedCost?.toString() ?? null };
+}
+function denied() {
+  return new AppError(409, "SUPPLIER_ORDER_INELIGIBLE", "Paid supplier order requires review");
+}
+async function eligible(
+  tx: Pick<Prisma.TransactionClient, "order" | "receipt" | "bluBankObservation">,
+  orderId: string,
+) {
+  const order = await tx.order.findUnique({
+    where: { id: orderId },
+    include: {
+      user: { select: { role: true } },
+      items: {
+        include: {
+          plan: true,
+          product: { select: { type: true, isActive: true } },
+          fulfilledItems: { select: { id: true } },
+        },
+      },
+    },
+  });
+  if (
+    !order ||
+    order.paymentStatus !== "PAID_PENDING_FULFILLMENT" ||
+    !order.paidAt ||
+    !order.paymentRefId?.trim() ||
+    order.user.role !== "USER" ||
+    order.currency !== "IRR" ||
+    order.items.length !== 1
+  )
+    throw denied();
+  if (order.paymentProvider === "CARD_TO_CARD" && readManualSupplier(order.paymentMetadata)) {
+    const receipt = await tx.receipt.findFirst({
+      where: { orderId: order.id, id: order.paymentRefId.slice(5), status: "APPROVED" },
+      select: { id: true },
+    });
+    if (!env.SUPPLIER_MANUAL_APPROVAL || !order.paymentRefId.startsWith("card:") || !receipt)
+      throw denied();
+  } else if (order.paymentProvider === "CARD_TO_CARD") {
+    const invoice = readBluInvoice(order.paymentMetadata);
+    const claim = await tx.bluBankObservation.findUnique({ where: { matchedOrderId: order.id } });
+    const approved = await tx.receipt.findMany({
+      where: { orderId: order.id, status: "APPROVED" },
+      select: { reference: true },
+    });
+    if (
+      !invoice?.supplierCheckout ||
+      invoice.qaCampaign ||
+      invoice.stockHeld ||
+      invoice.privateStockQa ||
+      invoice.iban !== env.BLU_INVOICE_IBAN ||
+      invoice.number !== env.BLU_INVOICE_CARD_NUMBER ||
+      order.bluInvoiceKey !== invoice.iban + ":" + invoice.amountIrr ||
+      !order.totalAmount.eq(invoice.amountIrr) ||
+      !claim ||
+      claim.invoiceKey !== order.bluInvoiceKey ||
+      claim.occurredAt < order.createdAt ||
+      claim.occurredAt.getTime() >= Date.parse(invoice.expiresAt) ||
+      !approved.some((r) => matchesBluReceipt(r.reference, claim))
+    )
+      throw denied();
+  }
+  const item = order.items[0],
+    variant = readVariant(item.plan.variant);
+  const snapshot =
+    item.planSnapshot && typeof item.planSnapshot === "object" && !Array.isArray(item.planSnapshot)
+      ? item.planSnapshot
+      : null;
+  const previous = readVariant(snapshot?.variant);
+  if (
+    item.quantity !== 1 ||
+    item.fulfilledItems.length ||
+    !item.product.isActive ||
+    !item.plan.isActive ||
+    item.plan.source !== "SUPPLIER" ||
+    !variant ||
+    !previous ||
+    variant.delivery !== "AUTOMATIC" ||
+    !["ACCOUNT", "CODE"].includes(variant.fulfillment) ||
+    snapshot?.source !== "SUPPLIER" ||
+    variantKey(variant, item.plan.durationDays) !==
+      variantKey(
+        previous,
+        typeof snapshot?.durationDays === "number" ? snapshot.durationDays : null,
+      ) ||
+    !item.unitPrice.eq(item.lineTotal) ||
+    !item.lineTotal.eq(order.totalAmount) ||
+    order.totalAmount.lte(0)
+  )
+    throw denied();
+  return { order, item, signature: variantKey(variant, item.plan.durationDays) };
+}
+
+export async function selectSupplierPurchase(
+  plan: SourcePlan,
+  registry: Registry = live,
+  maximumAmount?: Prisma.Decimal,
+  estimateWithoutWallet = false,
+) {
+  const variant = readVariant(plan.variant);
+  if (
+    plan.source !== "SUPPLIER" ||
+    !variant ||
+    variant.delivery !== "AUTOMATIC" ||
+    !["ACCOUNT", "CODE"].includes(variant.fulfillment)
+  )
+    throw denied();
+  const policy = await getPricing();
+  if (!policy?.enabled)
+    throw new AppError(503, "PRICING_UNAVAILABLE", "Fresh supplier pricing required");
+  const resolved = await quotePricing(policy);
+  await Promise.allSettled(
+    [...new Set(readMappings(plan.supplierMappings).map((m) => m.supplier))]
+      .filter(
+        (id) =>
+          registry.get(id)?.capabilities.walletExposure &&
+          process.env[supplierEndpoints[id].env]?.trim(),
+      )
+      .map((id) => syncCatalog(id)),
+  );
+  const candidates = matchingOffers(plan, await catalogs())
+    .flatMap((candidate) => {
+      if (!supplierSupported(registry.get(candidate.offer.supplier))) return [];
+      try {
+        const price = indicativePrice(
+          candidate.offer.cost,
+          candidate.offer.currency,
+          resolved.policy,
+        );
+        return [{ ...candidate, price }];
+      } catch (error) {
+        if (error instanceof AppError && error.code === "PRICING_UNAVAILABLE") return [];
+        throw error;
+      }
+    })
+    .sort((a, b) => a.price.cmp(b.price) || a.offer.supplier.localeCompare(b.offer.supplier));
+  const locked: Array<{
+    offer: (typeof candidates)[number]["offer"];
+    quote: z.infer<typeof quoteSchema>;
+    expiry: number;
+    price: Prisma.Decimal;
+  }> = [];
+  for (const candidate of candidates) {
+    const { offer } = candidate,
+      adapter = registry.get(offer.supplier)!;
+    let quote: z.infer<typeof quoteSchema>;
+    try {
+      quote = quoteSchema.parse(
+        await adapter.quote({
+          externalId: offer.externalId,
+          quantity: 1,
+          maximumCost: offer.cost,
+          currency: offer.currency,
+          productType: plan.productType,
+          fingerprint: offer.fingerprint,
+          estimateWithoutWallet,
+        }),
+      );
+    } catch {
+      continue;
+    }
+    const expiry = Math.min(
+      Date.parse(quote.expiresAt),
+      resolved.rateExpiresAt,
+      Date.now() + 900000,
+    );
+    if (
+      quote.externalId !== offer.externalId ||
+      quote.currency !== offer.currency ||
+      new Prisma.Decimal(quote.cost).gt(offer.cost) ||
+      expiry <= Date.now()
+    )
+      continue;
+    locked.push({
+      offer,
+      quote,
+      expiry,
+      price: indicativePrice(quote.cost, quote.currency, resolved.policy),
+    });
+  }
+  const selected = locked
+    .filter((q) => q.expiry > Date.now() && (!maximumAmount || q.price.lte(maximumAmount)))
+    .sort((a, b) => a.price.cmp(b.price) || a.offer.supplier.localeCompare(b.offer.supplier))[0];
+  if (!selected)
+    throw new AppError(
+      503,
+      "SUPPLIER_PURCHASE_UNSUPPORTED",
+      "No bounded matching supplier purchase is available",
+    );
+  return { ...selected, signature: variantKey(variant, plan.durationDays), fx: resolved.fx };
+}
+
+export async function prepareSupplierFulfillment(orderId: string, registry: Registry = live) {
+  const previous = await prisma.supplierFulfillment.findUnique({ where: { orderId } });
+  if (previous) return summary(previous);
+  const initial = await eligible(prisma, orderId);
+  const { offer, quote, expiry } = await selectSupplierPurchase(
+    { ...initial.item.plan, productType: initial.item.product.type },
+    registry,
+    initial.order.totalAmount,
+  );
+  return prisma.$transaction(async (tx) => {
+    await lockOrder(tx, orderId);
+    const existing = await tx.supplierFulfillment.findUnique({ where: { orderId } });
+    if (existing) return summary(existing);
+    const current = await eligible(tx, orderId);
+    if (
+      expiry <= Date.now() ||
+      current.item.id !== initial.item.id ||
+      current.item.planId !== initial.item.planId ||
+      current.signature !== initial.signature ||
+      !current.order.totalAmount.eq(initial.order.totalAmount)
+    )
+      throw denied();
+    return summary(
+      await tx.supplierFulfillment.create({
+        data: {
+          orderId,
+          reference: "oosta-supplier-" + randomUUID(),
+          supplier: offer.supplier,
+          externalId: offer.externalId,
+          variantKey: current.signature,
+          fingerprint: offer.fingerprint,
+          quoteId: quote.quoteId,
+          maximumCost: quote.cost,
+          currency: quote.currency,
+          expiresAt: new Date(expiry),
+        },
+      }),
+    );
+  });
+}
+
+async function applyResult(id: string, reference: string, raw: unknown) {
+  const found = await prisma.supplierFulfillment.findUniqueOrThrow({ where: { id } });
+  const updated = await prisma.$transaction(async (tx) => {
+    await lockOrder(tx, found.orderId);
+    const job = await tx.supplierFulfillment.findUniqueOrThrow({ where: { id } });
+    if (job.reference !== reference || !["SENDING", "PENDING", "UNCERTAIN"].includes(job.state))
+      return summary(job);
+    const parsed = resultSchema.safeParse(raw);
+    if (!parsed.success)
+      return summary(
+        await tx.supplierFulfillment.update({ where: { id }, data: { state: "REVIEW" } }),
+      );
+    const result = parsed.data;
+    if (result.state === "NOT_FOUND")
+      return summary(
+        await tx.supplierFulfillment.update({ where: { id }, data: { state: "UNCERTAIN" } }),
+      );
+    if (result.reference !== job.reference || result.externalId !== job.externalId)
+      return summary(
+        await tx.supplierFulfillment.update({ where: { id }, data: { state: "REVIEW" } }),
+      );
+    if (result.state === "NO_CHARGE") {
+      if (!job.chargedCost) await settleWallet(tx, job, "0");
+      const order = await tx.order.findUniqueOrThrow({
+        where: { id: job.orderId },
+        select: { paymentMetadata: true },
+      });
+      const retry = !job.chargedCost && !!readManualSupplier(order.paymentMetadata);
+      // Once an earlier response reported a debit, a later rejection cannot erase it.
+      return summary(
+        await tx.supplierFulfillment.update({
+          where: { id },
+          data: retry
+            ? {
+                state: "AWAITING_FUNDS",
+                walletExposure: null,
+                reference: "oosta-manual-" + randomUUID(),
+                result: Prisma.DbNull,
+              }
+            : { state: job.chargedCost ? "REVIEW" : "NO_CHARGE" },
+        }),
+      );
+    }
+    const data = {
+      chargedCost: result.amount,
+      supplierOrderId: result.supplierOrderId,
+      result: result as Prisma.InputJsonValue,
+    };
+    if (
+      result.currency !== job.currency ||
+      new Prisma.Decimal(result.amount).gt(
+        readManualSupplier(
+          (
+            await tx.order.findUniqueOrThrow({
+              where: { id: job.orderId },
+              select: { paymentMetadata: true },
+            })
+          ).paymentMetadata,
+        )
+          ? job.maximumCost
+          : (job.walletExposure ?? job.maximumCost),
+      ) ||
+      (job.supplierOrderId && job.supplierOrderId !== result.supplierOrderId) ||
+      (job.chargedCost && !job.chargedCost.eq(result.amount))
+    )
+      return summary(
+        await tx.supplierFulfillment.update({
+          where: { id },
+          data: { state: "REVIEW", result: result as Prisma.InputJsonValue },
+        }),
+      );
+    let current: Awaited<ReturnType<typeof eligible>>;
+    try {
+      current = await eligible(tx, job.orderId);
+    } catch (error) {
+      if (!(error instanceof AppError)) throw error;
+      return summary(
+        await tx.supplierFulfillment.update({ where: { id }, data: { ...data, state: "REVIEW" } }),
+      );
+    }
+    if (
+      current.signature !== job.variantKey ||
+      (result.state === "COMPLETE" && result.credential.type !== current.item.product.type)
+    )
+      return summary(
+        await tx.supplierFulfillment.update({ where: { id }, data: { ...data, state: "REVIEW" } }),
+      );
+    if (result.state === "PENDING")
+      return summary(
+        await tx.supplierFulfillment.update({ where: { id }, data: { ...data, state: "PENDING" } }),
+      );
+    const { type, ...payload } = result.credential;
+    await settleWallet(tx, job, result.amount);
+    await tx.inventoryItem.create({
+      data: {
+        type,
+        ...payload,
+        productId: current.item.productId,
+        planId: current.item.planId,
+        orderItemId: current.item.id,
+        status: "SOLD",
+        soldAt: new Date(),
+      },
+    });
+    await tx.order.update({ where: { id: job.orderId }, data: { paymentStatus: "PAID" } });
+    if (readManualSupplier(current.order.paymentMetadata))
+      await queueOrderEmail(tx, job.orderId, "ORDER_DELIVERED");
+    return summary(
+      await tx.supplierFulfillment.update({ where: { id }, data: { ...data, state: "DELIVERED" } }),
+    );
+  });
+  if (
+    found.state !== updated.state &&
+    ["DELIVERED", "AWAITING_FUNDS", "REVIEW", "UNCERTAIN"].includes(updated.state)
+  ) {
+    const order = await prisma.order
+      .findUnique({ where: { id: found.orderId }, select: { paymentMetadata: true } })
+      .catch(() => null);
+    if (readManualSupplier(order?.paymentMetadata))
+      void notifyAdmin(`وضعیت سفارش ${found.orderId.slice(-8)}: ${updated.state}`);
+  }
+  return updated;
+}
+
+export async function dispatchManualSupplier(
+  id: string,
+  adminId: string,
+  registry: Registry,
+  acceptedCost?: string,
+) {
+  const checkAdmin = async (tx: Pick<Prisma.TransactionClient, "user">) => {
+    if (
+      !env.SUPPLIER_MANUAL_APPROVAL ||
+      (await tx.user.findUnique({ where: { id: adminId }, select: { role: true } }))?.role !==
+        "ADMIN"
+    )
+      throw new AppError(403, "FORBIDDEN", "Administrator required");
+  };
+  await checkAdmin(prisma);
+  const job = await prisma.supplierFulfillment.findUniqueOrThrow({ where: { id } });
+  if (job.state !== "AWAITING_FUNDS") throw denied();
+  const current = await eligible(prisma, job.orderId);
+  if (!readManualSupplier(current.order.paymentMetadata)) throw denied();
+  const supplier = job.supplier as SupplierId;
+  const adapter = registry.get(supplier);
+  if (!supplierSupported(adapter)) throw denied();
+  const selected = await selectSupplierPurchase(
+    {
+      ...current.item.plan,
+      productType: current.item.product.type,
+      supplierMappings: readMappings(current.item.plan.supplierMappings).filter(
+        (mapping) =>
+          mapping.supplier === supplier &&
+          mapping.externalId === job.externalId &&
+          mapping.fingerprint === job.fingerprint,
+      ),
+    },
+    new Map([[supplier, adapter]]),
+    undefined,
+    true,
+  );
+  const cost = new Prisma.Decimal(selected.quote.cost);
+  const approved = job.approvedCost ?? job.maximumCost;
+  if (cost.gt(approved) && (!acceptedCost || !cost.eq(acceptedCost)))
+    throw new AppError(409, "SUPPLIER_COST_INCREASED", "New supplier cost must be accepted", {
+      cost: cost.toString(),
+      currency: job.currency,
+    });
+  await prisma.$transaction(async (tx) => {
+    await lockOrder(tx, job.orderId);
+    await checkAdmin(tx);
+    const latest = await tx.supplierFulfillment.findUniqueOrThrow({ where: { id } });
+    const fresh = await eligible(tx, job.orderId);
+    if (
+      latest.state !== "AWAITING_FUNDS" ||
+      latest.reference !== job.reference ||
+      !latest.maximumCost.eq(job.maximumCost) ||
+      !(latest.approvedCost ?? latest.maximumCost).eq(approved) ||
+      fresh.signature !== job.variantKey ||
+      selected.expiry <= Date.now()
+    )
+      throw denied();
+    const ready = await tx.supplierFulfillment.update({
+      where: { id },
+      data: {
+        state: "READY",
+        quoteId: selected.quote.quoteId,
+        maximumCost: cost,
+        approvedCost: Prisma.Decimal.max(approved, cost),
+        expiresAt: new Date(selected.expiry),
+      },
+    });
+    if (adapter.capabilities.walletExposure) await reserveWallet(tx, ready);
+    if (cost.gt(approved))
+      await tx.siteSetting.create({
+        data: {
+          key: "supplierAudit." + randomUUID(),
+          value: JSON.stringify({
+            action: "acceptCost",
+            id,
+            adminId,
+            cost: cost.toString(),
+            at: new Date(),
+          }),
+        },
+      });
+  });
+  return processSupplierFulfillment(id, registry);
+}
+
+export async function processSupplierFulfillment(id: string, registry: Registry = live) {
+  const found = await prisma.supplierFulfillment.findUniqueOrThrow({ where: { id } });
+  const supplier = found.supplier as SupplierId;
+  if (
+    found.state === "READY" &&
+    registry.get(supplier)?.capabilities.walletExposure &&
+    process.env[supplierEndpoints[supplier].env]?.trim()
+  )
+    try {
+      await syncCatalog(supplier);
+    } catch (error) {
+      if (!(error instanceof AppError && error.code === "SYNC_BUSY")) throw error;
+      return summary(found);
+    }
+  const reservation = await prisma.$transaction(async (tx) => {
+    await lockOrder(tx, found.orderId);
+    let job = await tx.supplierFulfillment.findUniqueOrThrow({ where: { id } });
+    if (job.state !== "READY") return { job, send: false };
+    const payment = await tx.order.findUniqueOrThrow({
+      where: { id: job.orderId },
+      select: { paymentMetadata: true },
+    });
+    if (!env.SUPPLIER_MANUAL_APPROVAL && readManualSupplier(payment.paymentMetadata))
+      return { job, send: false };
+    if (!supplierSupported(registry.get(job.supplier as SupplierId)))
+      throw new AppError(503, "SUPPLIER_PURCHASE_UNSUPPORTED", "Bounded supplier adapter required");
+    let valid = job.expiresAt.getTime() > Date.now();
+    try {
+      const current = await eligible(tx, job.orderId);
+      valid =
+        valid &&
+        current.signature === job.variantKey &&
+        matchingOffers(current.item.plan, await catalogs(tx)).some(
+          ({ offer }) =>
+            offer.supplier === job.supplier &&
+            offer.externalId === job.externalId &&
+            offer.fingerprint === job.fingerprint,
+        );
+    } catch (error) {
+      if (!(error instanceof AppError)) throw error;
+      valid = false;
+    }
+    if (!valid) {
+      await settleWallet(tx, job, "0");
+      return {
+        job: await tx.supplierFulfillment.update({ where: { id }, data: { state: "REVIEW" } }),
+        send: false,
+      };
+    }
+    if (registry.get(job.supplier as SupplierId)!.capabilities.walletExposure)
+      job = await reserveWallet(tx, job);
+    return {
+      job: await tx.supplierFulfillment.update({ where: { id }, data: { state: "SENDING" } }),
+      send: true,
+    };
+  });
+  if (!reservation.send) return summary(reservation.job);
+  const job = reservation.job;
+  let response: unknown;
+  try {
+    response = await registry.get(job.supplier as SupplierId)!.purchase({
+      reference: job.reference,
+      externalId: job.externalId,
+      quantity: 1,
+      quoteId: job.quoteId,
+      maximumCost: job.maximumCost.toString(),
+      currency: job.currency as "USD" | "USDT",
+    });
+  } catch {
+    return applyResult(id, job.reference, { state: "NOT_FOUND" });
+  }
+  return applyResult(id, job.reference, response);
+}
+
+export async function reconcileSupplierFulfillment(id: string, registry: Registry = live) {
+  const job = await prisma.supplierFulfillment.findUniqueOrThrow({ where: { id } });
+  if (!["SENDING", "PENDING", "UNCERTAIN"].includes(job.state)) return summary(job);
+  const adapter = registry.get(job.supplier as SupplierId);
+  if (!supplierSupported(adapter))
+    throw new AppError(503, "SUPPLIER_PURCHASE_UNSUPPORTED", "Supplier lookup unavailable");
+  let response: unknown;
+  try {
+    response = await adapter.lookup({
+      reference: job.reference,
+      externalId: job.externalId,
+      ...(job.supplierOrderId ? { supplierOrderId: job.supplierOrderId } : {}),
+    });
+  } catch {
+    return summary(job);
+  }
+  return applyResult(id, job.reference, response);
+}

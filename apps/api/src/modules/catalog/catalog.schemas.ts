@@ -12,7 +12,17 @@ export const listProductsQuery = z.object({
   pageSize: z.coerce.number().int().min(1).max(50).default(12),
   category: z.string().trim().min(1).optional(),
   q: z.string().trim().min(1).max(100).optional(),
-  sort: z.enum(["newest", "price_asc", "price_desc"]).default("newest"),
+  sort: z
+    .enum([
+      "recommended",
+      "newest",
+      "price_asc",
+      "price_desc",
+      "available",
+      "popular",
+      "bestselling",
+    ])
+    .default("recommended"),
   featured: boolFlag,
 });
 

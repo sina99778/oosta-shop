@@ -1,67 +1,139 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Container } from "@/components/ui/container";
-import { cn } from "@/lib/cn";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/auth";
+import { useApi } from "@/lib/use-api";
 import type { Locale } from "@/lib/i18n";
+import styles from "./admin.module.css";
 
 export function AdminNav({
   locale,
   labels,
 }: {
   locale: Locale;
-  labels: {
-    dashboard: string;
-    products: string;
-    orders: string;
-    receipts: string;
-    reviews: string;
-    tickets: string;
-    blog: string;
-    api: string;
-    settings: string;
-  };
+  labels: Record<
+    "products" | "orders" | "receipts" | "reviews" | "tickets" | "blog" | "api" | "settings",
+    string
+  >;
 }) {
   const pathname = usePathname();
+  const { logout, token } = useAuth();
+  const { data: supplierQueue, refetch } = useApi<{ enabled: boolean; count: number }>(
+    token ? "/admin/suppliers/manual/pending" : null,
+    token ?? undefined,
+  );
+  useEffect(() => {
+    if (!token) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") refetch();
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [token, refetch]);
+  const [open, setOpen] = useState(false);
+  const fa = locale === "fa";
   const base = `/${locale}/admin`;
-
-  const tabs = [
-    { href: `${base}/dashboard`, label: labels.dashboard },
-    { href: base, label: labels.products, exactish: true },
-    { href: `${base}/orders`, label: labels.orders },
-    { href: `${base}/receipts`, label: labels.receipts },
-    { href: `${base}/reviews`, label: labels.reviews },
-    { href: `${base}/tickets`, label: labels.tickets },
-    { href: `${base}/blog`, label: labels.blog },
-    { href: `${base}/api-keys`, label: labels.api },
-    { href: `${base}/settings`, label: labels.settings },
+  const groups = [
+    {
+      label: fa ? "عملیات فروش" : "Operations",
+      links: [
+        { path: "", label: fa ? "نمای کلی" : "Overview" },
+        { path: "/orders", label: labels.orders },
+        ...(supplierQueue?.enabled
+          ? [
+              {
+                path: "/orders#supplier-orders",
+                label:
+                  (fa ? "سفارش‌های تأمین‌کننده" : "Supplier orders") +
+                  (supplierQueue.count ? ` (${supplierQueue.count})` : ""),
+              },
+            ]
+          : []),
+        { path: "/receipts", label: labels.receipts },
+        { path: "/tickets", label: labels.tickets },
+      ],
+    },
+    {
+      label: fa ? "فروشگاه" : "Store",
+      links: [
+        { path: "/products", label: labels.products },
+        { path: "/suppliers", label: fa ? "تأمین‌کننده‌ها" : "Suppliers" },
+        { path: "/reviews", label: labels.reviews },
+        { path: "/blog", label: labels.blog },
+      ],
+    },
+    {
+      label: fa ? "مدیریت سیستم" : "System",
+      links: [
+        { path: "/settings", label: labels.settings },
+        { path: "/api-keys", label: labels.api },
+      ],
+    },
   ];
-
-  // "Products" is the catch-all tab: active only when no other tab matches.
-  const otherActive = tabs.some((t) => !t.exactish && pathname.startsWith(t.href));
-
-  const tab = (active: boolean) =>
-    cn(
-      "whitespace-nowrap border-b-2 px-4 py-3 text-sm transition-colors",
-      active
-        ? "border-primary text-foreground"
-        : "border-transparent text-muted hover:text-foreground",
-    );
+  const matches = (path: string) => {
+    const href = base + path;
+    return path
+      ? pathname === href || pathname.startsWith(href + "/")
+      : pathname === base || pathname === base + "/dashboard";
+  };
+  const activeLabel = groups.flatMap(({ links }) => links).find(({ path }) => matches(path))?.label;
+  const storefront = fa ? "فروشگاه" : "Storefront";
 
   return (
-    <div className="border-b border-border">
-      <Container className="flex gap-1 overflow-x-auto">
-        {tabs.map((t) => (
-          <Link
-            key={t.href}
-            href={t.href}
-            className={tab(t.exactish ? !otherActive : pathname.startsWith(t.href))}
-          >
-            {t.label}
+    <>
+      <div className={styles.topbar}>
+        <Link href={base} className={styles.brand}>
+          <Image src="/brand/oosta-ai-mark.png" width={38} height={38} alt="" />
+          <span>{fa ? "مدیریت اوستا" : "Oosta admin"}</span>
+        </Link>
+        <div className={styles.topActions}>
+          <Link href={`/${locale}`} className={styles.storeLink}>
+            {storefront} <span aria-hidden="true">↗</span>
           </Link>
-        ))}
-      </Container>
-    </div>
+          <button type="button" className={styles.logout} onClick={() => void logout()}>
+            {fa ? "خروج" : "Sign out"}
+          </button>
+        </div>
+      </div>
+      <aside className={styles.sidebar}>
+        <button
+          type="button"
+          className={styles.menuToggle}
+          aria-expanded={open}
+          aria-controls="admin-navigation"
+          onClick={() => setOpen(!open)}
+        >
+          <span>{fa ? "منوی مدیریت" : "Admin menu"}</span>
+          <span className={styles.menuCurrent}>{activeLabel}</span>
+          <span className={styles.chevron} aria-hidden="true">
+            {open ? "−" : "+"}
+          </span>
+        </button>
+        <nav
+          id="admin-navigation"
+          aria-label={fa ? "بخش‌های مدیریت" : "Admin navigation"}
+          className={styles.navigation}
+          data-open={open}
+        >
+          {groups.map((group) => (
+            <div className={styles.navGroup} key={group.label}>
+              <p>{group.label}</p>
+              {group.links.map(({ path, label }) => (
+                <Link
+                  key={path}
+                  href={base + path}
+                  aria-current={matches(path) ? "page" : undefined}
+                  onClick={() => setOpen(false)}
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          ))}
+        </nav>
+      </aside>
+    </>
   );
 }

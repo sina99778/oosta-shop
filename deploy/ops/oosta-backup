@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+lock=${OOSTA_BACKUP_LOCK:-/run/lock/oosta-backup.lock}
+program=${OOSTA_BACKUP_PROGRAM:-/opt/oostaAI/shared/release-ops/telegram-backup.cjs}
+[[ "$lock" = /* && "$program" = /* ]]
+exec 9>"$lock"
+flock -n 9 || exit 0
+# Ciphertext exists only temporarily inside the container; the sender always cleans up.
+docker exec -i oosta-api-1 node < "$program"

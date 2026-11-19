@@ -1,0 +1,46 @@
+[
+  {
+    "name": "SUCCESS_WITH_INVALID_JSON_ACCEPTED",
+    "result": {
+      "returned": {},
+      "requestHasAbortSignal": false
+    }
+  },
+  {
+    "name": "PHONE_DIGIT_CONTRACT",
+    "result": {
+      "persianDigitsAccepted": false,
+      "latinDigitsAccepted": true
+    }
+  },
+  {
+    "name": "ADMIN_DEFAULT_PAGINATION",
+    "result": {
+      "receipts": {
+        "page": 1,
+        "pageSize": 50
+      },
+      "reviews": {
+        "page": 1,
+        "pageSize": 50
+      },
+      "tickets": {
+        "page": 1,
+        "pageSize": 50
+      }
+    }
+  },
+  {
+    "name": "WHITE_ON_PRIMARY_GRADIENT_CONTRAST",
+    "result": [
+      {
+        "background": "#ff4d00",
+        "ratio": 3.326
+      },
+      {
+        "background": "#ff7a00",
+        "ratio": 2.613
+      }
+    ]
+  }
+]

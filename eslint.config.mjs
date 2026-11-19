@@ -13,6 +13,8 @@ export default tseslint.config(
       "**/.next/**",
       "**/out/**",
       "apps/web/**",
+      // Uploaded Telegram exports are reference material, not application source.
+      "ChatExport*/**",
     ],
   },
   js.configs.recommended,

@@ -1,12 +1,23 @@
+import { readVariant, readMappings, variantKey } from "../suppliers/variant";
+import { sourceStates, verifyMappings } from "../suppliers/suppliers.service";
 // Admin business logic: catalog CRUD (with safe delete guards), type-validated bulk
 // inventory import, inventory listing, and an orders overview.
 
 import { Prisma } from "@prisma/client";
+import { env } from "../../config/env";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/httpError";
 import { isSafeRasterMime } from "../../middleware/upload";
-import { deliverOrder, lowStockWarning } from "../orders/orders.service";
+import { deliverOrderInTransaction, lowStockWarning } from "../orders/orders.service";
+import { confirmSupplierCardPayment } from "../suppliers/card-checkout";
+import { confirmManualSupplierPayment, readManualSupplier } from "../suppliers/manual-payment";
+import { queueOrderEmail } from "../../lib/mailer";
+import { requireManualAdmin } from "../suppliers/manual-admin";
 import { notifyAdmin } from "../../bot";
+import { ticketWriteError } from "../tickets/tickets.service";
+import { lockOrder } from "../../lib/orderLock";
+import { readBluInvoice } from "../orders/blu-invoice";
+import { matchesBluReceipt } from "../orders/blu-events";
 import { generateSeo, isAiEnabled } from "../../lib/gemini";
 import { generateApiKey } from "../../lib/apiKey";
 import type {
@@ -49,10 +60,6 @@ async function ensureProduct(id: string): Promise<void> {
   const found = await prisma.product.findUnique({ where: { id }, select: { id: true } });
   if (!found) throw new AppError(404, "NOT_FOUND", "Product not found");
 }
-async function ensurePlan(id: string): Promise<void> {
-  const found = await prisma.productPlan.findUnique({ where: { id }, select: { id: true } });
-  if (!found) throw new AppError(404, "NOT_FOUND", "Plan not found");
-}
 
 // ---------------- Categories ----------------
 export async function listCategories() {
@@ -86,27 +93,66 @@ export async function deleteCategory(id: string) {
 }
 
 // ---------------- Products ----------------
-export async function listProducts() {
-  const products = await prisma.product.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { category: true, _count: { select: { plans: true, inventory: true } } },
-    omit: { imageData: true },
+async function internalStockByPlan(productId?: string) {
+  const rows = await prisma.inventoryItem.groupBy({
+    by: ["planId", "status"],
+    where: { productId, plan: { source: "INTERNAL" } },
+    _count: { _all: true },
   });
-  return products.map((p) => ({
-    id: p.id,
-    name: p.name,
-    slug: p.slug,
-    type: p.type,
-    isActive: p.isActive,
-    isFeatured: p.isFeatured,
-    sortOrder: p.sortOrder,
-    image: p.image,
-    hasImage: p.imageMimeType != null,
-    category: { id: p.category.id, name: p.category.name, slug: p.category.slug },
-    planCount: p._count.plans,
-    inventoryCount: p._count.inventory,
-    createdAt: p.createdAt,
-  }));
+  const counts = new Map<string, { available: number; reserved: number; sold: number }>();
+  for (const row of rows) {
+    if (!row.planId) continue;
+    const current = counts.get(row.planId) ?? { available: 0, reserved: 0, sold: 0 };
+    const key =
+      row.status === "AVAILABLE" ? "available" : row.status === "RESERVED" ? "reserved" : "sold";
+    current[key] = row._count._all;
+    counts.set(row.planId, current);
+  }
+  return counts;
+}
+
+export async function listProducts() {
+  const [products, byPlan] = await Promise.all([
+    prisma.product.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        category: true,
+        plans: { select: { id: true, source: true, isActive: true } },
+        _count: { select: { inventory: true } },
+      },
+      omit: { imageData: true },
+    }),
+    internalStockByPlan(),
+  ]);
+  return products.map((p) => {
+    const inventory = { available: 0, reserved: 0, sold: 0, paused: 0 };
+    const sources = { internal: 0, supplier: 0 };
+    for (const plan of p.plans) {
+      if (plan.isActive) sources[plan.source === "INTERNAL" ? "internal" : "supplier"]++;
+      const stock = byPlan.get(plan.id);
+      if (!stock) continue;
+      inventory[plan.isActive ? "available" : "paused"] += stock.available;
+      inventory.reserved += stock.reserved;
+      inventory.sold += stock.sold;
+    }
+    return {
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      type: p.type,
+      isActive: p.isActive,
+      isFeatured: p.isFeatured,
+      sortOrder: p.sortOrder,
+      image: p.image,
+      hasImage: p.imageMimeType != null,
+      category: { id: p.category.id, name: p.category.name, slug: p.category.slug },
+      planCount: p.plans.length,
+      inventoryCount: p._count.inventory,
+      inventory,
+      sources,
+      createdAt: p.createdAt,
+    };
+  });
 }
 export async function createProduct(input: CreateProductInput) {
   await ensureCategoryRef(input.categoryId);
@@ -139,12 +185,10 @@ export async function getProduct(id: string) {
     omit: { imageData: true },
   });
   if (!product) throw new AppError(404, "NOT_FOUND", "Product not found");
-  const avail = await prisma.inventoryItem.groupBy({
-    by: ["planId"],
-    where: { productId: id, status: "AVAILABLE" },
-    _count: { _all: true },
-  });
-  const availMap = new Map(avail.map((a) => [a.planId, a._count._all]));
+  const [stock, supplier] = await Promise.all([
+    internalStockByPlan(id),
+    sourceStates(product.plans),
+  ]);
   return {
     id: product.id,
     name: product.name,
@@ -162,16 +206,31 @@ export async function getProduct(id: string) {
     type: product.type,
     isActive: product.isActive,
     category: { id: product.category.id, name: product.category.name, slug: product.category.slug },
-    plans: product.plans.map((pl) => ({
-      id: pl.id,
-      label: pl.label,
-      durationDays: pl.durationDays,
-      price: Number(pl.price),
-      salePrice: pl.salePrice != null ? Number(pl.salePrice) : null,
-      currency: pl.currency,
-      isActive: pl.isActive,
-      availableStock: availMap.get(pl.id) ?? 0,
-    })),
+    plans: product.plans.map((pl) => {
+      const inventory = stock.get(pl.id) ?? { available: 0, reserved: 0, sold: 0 };
+      const state = supplier.get(pl.id);
+      const supplierAvailability =
+        pl.source !== "SUPPLIER"
+          ? null
+          : state?.availableStock
+            ? { kind: "confirmed" as const, count: state.availableStock }
+            : { kind: state?.inStock ? ("onRequest" as const) : ("unconfirmed" as const) };
+      return {
+        id: pl.id,
+        label: pl.label,
+        durationDays: pl.durationDays,
+        source: pl.source,
+        variant: readVariant(pl.variant),
+        supplierMappings: readMappings(pl.supplierMappings),
+        price: Number(pl.price),
+        salePrice: pl.salePrice != null ? Number(pl.salePrice) : null,
+        currency: pl.currency,
+        isActive: pl.isActive,
+        availableStock: inventory.available,
+        inventory,
+        supplierAvailability,
+      };
+    }),
     createdAt: product.createdAt,
   };
 }
@@ -252,6 +311,18 @@ export async function removeProductImage(id: string) {
 // ---------------- Plans ----------------
 export async function createPlan(productId: string, input: CreatePlanInput) {
   await ensureProduct(productId);
+  const source = input.source ?? "INTERNAL";
+  const variant = input.variant ?? null;
+  if (source === "SUPPLIER" && !variant)
+    throw new AppError(400, "VARIANT_REQUIRED", "Supplier plans need structured attributes");
+  if (source === "INTERNAL" && variant && variant.delivery !== "AUTOMATIC")
+    throw new AppError(400, "INTERNAL_DELIVERY", "Internal inventory uses automatic delivery");
+  if (source === "INTERNAL" && input.supplierMappings?.length)
+    throw new AppError(400, "MAPPING_SOURCE", "Supplier mappings require a supplier plan");
+  const mappings =
+    variant && source === "SUPPLIER"
+      ? await verifyMappings(input.supplierMappings ?? [], variant, input.durationDays ?? null)
+      : [];
   return prisma.productPlan.create({
     data: {
       productId,
@@ -261,80 +332,138 @@ export async function createPlan(productId: string, input: CreatePlanInput) {
       salePrice: input.salePrice ?? null,
       currency: input.currency ?? "IRR",
       isActive: input.isActive ?? true,
+      source,
+      variant: variant ?? Prisma.DbNull,
+      supplierMappings: mappings,
     },
   });
 }
 export async function updatePlan(id: string, input: UpdatePlanInput) {
-  await ensurePlan(id);
-  const data: Prisma.ProductPlanUpdateInput = {};
-  if (input.label !== undefined) data.label = input.label;
-  if (input.durationDays !== undefined) data.durationDays = input.durationDays;
-  if (input.price !== undefined) data.price = input.price;
-  if (input.salePrice !== undefined) data.salePrice = input.salePrice;
-  if (input.currency !== undefined) data.currency = input.currency;
-  if (input.isActive !== undefined) data.isActive = input.isActive;
-  return prisma.productPlan.update({ where: { id }, data });
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM product_plans WHERE id=${id} FOR UPDATE`;
+    const current = await tx.productPlan.findUnique({ where: { id } });
+    if (!current) throw new AppError(404, "NOT_FOUND", "Plan not found");
+    const variant = input.variant === undefined ? readVariant(current.variant) : input.variant;
+    const source = input.source ?? current.source;
+    const duration = input.durationDays === undefined ? current.durationDays : input.durationDays;
+    const previous = readVariant(current.variant);
+    const semanticChange =
+      source !== current.source ||
+      duration !== current.durationDays ||
+      (variant ? variantKey(variant, duration) : null) !==
+        (previous ? variantKey(previous, current.durationDays) : null);
+    if (semanticChange && input.supplierMappings?.length)
+      throw new AppError(
+        409,
+        "REVIEW_AFTER_VARIANT_CHANGE",
+        "Save the new terms before reviewing supplier mappings",
+      );
+    if (semanticChange) {
+      const count =
+        (await tx.inventoryItem.count({ where: { planId: id } })) +
+        (await tx.orderItem.count({ where: { planId: id } }));
+      if (count)
+        throw new AppError(
+          409,
+          "PLAN_IN_USE",
+          "Create a new variant; existing stock or orders keep their original terms",
+        );
+    }
+    if (source === "SUPPLIER" && !variant)
+      throw new AppError(400, "VARIANT_REQUIRED", "Supplier plans need structured attributes");
+    if (source === "INTERNAL" && variant && variant.delivery !== "AUTOMATIC")
+      throw new AppError(400, "INTERNAL_DELIVERY", "Internal inventory uses automatic delivery");
+    if (source === "INTERNAL" && input.supplierMappings?.length)
+      throw new AppError(400, "MAPPING_SOURCE", "Supplier mappings require a supplier plan");
+    const data: Prisma.ProductPlanUpdateInput = {};
+    if (input.label !== undefined) data.label = input.label;
+    if (input.price !== undefined) data.price = input.price;
+    if (input.salePrice !== undefined) data.salePrice = input.salePrice;
+    if (input.currency !== undefined) data.currency = input.currency;
+    if (input.isActive !== undefined) data.isActive = input.isActive;
+    if (input.durationDays !== undefined) data.durationDays = input.durationDays;
+    if (input.source !== undefined) data.source = input.source;
+    if (input.variant !== undefined) data.variant = variant ?? Prisma.DbNull;
+    if (input.supplierMappings !== undefined)
+      data.supplierMappings =
+        variant && source === "SUPPLIER"
+          ? await verifyMappings(input.supplierMappings, variant, duration)
+          : [];
+    // A semantic edit invalidates prior mappings rather than silently reapproving them.
+    else if (semanticChange) data.supplierMappings = [];
+    return tx.productPlan.update({ where: { id }, data });
+  });
 }
 export async function deletePlan(id: string) {
-  await ensurePlan(id);
-  const [orderItems, inventory] = await Promise.all([
-    prisma.orderItem.count({ where: { planId: id } }),
-    prisma.inventoryItem.count({ where: { planId: id } }),
-  ]);
-  if (orderItems > 0 || inventory > 0) {
-    throw new AppError(
-      409,
-      "CONFLICT",
-      "Plan has inventory or orders; deactivate it instead of deleting",
-    );
-  }
-  await prisma.productPlan.delete({ where: { id } });
-  return { id };
+  return prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<
+      { id: string }[]
+    >`SELECT id FROM product_plans WHERE id=${id} FOR UPDATE`;
+    if (!rows.length) throw new AppError(404, "NOT_FOUND", "Plan not found");
+    const [orderItems, inventory] = await Promise.all([
+      tx.orderItem.count({ where: { planId: id } }),
+      tx.inventoryItem.count({ where: { planId: id } }),
+    ]);
+    if (orderItems > 0 || inventory > 0) {
+      throw new AppError(
+        409,
+        "CONFLICT",
+        "Plan has inventory or orders; deactivate it instead of deleting",
+      );
+    }
+    await tx.productPlan.delete({ where: { id } });
+    return { id };
+  });
 }
 
 // ---------------- Inventory ----------------
 export async function bulkImportInventory(input: BulkInventoryInput) {
-  const plan = await prisma.productPlan.findUnique({
-    where: { id: input.planId },
-    include: { product: true },
-  });
-  if (!plan) throw new AppError(404, "NOT_FOUND", "Plan not found");
-  const type = plan.product.type;
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM product_plans WHERE id=${input.planId} FOR UPDATE`;
+    const plan = await tx.productPlan.findUnique({
+      where: { id: input.planId },
+      include: { product: true },
+    });
+    if (!plan) throw new AppError(404, "NOT_FOUND", "Plan not found");
+    if (plan.source !== "INTERNAL")
+      throw new AppError(409, "EXTERNAL_PLAN", "Supplier plans cannot receive internal inventory");
+    const type = plan.product.type;
 
-  const data: Prisma.InventoryItemCreateManyInput[] = input.items.map((item, idx) => {
-    const base = { productId: plan.productId, planId: plan.id, type };
-    if (type === "ACCOUNT") {
-      if (!item.accountEmail || !item.accountPassword) {
+    const data: Prisma.InventoryItemCreateManyInput[] = input.items.map((item, idx) => {
+      const base = { productId: plan.productId, planId: plan.id, type };
+      if (type === "ACCOUNT") {
+        if (!item.accountEmail || !item.accountPassword) {
+          throw new AppError(
+            400,
+            "VALIDATION_ERROR",
+            `Item ${idx + 1}: accountEmail and accountPassword are required for ACCOUNT products`,
+          );
+        }
+        return { ...base, accountEmail: item.accountEmail, accountPassword: item.accountPassword };
+      }
+      if (type === "LICENSE") {
+        if (!item.licenseKey) {
+          throw new AppError(
+            400,
+            "VALIDATION_ERROR",
+            `Item ${idx + 1}: licenseKey is required for LICENSE products`,
+          );
+        }
+        return { ...base, licenseKey: item.licenseKey };
+      }
+      if (!item.giftCardCode) {
         throw new AppError(
           400,
           "VALIDATION_ERROR",
-          `Item ${idx + 1}: accountEmail and accountPassword are required for ACCOUNT products`,
+          `Item ${idx + 1}: giftCardCode is required for GIFTCARD products`,
         );
       }
-      return { ...base, accountEmail: item.accountEmail, accountPassword: item.accountPassword };
-    }
-    if (type === "LICENSE") {
-      if (!item.licenseKey) {
-        throw new AppError(
-          400,
-          "VALIDATION_ERROR",
-          `Item ${idx + 1}: licenseKey is required for LICENSE products`,
-        );
-      }
-      return { ...base, licenseKey: item.licenseKey };
-    }
-    if (!item.giftCardCode) {
-      throw new AppError(
-        400,
-        "VALIDATION_ERROR",
-        `Item ${idx + 1}: giftCardCode is required for GIFTCARD products`,
-      );
-    }
-    return { ...base, giftCardCode: item.giftCardCode };
-  });
+      return { ...base, giftCardCode: item.giftCardCode };
+    });
 
-  const result = await prisma.inventoryItem.createMany({ data });
-  return { created: result.count };
+    const result = await tx.inventoryItem.createMany({ data });
+    return { created: result.count };
+  });
 }
 
 export async function listInventory(query: InventoryQuery) {
@@ -384,6 +513,7 @@ export async function listInventory(query: InventoryQuery) {
 export async function listOrders(query: OrdersQuery) {
   const where: Prisma.OrderWhereInput = {};
   if (query.status) where.paymentStatus = query.status;
+  if (query.q) where.id = query.q.length === 8 ? { endsWith: query.q } : query.q;
 
   const [total, orders] = await Promise.all([
     prisma.order.count({ where }),
@@ -425,7 +555,13 @@ export async function getOrder(id: string) {
     where: { id },
     include: {
       user: { select: { id: true, name: true, email: true, phone: true } },
-      items: { include: { product: true, plan: true, fulfilledItems: true } },
+      items: {
+        include: {
+          product: { select: { id: true, name: true } },
+          plan: { select: { id: true, label: true } },
+          fulfilledItems: { select: { status: true } },
+        },
+      },
     },
   });
   if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
@@ -447,7 +583,8 @@ export async function getOrder(id: string) {
       quantity: it.quantity,
       unitPrice: Number(it.unitPrice),
       lineTotal: Number(it.lineTotal),
-      fulfilledCount: it.fulfilledItems.length,
+      fulfilledCount: it.fulfilledItems.filter((item) => item.status === "SOLD").length,
+      reservedCount: it.fulfilledItems.filter((item) => item.status === "RESERVED").length,
     })),
   };
 }
@@ -456,16 +593,23 @@ export async function getOrder(id: string) {
 // Receipts are never deleted; this is the review queue + permanent history.
 
 const receiptUserSelect = { id: true, name: true, email: true, phone: true } as const;
+const receiptOrderInclude = {
+  user: { select: receiptUserSelect },
+  bluBankClaim: { select: { trackingDigest: true, reviewRequired: true } },
+} satisfies Prisma.OrderInclude;
 
 type ReceiptWithOrder = Prisma.ReceiptGetPayload<{
   include: {
     order: {
-      include: { user: { select: { id: true; name: true; email: true; phone: true } } };
+      include: typeof receiptOrderInclude;
     };
   };
 }>;
 
 function serializeReceipt(r: ReceiptWithOrder) {
+  const bankInvoice = readBluInvoice(r.order.paymentMetadata);
+  const stockInvoice = bankInvoice?.stockHeld || bankInvoice?.supplierCheckout;
+  const claim = r.order.bluBankClaim;
   return {
     id: r.id,
     status: r.status,
@@ -474,6 +618,13 @@ function serializeReceipt(r: ReceiptWithOrder) {
     mimeType: r.mimeType,
     createdAt: r.createdAt,
     reviewedAt: r.reviewedAt,
+    bankEvidence: stockInvoice
+      ? claim?.reviewRequired
+        ? "review"
+        : matchesBluReceipt(r.reference, claim)
+          ? "matched"
+          : "waiting"
+      : null,
     order: {
       id: r.order.id,
       totalAmount: Number(r.order.totalAmount),
@@ -492,18 +643,19 @@ function serializeReceipt(r: ReceiptWithOrder) {
 }
 
 export async function listReceipts(query: ReceiptsQuery) {
-  const where: Prisma.ReceiptWhereInput = {};
+  const scope = { orderId: query.orderId };
+  const where: Prisma.ReceiptWhereInput = { ...scope };
   if (query.status) where.status = query.status;
 
   const [total, pending, receipts] = await Promise.all([
     prisma.receipt.count({ where }),
-    prisma.receipt.count({ where: { status: "PENDING" } }),
+    prisma.receipt.count({ where: { ...scope, status: "PENDING" } }),
     prisma.receipt.findMany({
       where,
       orderBy: { createdAt: "desc" },
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
-      include: { order: { include: { user: { select: receiptUserSelect } } } },
+      include: { order: { include: receiptOrderInclude } },
     }),
   ]);
 
@@ -532,7 +684,7 @@ export async function getReceiptImage(id: string) {
 async function loadReceiptForReview(id: string) {
   const receipt = await prisma.receipt.findUnique({
     where: { id },
-    include: { order: { include: { user: { select: receiptUserSelect } } } },
+    include: { order: { include: receiptOrderInclude } },
   });
   if (!receipt) throw new AppError(404, "NOT_FOUND", "Receipt not found");
   return receipt;
@@ -540,71 +692,184 @@ async function loadReceiptForReview(id: string) {
 
 // Approve: deliver the order (atomic inventory claim) and mark the receipt APPROVED.
 // If delivery fails (e.g. out of stock) the receipt stays PENDING so it can be retried.
-export async function approveReceipt(id: string, input: ReviewReceiptInput) {
-  const receipt = await loadReceiptForReview(id);
-  if (receipt.order.paymentProvider !== "CARD_TO_CARD") {
-    throw new AppError(400, "NOT_CARD_TO_CARD", "This receipt is not for a card-to-card order");
-  }
-  // Idempotency: an order can carry several PENDING receipts (re-uploads). Once
-  // one is approved and the order is PAID, approving another must not re-deliver.
-  if (receipt.status !== "PENDING") {
-    throw new AppError(409, "ALREADY_REVIEWED", "This receipt was already reviewed");
-  }
-  if (receipt.order.paymentStatus === "PAID") {
-    throw new AppError(409, "ALREADY_PAID", "This order is already paid and delivered");
-  }
-  await deliverOrder(receipt.orderId, `card:${receipt.id}`);
-  await prisma.receipt.update({
-    where: { id },
-    data: { status: "APPROVED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
+export async function approveReceipt(
+  id: string,
+  input: ReviewReceiptInput,
+  automatic = false,
+  adminId?: string,
+) {
+  const initial = await loadReceiptForReview(id);
+  await prisma.$transaction(async (tx) => {
+    await lockOrder(tx, initial.orderId);
+    const receipt = await tx.receipt.findUniqueOrThrow({ where: { id }, include: { order: true } });
+    if (receipt.order.paymentProvider !== "CARD_TO_CARD") {
+      throw new AppError(400, "NOT_CARD_TO_CARD", "This receipt is not for a card-to-card order");
+    }
+    if (receipt.status !== "PENDING") {
+      throw new AppError(409, "ALREADY_REVIEWED", "This receipt was already reviewed");
+    }
+    if (receipt.order.paymentStatus === "PAID") {
+      throw new AppError(409, "ALREADY_PAID", "This order is already paid and delivered");
+    }
+    const invoice = readBluInvoice(receipt.order.paymentMetadata);
+    if (readManualSupplier(receipt.order.paymentMetadata)) {
+      if (automatic)
+        throw new AppError(409, "SUPPLIER_MANUAL_APPROVAL_REQUIRED", "Manual approval required");
+      await requireManualAdmin(tx, adminId ?? "");
+      await confirmManualSupplierPayment(tx, receipt);
+    } else if (invoice?.supplierCheckout) {
+      await confirmSupplierCardPayment(tx, receipt, automatic);
+    } else {
+      if (invoice?.stockHeld || automatic) {
+        const claim = await tx.bluBankObservation.findUnique({
+          where: { matchedOrderId: receipt.orderId },
+        });
+        if (!matchesBluReceipt(receipt.reference, claim)) {
+          throw new AppError(
+            409,
+            "BLU_MATCH_REQUIRED",
+            "This receipt requires a matching Blu deposit before approval",
+          );
+        }
+        if (automatic) {
+          const profile = await tx.user.findUnique({
+            where: { id: receipt.order.userId },
+            select: { role: true },
+          });
+          const items = await tx.orderItem.findMany({
+            where: { orderId: receipt.orderId },
+            include: { plan: true, fulfilledItems: true },
+          });
+          const privatePilot =
+            invoice?.privateStockQa &&
+            invoice.qaCampaign === env.BLU_QA_INVOICE_CAMPAIGN?.toLowerCase() &&
+            receipt.order.userId === env.BLU_INVOICE_QA_USER_ID;
+          const ordinaryStock =
+            env.BLU_STOCK_CHECKOUT_ENABLED && !invoice?.qaCampaign && !invoice?.privateStockQa;
+          if (
+            !env.BLU_AUTO_APPROVE_ENABLED ||
+            !invoice?.stockHeld ||
+            (!privatePilot && !ordinaryStock) ||
+            receipt.order.paymentStatus !== "PENDING_REVIEW" ||
+            receipt.order.paidAt ||
+            profile?.role !== "USER" ||
+            invoice.iban !== env.BLU_INVOICE_IBAN ||
+            invoice.number !== env.BLU_INVOICE_CARD_NUMBER ||
+            receipt.order.bluInvoiceKey !== invoice.iban + ":" + invoice.amountIrr ||
+            !["IRR", "IRT"].includes(receipt.order.currency) ||
+            !receipt.order.totalAmount
+              .mul(receipt.order.currency === "IRT" ? 10 : 1)
+              .eq(invoice.amountIrr) ||
+            !receipt.order.totalAmount.add(invoice.discount).eq(invoice.baseAmount) ||
+            !claim ||
+            claim.invoiceKey !== receipt.order.bluInvoiceKey ||
+            claim.occurredAt < receipt.order.createdAt ||
+            claim.occurredAt.getTime() >= Date.parse(invoice.expiresAt) ||
+            Date.now() >= Date.parse(invoice.expiresAt) + 86400000 ||
+            items.length !== 1 ||
+            items[0].quantity !== 1 ||
+            items[0].plan.source !== "INTERNAL" ||
+            items[0].fulfilledItems.length !== 1 ||
+            items[0].fulfilledItems[0].status !== "RESERVED" ||
+            items[0].fulfilledItems[0].planId !== items[0].planId
+          )
+            throw new AppError(409, "BLU_AUTO_NOT_ELIGIBLE", "This receipt requires manual review");
+        }
+      }
+      await deliverOrderInTransaction(tx, receipt.orderId, `card:${receipt.id}`);
+    }
+    await tx.receipt.update({
+      where: { id },
+      data: {
+        status: "APPROVED",
+        reviewedAt: new Date(),
+        reviewerNote: automatic
+          ? invoice?.supplierCheckout
+            ? "Automatic Blu approval: signed deposit and receipt matched; supplier fulfillment queued."
+            : "Automatic Blu approval: signed deposit and receipt matched; reserved stock delivered."
+          : (input.note ?? null),
+      },
+    });
   });
-  // Card-to-card sales consume inventory too — warn the admin when a plan runs low.
-  void lowStockWarning(receipt.orderId)
-    .then((warning) => (warning ? notifyAdmin(warning) : undefined))
-    .catch(() => {});
+  if (readManualSupplier(initial.order.paymentMetadata)) {
+    void prisma.supplierFulfillment
+      .findUnique({ where: { orderId: initial.orderId }, select: { id: true, supplier: true } })
+      .then((job) => {
+        if (job)
+          return notifyAdmin(
+            "رسید سفارش " +
+              initial.orderId.slice(-8) +
+              " تأیید شد. اعتبار " +
+              job.supplier +
+              " را بررسی کن.",
+            { label: "خرید و تحویل", data: "supplier_buy_" + job.id },
+          );
+      })
+      .catch(() => {});
+  } else if (!readBluInvoice(initial.order.paymentMetadata)?.supplierCheckout)
+    void lowStockWarning(initial.orderId)
+      .then((warning) => (warning ? notifyAdmin(warning) : undefined))
+      .catch(() => {});
   return serializeReceipt(await loadReceiptForReview(id));
 }
 
-// Reject a receipt. Three cases:
-//  - this receipt delivered the order (APPROVED + order PAID): undo it — REFUND
-//    the order and release its inventory back to AVAILABLE.
-//  - a stale duplicate on an order another receipt already PAID: just mark the
-//    receipt REJECTED; leave the order PAID and its inventory untouched.
-//  - the order is not yet paid: normal reject — move the order to REJECTED.
-export async function rejectReceipt(id: string, input: ReviewReceiptInput) {
-  const receipt = await loadReceiptForReview(id);
-  const undo = receipt.status === "APPROVED" && receipt.order.paymentStatus === "PAID";
-  const orderAlreadyPaidElsewhere =
-    receipt.status !== "APPROVED" && receipt.order.paymentStatus === "PAID";
-
+// A disclosed credential must never re-enter available stock, even after refund.
+export async function rejectReceipt(id: string, input: ReviewReceiptInput, adminId?: string) {
+  const initial = await loadReceiptForReview(id);
   await prisma.$transaction(async (tx) => {
-    await tx.receipt.update({
-      where: { id },
-      data: { status: "REJECTED", reviewedAt: new Date(), reviewerNote: input.note ?? null },
-    });
-
-    // Don't touch a sale that a different receipt completed.
-    if (!orderAlreadyPaidElsewhere) {
+    await lockOrder(tx, initial.orderId);
+    const receipt = await tx.receipt.findUniqueOrThrow({ where: { id }, include: { order: true } });
+    if (readManualSupplier(receipt.order.paymentMetadata)) {
+      await requireManualAdmin(tx, adminId ?? "");
+      if (receipt.status !== "PENDING" || receipt.order.paymentStatus !== "PENDING_REVIEW")
+        throw new AppError(409, "ALREADY_REVIEWED", "This receipt cannot be rejected");
+      const transitioned = await tx.supplierFulfillment.updateMany({
+        where: { orderId: receipt.orderId, state: "AWAITING_PAYMENT" },
+        data: { state: "REJECTED" },
+      });
+      if (transitioned.count !== 1)
+        throw new AppError(409, "ALREADY_REVIEWED", "Order already reviewed");
+      await tx.receipt.updateMany({
+        where: { orderId: receipt.orderId, status: "PENDING" },
+        data: {
+          status: "REJECTED",
+          reviewedAt: new Date(),
+          reviewerNote: input.note ?? null,
+        },
+      });
       await tx.order.update({
         where: { id: receipt.orderId },
-        data: { paymentStatus: undo ? "REFUNDED" : "REJECTED" },
+        data: { paymentStatus: "REJECTED" },
       });
+      await queueOrderEmail(tx, receipt.orderId, "ORDER_REJECTED");
+      return;
     }
-
+    const undo = receipt.status === "APPROVED" && receipt.order.paymentStatus === "PAID";
+    await tx.receipt.update({
+      where: { id },
+      data: {
+        status: "REJECTED",
+        reviewedAt: new Date(),
+        reviewerNote: input.note ?? null,
+      },
+    });
     if (undo) {
-      const orderItems = await tx.orderItem.findMany({
-        where: { orderId: receipt.orderId },
-        select: { id: true },
+      await tx.order.update({
+        where: { id: receipt.orderId },
+        data: { paymentStatus: "REFUNDED" },
       });
-      const orderItemIds = orderItems.map((oi) => oi.id);
-
-      await tx.inventoryItem.updateMany({
-        where: { orderItemId: { in: orderItemIds } },
-        data: { status: "AVAILABLE", orderItemId: null, soldAt: null },
+    } else if (["PENDING", "PENDING_REVIEW", "REJECTED"].includes(receipt.order.paymentStatus)) {
+      const pending = await tx.receipt.count({
+        where: { orderId: receipt.orderId, status: "PENDING" },
+      });
+      await tx.order.update({
+        where: { id: receipt.orderId },
+        data: {
+          paymentStatus: pending ? "PENDING_REVIEW" : "REJECTED",
+        },
       });
     }
   });
-
   return serializeReceipt(await loadReceiptForReview(id));
 }
 
@@ -724,15 +989,23 @@ export async function listTickets(query: TicketsQuery) {
   };
 }
 
+const ticketDetailInclude = {
+  user: { select: ticketUserSelect },
+  messages: { orderBy: { createdAt: "asc" } },
+} satisfies Prisma.TicketInclude;
+
 export async function getTicket(id: string) {
   const ticket = await prisma.ticket.findUnique({
     where: { id },
-    include: {
-      user: { select: ticketUserSelect },
-      messages: { orderBy: { createdAt: "asc" } },
-    },
+    include: ticketDetailInclude,
   });
   if (!ticket) throw new AppError(404, "NOT_FOUND", "Ticket not found");
+  return serializeAdminTicket(ticket);
+}
+
+function serializeAdminTicket(
+  ticket: Prisma.TicketGetPayload<{ include: typeof ticketDetailInclude }>,
+) {
   return {
     id: ticket.id,
     subject: ticket.subject,
@@ -750,21 +1023,29 @@ export async function getTicket(id: string) {
 }
 
 export async function replyTicket(id: string, adminId: string, input: TicketReplyInput) {
-  const ticket = await prisma.ticket.findUnique({ where: { id }, select: { id: true } });
-  if (!ticket) throw new AppError(404, "NOT_FOUND", "Ticket not found");
-  await prisma.ticketMessage.create({
-    data: { ticketId: id, authorId: adminId, body: input.body, isStaff: true },
-  });
-  await prisma.ticket.update({
-    where: { id },
-    data: { status: "ANSWERED", updatedAt: new Date() },
-  });
-  return getTicket(id);
+  const ticket = await prisma.ticket
+    .update({
+      where: { id },
+      data: {
+        status: "ANSWERED",
+        updatedAt: new Date(),
+        messages: { create: { authorId: adminId, body: input.body, isStaff: true } },
+      },
+      include: ticketDetailInclude,
+    })
+    .catch(ticketWriteError);
+  return serializeAdminTicket(ticket);
 }
 
 export async function setTicketStatus(id: string, input: TicketStatusInput) {
-  await prisma.ticket.update({ where: { id }, data: { status: input.status } });
-  return getTicket(id);
+  const ticket = await prisma.ticket
+    .update({
+      where: { id },
+      data: { status: input.status },
+      include: ticketDetailInclude,
+    })
+    .catch(ticketWriteError);
+  return serializeAdminTicket(ticket);
 }
 
 // ---------------- API keys ----------------
@@ -800,7 +1081,7 @@ export function generateProductSeo(input: SeoGenerateInput) {
 
 // ---------------- Sales dashboard / analytics ----------------
 export async function getStats() {
-  const [paidAgg, totalOrders, pendingReview, customers, currencyRow] = await Promise.all([
+  const [paidAgg, totalOrders, pendingReview, customers] = await Promise.all([
     prisma.order.aggregate({
       where: { paymentStatus: "PAID" },
       _sum: { totalAmount: true },
@@ -809,20 +1090,22 @@ export async function getStats() {
     prisma.order.count(),
     prisma.order.count({ where: { paymentStatus: "PENDING_REVIEW" } }),
     prisma.user.count({ where: { role: "USER" } }),
-    prisma.order.findFirst({ where: { paymentStatus: "PAID" }, select: { currency: true } }),
   ]);
 
-  const [revenue30Rows, salesByDay] = await Promise.all([
+  const [revenue30Rows, salesByDay, revenueTotalRows] = await Promise.all([
     prisma.$queryRaw<{ revenue: number }[]>`
-      SELECT COALESCE(SUM("totalAmount"), 0)::float AS revenue FROM orders
+      SELECT COALESCE(SUM(CASE WHEN currency = 'IRT' THEN "totalAmount" * 10 ELSE "totalAmount" END), 0)::float AS revenue FROM orders
       WHERE "paymentStatus" = 'PAID' AND "paidAt" >= NOW() - INTERVAL '30 days'`,
     prisma.$queryRaw<{ day: string; count: number; revenue: number }[]>`
       SELECT to_char(date_trunc('day', "paidAt"), 'YYYY-MM-DD') AS day,
              COUNT(*)::int AS count,
-             COALESCE(SUM("totalAmount"), 0)::float AS revenue
+             COALESCE(SUM(CASE WHEN currency = 'IRT' THEN "totalAmount" * 10 ELSE "totalAmount" END), 0)::float AS revenue
       FROM orders
       WHERE "paymentStatus" = 'PAID' AND "paidAt" >= NOW() - INTERVAL '13 days'
       GROUP BY 1 ORDER BY 1`,
+    prisma.$queryRaw<{ revenue: number }[]>`
+      SELECT COALESCE(SUM(CASE WHEN currency = 'IRT' THEN "totalAmount" * 10 ELSE "totalAmount" END), 0)::float AS revenue
+      FROM orders WHERE "paymentStatus" = 'PAID'`,
   ]);
 
   // Top products by units sold
@@ -845,12 +1128,16 @@ export async function getStats() {
 
   // Low-stock active products
   const activeProducts = await prisma.product.findMany({
-    where: { isActive: true },
+    where: { isActive: true, plans: { some: { isActive: true, source: "INTERNAL" } } },
     select: { id: true, name: true },
   });
   const availRows = await prisma.inventoryItem.groupBy({
     by: ["productId"],
-    where: { status: "AVAILABLE", productId: { in: activeProducts.map((p) => p.id) } },
+    where: {
+      status: "AVAILABLE",
+      productId: { in: activeProducts.map((p) => p.id) },
+      plan: { isActive: true, source: "INTERNAL" },
+    },
     _count: { _all: true },
   });
   const availMap = new Map(availRows.map((a) => [a.productId, a._count._all]));
@@ -870,8 +1157,8 @@ export async function getStats() {
   });
 
   return {
-    currency: currencyRow?.currency ?? "IRR",
-    revenueTotal: Number(paidAgg._sum.totalAmount ?? 0),
+    currency: "IRR",
+    revenueTotal: revenueTotalRows[0]?.revenue ?? 0,
     revenue30: revenue30Rows[0]?.revenue ?? 0,
     paidOrders: paidAgg._count._all,
     totalOrders,

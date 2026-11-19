@@ -13,7 +13,7 @@ const safe = (url: string) => /^https?:\/\//i.test(url) || url.startsWith("/");
 const INLINE_SPLIT =
   /(!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|\*[^*\n]+\*|`[^`\n]+`)/g;
 
-function inline(text: string, keyPrefix: string): ReactNode[] {
+function inline(text: string, keyPrefix: string, preview: boolean): ReactNode[] {
   // Split on ![image](url), [link](url), **bold**, *italic*, `code`
   return text.split(INLINE_SPLIT).map((part, i) => {
     const key = `${keyPrefix}-${i}`;
@@ -32,6 +32,9 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
     }
     const img = part.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
     if (img && safe(img[2])) {
+      if (preview && !/^\/(?:api\/)?blog-media\/[a-z0-9-]+$/i.test(img[2])) {
+        return <span key={key}>{img[1] || img[2]}</span>;
+      }
       return (
         <img
           key={key}
@@ -45,6 +48,12 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
     }
     const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
     if (link && safe(link[2])) {
+      if (preview)
+        return (
+          <span key={key} className="text-primary">
+            {link[1]}
+          </span>
+        );
       return (
         <a
           key={key}
@@ -118,7 +127,17 @@ const HEADINGS: Array<{ prefix: string; cls: string; tag: "h3" | "h4" | "h5" | "
   { prefix: "# ", cls: "mt-4 mb-1 text-xl font-bold", tag: "h3" },
 ];
 
-export function Markdown({ text, className }: { text: string; className?: string }) {
+export function Markdown({
+  text,
+  className,
+  preview = false,
+  headingOffset = 2,
+}: {
+  text: string;
+  className?: string;
+  preview?: boolean;
+  headingOffset?: 0 | 2;
+}) {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   const blocks: ReactNode[] = [];
   let list: string[] = [];
@@ -134,7 +153,7 @@ export function Markdown({ text, className }: { text: string; className?: string
         className={`my-2 space-y-1 ps-5 ${listType === "ul" ? "list-disc" : "list-decimal"}`}
       >
         {items.map((it, i) => (
-          <li key={i}>{inline(it, `li-${blocks.length}-${i}`)}</li>
+          <li key={i}>{inline(it, `li-${blocks.length}-${i}`, preview)}</li>
         ))}
       </Tag>,
     );
@@ -147,7 +166,15 @@ export function Markdown({ text, className }: { text: string; className?: string
     const video = line.match(/^!video\s+(\S+)$/i);
     if (video) {
       flushList();
-      blocks.push(videoEmbed(video[1], `v-${idx}`));
+      blocks.push(
+        preview ? (
+          <p key={`v-${idx}`} dir="ltr">
+            {video[1]}
+          </p>
+        ) : (
+          videoEmbed(video[1], `v-${idx}`)
+        ),
+      );
       return;
     }
 
@@ -174,17 +201,20 @@ export function Markdown({ text, className }: { text: string; className?: string
     if (line.startsWith("> ")) {
       blocks.push(
         <blockquote key={`q-${idx}`} className="my-3 border-s-2 border-primary/60 ps-4 text-muted">
-          {inline(line.slice(2), `q-${idx}`)}
+          {inline(line.slice(2), `q-${idx}`, preview)}
         </blockquote>,
       );
       return;
     }
     const heading = HEADINGS.find((h) => line.startsWith(h.prefix));
     if (heading) {
-      const Tag = heading.tag;
+      const Tag =
+        headingOffset === 0
+          ? (`h${Math.max(2, heading.prefix.trim().length)}` as "h2" | "h3" | "h4" | "h5" | "h6")
+          : heading.tag;
       blocks.push(
         <Tag key={`h-${idx}`} className={heading.cls}>
-          {inline(line.slice(heading.prefix.length), `h-${idx}`)}
+          {inline(line.slice(heading.prefix.length), `h-${idx}`, preview)}
         </Tag>,
       );
       return;
@@ -193,7 +223,7 @@ export function Markdown({ text, className }: { text: string; className?: string
 
     blocks.push(
       <p key={`p-${idx}`} className="my-2 leading-relaxed">
-        {inline(line, `p-${idx}`)}
+        {inline(line, `p-${idx}`, preview)}
       </p>,
     );
   });

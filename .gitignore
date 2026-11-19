@@ -30,6 +30,9 @@ yarn-error.log*
 # Test / coverage
 coverage/
 
+# Local reference material; never include private chat exports in new commits.
+ChatExport*/
+
 # Prisma local artifacts
 *.db
 *.db-journal

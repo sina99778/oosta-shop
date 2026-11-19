@@ -15,6 +15,8 @@ const EnvSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("7d"),
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(4).max(15).default(12),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
+  // Trust nginx's Docker subnet only; nginx normalizes the CDN client address.
+  TRUST_PROXY: z.string().default("loopback,172.30.0.0/24"),
 
   PAYMENT_PROVIDER: z.enum(["mock", "zarinpal"]).default("mock"),
   ALLOW_MOCK_PAYMENTS_IN_PRODUCTION: z
@@ -38,6 +40,28 @@ const EnvSchema = z.object({
   CARD_NUMBER: z.string().optional(),
   CARD_HOLDER: z.string().optional(),
   CARD_BANK: z.string().optional(),
+  BLU_INVOICE_QA_USER_ID: z.string().trim().optional(),
+  BLU_INVOICE_CARD_NUMBER: z.string().trim().optional(),
+  BLU_INVOICE_IBAN: z.string().trim().optional(),
+  BLU_QA_CARD_HOLDER_B64: z.string().trim().optional(),
+  BLU_QA_INVOICE_CAMPAIGN: z.string().trim().optional(),
+  BLU_QA_AMOUNT_IRR: z.string().trim().optional(),
+  BLU_EVENT_PUBLIC_KEY: z.string().trim().optional(),
+  BLU_TRACKING_HMAC_KEY: z.string().trim().optional(),
+  BLU_POLL_STATUS_FILE: z.string().trim().optional(),
+  BLU_AUTO_APPROVE_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+  SUPPLIER_MANUAL_APPROVAL: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  SUPPLIER_MANUAL_DELIVERY_HOURS: z.coerce.number().int().min(0).max(168).default(0),
+  BLU_STOCK_CHECKOUT_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 
   // AI SEO assistant (Google Gemini). Optional — the deterministic analyzer always
   // works; AI generation is enabled only when GEMINI_API_KEY is set.
@@ -70,7 +94,9 @@ const EnvSchema = z.object({
     z.coerce.number().int().positive().optional(),
   ),
 
-  // Automatic Telegram DB backups: send a dump every N hours (0 disables).
+  // Public age recipient only. The corresponding private identity stays off-server.
+  BACKUP_AGE_RECIPIENT: z.string().trim().optional(),
+  // Automatic encrypted Telegram DB backups: send every N hours (0 disables).
   // Only runs when the bot is enabled.
   BACKUP_INTERVAL_HOURS: z.preprocess(
     (value) => (value === "" || value === undefined ? undefined : value),
@@ -92,7 +118,10 @@ function loadEnv() {
   // Production safety guards: refuse to boot with insecure placeholder values.
   if (data.NODE_ENV === "production") {
     const problems: string[] = [];
-    if (data.JWT_SECRET === "dev-only-secret-change-me") {
+    if (
+      data.JWT_SECRET.length < 32 ||
+      ["dev-only-secret-change-me", "replace-with-a-long-random-secret"].includes(data.JWT_SECRET)
+    ) {
       problems.push("JWT_SECRET must be set to a strong, unique value in production");
     }
     if (data.PAYMENT_PROVIDER === "mock" && !data.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION) {
@@ -102,11 +131,17 @@ function loadEnv() {
     }
     if (
       data.PAYMENT_PROVIDER === "zarinpal" &&
-      data.ZARINPAL_MERCHANT_ID === "00000000-0000-0000-0000-000000000000"
+      (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        data.ZARINPAL_MERCHANT_ID,
+      ) ||
+        data.ZARINPAL_MERCHANT_ID === "00000000-0000-0000-0000-000000000000")
     ) {
       problems.push(
         "ZARINPAL_MERCHANT_ID must be set when PAYMENT_PROVIDER=zarinpal in production",
       );
+    }
+    if (data.PAYMENT_PROVIDER === "zarinpal" && data.ZARINPAL_SANDBOX) {
+      problems.push("ZARINPAL_SANDBOX must be false in production");
     }
     if (problems.length > 0) {
       throw new Error(

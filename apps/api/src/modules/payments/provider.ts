@@ -88,6 +88,10 @@ const zarinpalProvider: PaymentProviderAdapter = {
   name: "ZARINPAL",
   async createPayment({ amount, currency: orderCurrency, description, callbackUrl }) {
     const gw = await getGatewayConfig();
+    assertOnlinePaymentAllowed(gw);
+    if (!["IRR", "IRT"].includes(orderCurrency)) {
+      throw new AppError(400, "UNSUPPORTED_CURRENCY", "Unsupported payment currency");
+    }
     let finalAmount = amount;
     const targetCurrency = env.ZARINPAL_CURRENCY; // "IRR" or "IRT"
 
@@ -97,12 +101,18 @@ const zarinpalProvider: PaymentProviderAdapter = {
       finalAmount = amount * 10;
     }
 
+    if (!Number.isSafeInteger(finalAmount) || finalAmount <= 0)
+      throw new AppError(
+        400,
+        "INVALID_PAYMENT_AMOUNT",
+        "Payment amount must be a whole positive unit in the gateway currency",
+      );
     const json = await zarinpalRequest<{ data?: { code?: number; authority?: string } }>(
       gw.zarinpalSandbox,
       "/pg/v4/payment/request.json",
       {
         merchant_id: gw.zarinpalMerchantId,
-        amount: Math.round(finalAmount),
+        amount: finalAmount,
         currency: targetCurrency,
         description,
         callback_url: callbackUrl,
@@ -136,6 +146,16 @@ const zarinpalProvider: PaymentProviderAdapter = {
     const merchantId =
       typeof saved?.merchantId === "string" ? saved.merchantId : current!.zarinpalMerchantId;
     const sandbox = typeof saved?.sandbox === "boolean" ? saved.sandbox : current!.zarinpalSandbox;
+    if (env.isProduction && sandbox) {
+      throw new AppError(
+        409,
+        "SANDBOX_DISABLED",
+        "Sandbox payments cannot fulfill production orders",
+      );
+    }
+    if (!["IRR", "IRT"].includes(orderCurrency)) {
+      throw new AppError(400, "UNSUPPORTED_CURRENCY", "Unsupported payment currency");
+    }
     const savedCurrency = saved?.targetCurrency;
     const targetCurrency =
       savedCurrency === "IRR" || savedCurrency === "IRT" ? savedCurrency : env.ZARINPAL_CURRENCY;
@@ -147,12 +167,18 @@ const zarinpalProvider: PaymentProviderAdapter = {
       finalAmount = amount * 10;
     }
 
+    if (!Number.isSafeInteger(finalAmount) || finalAmount <= 0)
+      throw new AppError(
+        400,
+        "INVALID_PAYMENT_AMOUNT",
+        "Payment amount must be a whole positive unit in the gateway currency",
+      );
     const json = await zarinpalRequest<{ data?: { code?: number; ref_id?: number } }>(
       sandbox,
       "/pg/v4/payment/verify.json",
       {
         merchant_id: merchantId,
-        amount: Math.round(finalAmount),
+        amount: finalAmount,
         authority,
       },
     );
@@ -179,6 +205,14 @@ export function getPaymentProviderForOrder(
   provider: PaymentProvider | null,
 ): PaymentProviderAdapter {
   if (provider === "ZARINPAL") return zarinpalProvider;
-  if (provider === "MANUAL") return mockProvider;
+  if (provider === "MANUAL") {
+    if (
+      env.isProduction &&
+      (!env.ALLOW_MOCK_PAYMENTS_IN_PRODUCTION || env.BLU_STOCK_CHECKOUT_ENABLED)
+    ) {
+      throw new AppError(409, "MOCK_DISABLED", "Mock payments cannot fulfill production orders");
+    }
+    return mockProvider;
+  }
   throw new AppError(409, "INVALID_PAYMENT_PROVIDER", "Order has no online payment provider");
 }

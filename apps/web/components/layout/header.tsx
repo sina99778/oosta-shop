@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
-import { cn } from "@/lib/cn";
 import { LocaleSwitcher } from "./locale-switcher";
 import { ThemeToggle } from "./theme-toggle";
+import { Wordmark } from "@/components/wordmark";
 import type { Locale } from "@/lib/i18n";
+import styles from "./site-chrome.module.css";
 
 type NavDict = {
   home: string;
@@ -34,96 +36,160 @@ export function Header({
 }) {
   const { user, logout, loading } = useAuth();
   const pathname = usePathname();
+  const [openPath, setOpenPath] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const menuOpen = openPath === pathname;
+  const fa = locale === "fa";
   const base = `/${locale}`;
+  const menuLabel = fa ? "منوی اصلی" : "Main menu";
 
-  const link = (href: string, label: string) => {
-    const active = pathname === href || (href !== base && pathname.startsWith(href));
+  const routes = [
+    { href: base, label: dict.home },
+    { href: `${base}/products`, label: dict.products },
+    { href: `${base}/blog`, label: dict.blog },
+    { href: `${base}/support`, label: dict.support },
+    ...(user ? [{ href: `${base}/dashboard`, label: dict.dashboard }] : []),
+    ...(user?.role === "ADMIN" ? [{ href: `${base}/admin`, label: dict.admin }] : []),
+  ];
+
+  function navigation() {
+    return routes.map(({ href, label }) => {
+      const active = pathname === href || (href !== base && pathname.startsWith(`${href}/`));
+      return (
+        <Link
+          prefetch={false}
+          key={href}
+          href={href}
+          className={styles.navLink}
+          onClick={() => setOpenPath(null)}
+          aria-current={active ? "page" : undefined}
+        >
+          {label}
+        </Link>
+      );
+    });
+  }
+
+  function accountActions() {
+    if (loading) return null;
+    if (user)
+      return (
+        <Button
+          variant="outline"
+          type="button"
+          size="sm"
+          disabled={loggingOut}
+          onClick={async () => {
+            setLogoutError(null);
+            setLoggingOut(true);
+            try {
+              await logout();
+              setOpenPath(null);
+            } catch {
+              setLogoutError(
+                fa ? "خروج انجام نشد؛ دوباره تلاش کن." : "Sign-out failed. Please try again.",
+              );
+            } finally {
+              setLoggingOut(false);
+            }
+          }}
+        >
+          {loggingOut ? (fa ? "در حال خروج…" : "Signing out…") : dict.logout}
+        </Button>
+      );
     return (
-      <Link
-        href={href}
-        className={cn(
-          "text-sm transition-colors",
-          active ? "font-medium text-foreground" : "text-muted hover:text-foreground",
-        )}
-      >
-        {label}
-      </Link>
+      <>
+        <Link
+          prefetch={false}
+          href={`${base}/login`}
+          onClick={() => setOpenPath(null)}
+          className={`oosta-button ${styles.accountAction}`}
+          data-button-variant="outline"
+        >
+          {dict.login}
+        </Link>
+        <Link
+          prefetch={false}
+          href={`${base}/signup`}
+          onClick={() => setOpenPath(null)}
+          className={`oosta-button ${styles.accountAction}`}
+          data-button-variant="primary"
+        >
+          {dict.signup}
+        </Link>
+      </>
     );
-  };
+  }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-xl">
-      <Container className="flex h-[70px] items-center justify-between gap-4">
-        <div className="flex items-center gap-8">
-          <Link
-            href={base}
-            className="flex items-center gap-2 text-2xl font-black tracking-[-0.06em]"
-          >
-            <span>
-              oosta<span className="text-primary">AI</span>
-            </span>
-            <span className="size-2 rounded-full bg-primary" />
-          </Link>
-          <nav className="hidden items-center gap-7 md:flex">
-            {link(base, dict.home)}
-            {link(`${base}/products`, dict.products)}
-            {link(`${base}/blog`, dict.blog)}
-            {user && link(`${base}/dashboard`, dict.dashboard)}
-            {user && link(`${base}/support`, dict.support)}
-            {user?.role === "ADMIN" && link(`${base}/admin`, dict.admin)}
-          </nav>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Link
-            href={`${base}/products`}
-            aria-label={dict.products}
-            className="relative hidden size-10 items-center justify-center border border-border text-foreground transition-colors hover:border-primary hover:text-primary sm:inline-flex"
+    <header
+      className={`oosta-header ${styles.header}`}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || !menuOpen) return;
+        setOpenPath(null);
+        menuButton.current?.focus();
+      }}
+    >
+      <Container className={styles.headerRow}>
+        <Link
+          prefetch={false}
+          href={base}
+          aria-label={fa ? "اوستا، صفحهٔ اصلی" : "Oosta home"}
+          className={styles.brand}
+          onClick={() => setOpenPath(null)}
+        >
+          <Wordmark />
+        </Link>
+        <nav className={styles.desktopNav} aria-label={menuLabel}>
+          {navigation()}
+        </nav>
+        <div className={styles.toolbar}>
+          <ThemeToggle label={themeLabel} />
+          <LocaleSwitcher current={locale} />
+          <div className={styles.desktopAccount}>{accountActions()}</div>
+          <button
+            type="button"
+            ref={menuButton}
+            className={`oosta-button ${styles.menuButton}`}
+            data-button-variant="outline"
+            aria-label={menuOpen ? (fa ? "بستن منو" : "Close menu") : menuLabel}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-navigation"
+            onClick={() => setOpenPath(menuOpen ? null : pathname)}
           >
             <svg
-              width="20"
-              height="20"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              strokeWidth="1.8"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              aria-hidden="true"
+              width="21"
+              height="21"
             >
-              <path d="M3 3h2l2.4 11.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.6L21 7H6" />
-              <circle cx="10" cy="20" r="1" />
-              <circle cx="18" cy="20" r="1" />
+              <path d={menuOpen ? "M6 6l12 12M18 6 6 18" : "M4 6h16M4 12h16M4 18h16"} />
             </svg>
-            <span className="absolute -end-1 -top-1 grid size-4 place-items-center rounded-full bg-primary text-[9px] font-bold text-white">
-              0
-            </span>
-          </Link>
-          <ThemeToggle label={themeLabel} />
-          <LocaleSwitcher current={locale} />
-          {!loading &&
-            (user ? (
-              <>
-                <span className="hidden text-sm text-muted lg:inline">{user.name}</span>
-                <Button variant="outline" size="sm" className="rounded-none" onClick={logout}>
-                  {dict.logout}
-                </Button>
-              </>
-            ) : (
-              <>
-                <Link
-                  href={`${base}/login`}
-                  className="hidden h-10 items-center border border-border px-4 text-sm text-foreground transition-colors hover:border-primary hover:text-primary sm:inline-flex"
-                >
-                  {dict.login}
-                </Link>
-                <Link
-                  href={`${base}/signup`}
-                  className="inline-flex h-10 items-center bg-primary px-4 text-sm font-bold text-white transition-colors hover:bg-primary-hover active:scale-[0.98]"
-                >
-                  {dict.signup}
-                </Link>
-              </>
-            ))}
+          </button>
         </div>
       </Container>
+      <nav
+        id="mobile-navigation"
+        aria-label={menuLabel}
+        hidden={!menuOpen}
+        className={styles.mobileNav}
+      >
+        <Container className={styles.mobileInner}>
+          <div className={styles.mobileLinks}>{navigation()}</div>
+          {!loading && <div className={styles.mobileAccount}>{accountActions()}</div>}
+        </Container>
+      </nav>
+      {logoutError && (
+        <p role="alert" className="px-4 pb-3 text-center text-sm text-danger">
+          {logoutError}
+        </p>
+      )}
     </header>
   );
 }

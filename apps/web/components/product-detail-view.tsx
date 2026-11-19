@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useApi } from "@/lib/use-api";
 import { useAuth } from "@/lib/auth";
-import { api, ApiError, assetUrl } from "@/lib/api";
+import { api, ApiError, assetUrl, productImageUrl } from "@/lib/api";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,10 +12,19 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { Markdown } from "@/components/markdown";
 import { ProductCard } from "@/components/product-card";
+import { ProductMark } from "@/components/product-mark";
+import { VariantSelector } from "./variant-selector";
+import { SupplierQuotePanel } from "./supplier-quote-panel";
+import layout from "./product-detail.module.css";
+import { consumePlanReturn, trackStorefrontStep } from "@/lib/storefront-metrics";
+import styles from "./shop.module.css";
 import { cn } from "@/lib/cn";
 import { formatPrice, formatDate } from "@/lib/format";
+import { planDisplayLabel, variantDescription } from "@/lib/product-variant";
+import { availabilityLabel, availabilityOf, canBuyPlan } from "@/lib/product-availability";
 import type { Locale } from "@/lib/i18n";
-import type { CreateOrderResponse, PaymentConfig, PaymentMethod, ProductDetail } from "@/lib/types";
+import type { CheckoutMethods } from "@/lib/product-availability";
+import type { CreateOrderResponse, PaymentMethod, ProductDetail } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 
 function stars(n: number): string {
@@ -26,20 +34,23 @@ function stars(n: number): string {
 
 export function ProductDetailView({
   locale,
-  slug,
+  product,
+  requestedPlanId,
+  payment,
   dict,
 }: {
   locale: Locale;
-  slug: string;
+  product: ProductDetail;
+  requestedPlanId?: string;
+  payment: CheckoutMethods | null;
   dict: Dictionary;
 }) {
-  const { data, loading, error } = useApi<{ product: ProductDetail }>(`/products/${slug}`);
-  const paymentConfig = useApi<PaymentConfig>("/payments/config");
+  const { slug } = product;
   const { user, token } = useAuth();
   const router = useRouter();
   const t = dict.product;
 
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<string | null | undefined>(undefined);
   const [activeImage, setActiveImage] = useState(0);
   const [tab, setTab] = useState<"description" | "specs" | "reviews">("description");
   const [buying, setBuying] = useState<PaymentMethod | null>(null);
@@ -53,34 +64,53 @@ export function ProductDetailView({
 
   const [reviewsList, setReviewsList] = useState<
     Array<ProductDetail["reviews"][number] & { isPendingLocal?: boolean }>
-  >([]);
+  >(product.reviews);
 
-  useEffect(() => {
-    if (data?.product) {
-      const reviews = data.product.reviews;
-      queueMicrotask(() => setReviewsList(reviews));
-    }
-  }, [data]);
-
-  if (loading) {
-    return (
-      <Container className="py-20 text-center">
-        <Spinner className="size-6" />
-      </Container>
-    );
-  }
-  if (error || !data) {
-    return <Container className="py-20 text-center text-muted">{t.notFound}</Container>;
-  }
-
-  const product = data.product;
   const images = [
-    ...(product.hasImage ? [assetUrl(`/products/${product.id}/image`)] : []),
+    ...(productImageUrl(product) ? [productImageUrl(product)!] : []),
     ...product.galleryImageIds.map((id) => assetUrl(`/product-images/${id}`)),
   ];
-  const activePlanId =
-    selectedPlan ?? product.plans.find((p) => p.inStock)?.id ?? product.plans[0]?.id ?? null;
+  const requestedPlan = product.plans.find(
+    (p) =>
+      p.id === requestedPlanId &&
+      availabilityOf(p) !== "OUT_OF_STOCK" &&
+      (p.inStock || p.quoteRequired),
+  );
+  const defaultPlan =
+    requestedPlanId === undefined
+      ? (product.plans.find((p) => availabilityOf(p) === "LOCAL_STOCK") ??
+        product.plans.find((p) => p.inStock) ??
+        product.plans[0])
+      : requestedPlan;
+  const activePlanId = selectedPlan === undefined ? (defaultPlan?.id ?? null) : selectedPlan;
   const plan = product.plans.find((p) => p.id === activePlanId) ?? null;
+  const canBuy = !!plan && canBuyPlan(plan, payment);
+  const localeFa = locale === "fa";
+  const staleSelection = requestedPlanId !== undefined && !requestedPlan && !plan;
+  const returnPath = `/${locale}/products/${encodeURIComponent(slug)}${plan ? `?plan=${encodeURIComponent(plan.id)}` : ""}`;
+  const loginPath = `/${locale}/login?next=${encodeURIComponent(returnPath)}`;
+  const viewedSlug = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (viewedSlug.current === slug) return;
+    viewedSlug.current = slug;
+    trackStorefrontStep("product_viewed");
+  }, [slug]);
+
+  useEffect(() => {
+    if (user && token) consumePlanReturn(locale, slug, requestedPlan?.id ?? null);
+  }, [user, token, locale, slug, requestedPlan?.id]);
+
+  function selectPlan(id: string | null) {
+    setSelectedPlan(id);
+    setBuyError(null);
+    if (id) trackStorefrontStep("plan_selected");
+  }
+
+  function loginForPlan() {
+    trackStorefrontStep("plan_login_started");
+    router.push(loginPath);
+  }
 
   const cardLabels = {
     from: dict.common.from,
@@ -92,9 +122,10 @@ export function ProductDetailView({
   };
 
   async function buy(method: PaymentMethod) {
-    if (!plan) return;
+    const methodEnabled = method === "online" ? payment?.online : payment?.cardToCard;
+    if (!plan || !canBuy || !methodEnabled || buying !== null) return;
     if (!user || !token) {
-      router.push(`/${locale}/login?next=${encodeURIComponent(`/${locale}/products/${slug}`)}`);
+      loginForPlan();
       return;
     }
     setBuying(method);
@@ -123,7 +154,7 @@ export function ProductDetailView({
 
   async function submitReview() {
     if (!user || !token) {
-      router.push(`/${locale}/login?next=${encodeURIComponent(`/${locale}/products/${slug}`)}`);
+      router.push(loginPath);
       return;
     }
     setReviewBusy(true);
@@ -139,7 +170,7 @@ export function ProductDetailView({
         createdAt: new Date().toISOString(),
         isPendingLocal: true,
       };
-      setReviewsList((prev) => [newReview, ...prev]);
+      setReviewsList((prev) => [newReview, ...prev.filter((r) => !r.isPendingLocal)]);
 
       setComment("");
       setReviewMsg(t.reviewThanks);
@@ -150,62 +181,133 @@ export function ProductDetailView({
     }
   }
 
+  const planPicker = product.plans.some((p) => p.variant) ? (
+    <VariantSelector
+      key={slug + JSON.stringify(product.plans.map((p) => [p.id, p.variant, p.durationDays]))}
+      plans={product.plans}
+      value={activePlanId}
+      onChange={selectPlan}
+      locale={locale}
+    />
+  ) : (
+    <details className="mt-3 rounded-xl border border-border" open={product.plans.length === 1}>
+      <summary className="min-h-14 cursor-pointer p-4 font-medium">
+        {locale === "fa" ? "انتخاب نوع اشتراک" : "Choose subscription"}
+        {plan && (
+          <bdi className="mt-1 block text-sm font-normal text-muted">
+            {planDisplayLabel(plan.label, localeFa)}
+          </bdi>
+        )}
+      </summary>
+      <div className="max-h-[32rem] space-y-2 overflow-y-auto border-t border-border p-4">
+        {product.plans.map((pl) => (
+          <label
+            key={pl.id}
+            className={cn(
+              "flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-lg border p-3 transition-colors",
+              activePlanId === pl.id ? "border-primary bg-surface" : "border-border",
+              !pl.inStock && !pl.quoteRequired && "cursor-not-allowed opacity-60",
+            )}
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <input
+                type="radio"
+                name="plan"
+                className="accent-primary"
+                checked={activePlanId === pl.id}
+                disabled={!pl.inStock && !pl.quoteRequired}
+                onChange={() => selectPlan(pl.id)}
+              />
+              <span className="break-words font-medium">
+                <bdi>{planDisplayLabel(pl.label, locale === "fa")}</bdi>
+              </span>
+            </span>
+            <span className="flex flex-wrap items-center gap-3">
+              {!pl.quoteRequired && (
+                <span className="font-semibold">
+                  {pl.onSale && (
+                    <span className="me-2 text-xs text-muted line-through">
+                      {formatPrice(pl.price, pl.currency, locale)}
+                    </span>
+                  )}
+                  {formatPrice(pl.effectivePrice, pl.currency, locale)}
+                </span>
+              )}
+              <Badge tone={availabilityOf(pl) === "LOCAL_STOCK" ? "success" : "muted"}>
+                {availabilityLabel(pl, locale)}
+              </Badge>
+            </span>
+          </label>
+        ))}
+      </div>
+    </details>
+  );
+
   return (
-    <Container className="py-8 animate-fade-in">
+    <Container className={styles.detail}>
       {/* Breadcrumb */}
-      <nav className="mb-4 flex flex-wrap items-center gap-1 text-sm text-muted">
+      <nav
+        aria-label={locale === "fa" ? "مسیر صفحه" : "Breadcrumb"}
+        className={cn("flex flex-wrap items-center text-muted", styles.detailBreadcrumb)}
+      >
         <Link href={`/${locale}`} className="hover:text-foreground">
           {dict.nav.home}
         </Link>
-        <span>/</span>
+        <span aria-hidden="true">/</span>
         <Link
           href={`/${locale}/products?category=${product.category.slug}`}
           className="hover:text-foreground"
         >
           {product.category.name}
         </Link>
-        <span>/</span>
-        <span className="text-foreground">{product.name}</span>
+        <span aria-hidden="true">/</span>
+        <span className="text-foreground" aria-current="page">
+          <bdi>{product.name}</bdi>
+        </span>
       </nav>
 
-      <div className="grid gap-8 lg:grid-cols-2">
+      <div
+        className={cn(
+          layout.overview,
+          images.length > 0 ? layout.withGallery : layout.withoutGallery,
+        )}
+      >
         {/* Gallery */}
-        <div>
-          <div className="aspect-[4/3] overflow-hidden rounded-xl border border-border bg-surface">
-            {images.length > 0 ? (
-              // eslint-disable-next-line @next/next/no-img-element
+        {images.length > 0 && (
+          <div className={layout.media}>
+            <div className={styles.gallery}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={images[activeImage] ?? images[0]}
+                fetchPriority="high"
                 alt={product.name}
                 className="h-full w-full object-cover"
               />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-6xl font-bold text-muted/30">
-                {product.name.charAt(0)}
+            </div>
+            {images.length > 1 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {images.map((src, i) => (
+                  <button
+                    key={i}
+                    aria-label={`${product.name} — ${i + 1}`}
+                    aria-pressed={activeImage === i}
+                    onClick={() => setActiveImage(i)}
+                    className={cn(
+                      "size-16 overflow-hidden rounded-lg border",
+                      i === activeImage ? "border-primary" : "border-border",
+                    )}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={src} alt="" className="h-full w-full object-cover" />
+                  </button>
+                ))}
               </div>
             )}
           </div>
-          {images.length > 1 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {images.map((src, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveImage(i)}
-                  className={cn(
-                    "size-16 overflow-hidden rounded-lg border",
-                    i === activeImage ? "border-primary" : "border-border",
-                  )}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={src} alt="" className="h-full w-full object-cover" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Info */}
-        <div>
+        <div className={cn(layout.intro, styles.detailInfo)}>
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Badge tone="muted">{product.category.name}</Badge>
             {product.isFeatured && <Badge tone="primary">{t.featured}</Badge>}
@@ -215,7 +317,10 @@ export function ProductDetailView({
               </Badge>
             )}
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">{product.name}</h1>
+          <h1 className={layout.title}>
+            {!images.length && <ProductMark type={product.type} className={layout.mark} />}
+            <bdi>{product.name}</bdi>
+          </h1>
 
           {product.rating.count > 0 && (
             <p className="mt-2 text-sm text-amber-400">
@@ -229,10 +334,45 @@ export function ProductDetailView({
           {product.shortDescription && (
             <p className="mt-3 text-muted">{product.shortDescription}</p>
           )}
-
-          {/* Price */}
+        </div>
+        {/* Plans */}
+        <Card className={cn(layout.purchase, styles.planCard)}>
+          <h2 className="font-semibold">{t.perPlan}</h2>
+          {staleSelection && (
+            <p role="alert" className="mt-3 text-sm text-danger">
+              {localeFa
+                ? "پلن قبلی دیگر در دسترس نیست. یک پلن را دوباره انتخاب کن."
+                : "Your previous plan is unavailable. Please choose a plan again."}
+            </p>
+          )}
+          {!plan && planPicker}
           {plan && (
-            <div className="mt-5 flex items-end gap-3">
+            <div className={layout.terms}>
+              <p className="font-semibold">
+                <bdi>{planDisplayLabel(plan.label, localeFa)}</bdi>
+              </p>
+              <p>
+                {plan.durationDays == null
+                  ? plan.quoteRequired
+                    ? localeFa
+                      ? "مدت طبق عنوان پلن"
+                      : "See plan title for duration"
+                    : localeFa
+                      ? "بدون انقضا"
+                      : "Perpetual"
+                  : `${plan.durationDays.toLocaleString(locale)} ${localeFa ? "روز" : "days"}`}
+                {" · "}
+                {plan.variant
+                  ? variantDescription(plan.variant, localeFa)
+                  : localeFa
+                    ? "دسترسی و ضمانت مشخص نشده"
+                    : "Access and warranty unspecified"}
+              </p>
+            </div>
+          )}
+          {/* Price */}
+          {plan && !plan.quoteRequired && (
+            <div className={cn("mt-2 flex flex-wrap items-end gap-3", styles.detailPrice)}>
               <span className="text-3xl font-bold">
                 {formatPrice(plan.effectivePrice, plan.currency, locale)}
               </span>
@@ -244,99 +384,142 @@ export function ProductDetailView({
             </div>
           )}
 
-          {/* Plans */}
-          <Card className="mt-5 h-fit">
-            <h2 className="font-semibold">{t.perPlan}</h2>
-            <div className="mt-3 space-y-2">
-              {product.plans.map((pl) => (
-                <label
-                  key={pl.id}
-                  className={cn(
-                    "flex cursor-pointer items-center justify-between rounded-lg border p-3 transition-colors",
-                    activePlanId === pl.id ? "border-primary bg-surface" : "border-border",
-                    !pl.inStock && "cursor-not-allowed opacity-50",
-                  )}
-                >
-                  <span className="flex items-center gap-3">
-                    <input
-                      type="radio"
-                      name="plan"
-                      className="accent-primary"
-                      checked={activePlanId === pl.id}
-                      disabled={!pl.inStock}
-                      onChange={() => setSelectedPlan(pl.id)}
-                    />
-                    <span className="font-medium">{pl.label}</span>
-                  </span>
-                  <span className="flex items-center gap-3">
-                    <span className="font-semibold">
-                      {pl.onSale && (
-                        <span className="me-2 text-xs text-muted line-through">
-                          {formatPrice(pl.price, pl.currency, locale)}
-                        </span>
-                      )}
-                      {formatPrice(pl.effectivePrice, pl.currency, locale)}
-                    </span>
-                    <Badge tone={pl.inStock ? "success" : "danger"}>
-                      {pl.inStock ? dict.common.inStock : dict.common.outOfStock}
-                    </Badge>
-                  </span>
-                </label>
-              ))}
-            </div>
-
-            {product.lowStock && (
-              <p className="mt-3 text-sm text-danger">
-                {product.availableStock} {t.left}
-              </p>
-            )}
-            {buyError && <p className="mt-3 text-sm text-danger">{buyError}</p>}
-
-            <Button
-              className="mt-4 w-full"
-              size="lg"
-              disabled={!plan || !plan.inStock || buying !== null}
-              onClick={() => buy("online")}
-            >
-              {buying === "online" ? (
-                <>
-                  <Spinner /> {t.purchasing}
-                </>
-              ) : !product.inStock ? (
-                t.soldOut
-              ) : !user ? (
-                t.loginToBuy
-              ) : (
-                dict.common.buyNow
+          {plan && (
+            <div className="mt-4 flex flex-wrap items-center gap-2" aria-live="polite">
+              <Badge tone={availabilityOf(plan) === "LOCAL_STOCK" ? "success" : "muted"}>
+                {availabilityLabel(plan, locale)}
+              </Badge>
+              {canBuy && (
+                <span className="text-sm text-primary">
+                  {localeFa ? "آمادهٔ خرید" : "Ready to purchase"}
+                </span>
               )}
-            </Button>
+            </div>
+          )}
+          {plan?.quoteRequired && (
+            <SupplierQuotePanel
+              key={plan.id + JSON.stringify(plan.variant) + (token ?? "anonymous")}
+              plan={plan}
+              token={token}
+              locale={locale}
+              loginPath={loginPath}
+            />
+          )}
+          {plan && availabilityOf(plan) === "LOCAL_STOCK" && plan.availableStock <= 5 && (
+            <p className="mt-3 text-sm text-danger">
+              {plan.availableStock.toLocaleString(locale)} {t.left}
+            </p>
+          )}
+          {buyError && <p className="mt-3 text-sm text-danger">{buyError}</p>}
 
-            {paymentConfig.data?.cardToCard && product.inStock && (
-              <Button
-                className="mt-2 w-full"
-                size="lg"
-                variant="outline"
-                disabled={!plan || !plan.inStock || buying !== null}
-                onClick={() => buy("card_to_card")}
-              >
-                {buying === "card_to_card" ? (
-                  <>
-                    <Spinner /> {dict.checkout.cardToCard.uploading}
-                  </>
-                ) : (
-                  dict.checkout.payCardToCard
-                )}
-              </Button>
-            )}
+          {plan && !plan.quoteRequired && availabilityOf(plan) === "LOCAL_STOCK" && (
+            <>
+              {canBuy && payment?.online && (
+                <Button
+                  className="mt-4 w-full"
+                  size="lg"
+                  disabled={buying !== null}
+                  onClick={() => buy("online")}
+                >
+                  {buying === "online" ? (
+                    <>
+                      <Spinner /> {t.purchasing}
+                    </>
+                  ) : !user ? (
+                    t.loginToBuy
+                  ) : (
+                    dict.common.buyNow
+                  )}
+                </Button>
+              )}
 
-            <p className="mt-3 text-center text-xs text-muted">⚡ {t.instantDelivery}</p>
-          </Card>
+              {canBuy && payment?.cardToCard && (
+                <Button
+                  className="mt-2 w-full"
+                  size="lg"
+                  variant="outline"
+                  disabled={buying !== null}
+                  onClick={() => buy("card_to_card")}
+                >
+                  {buying === "card_to_card" ? (
+                    <>
+                      <Spinner /> {dict.checkout.cardToCard.uploading}
+                    </>
+                  ) : (
+                    dict.checkout.payCardToCard
+                  )}
+                </Button>
+              )}
+
+              {!canBuy && (
+                <p role="status" className="mt-3 text-sm text-muted">
+                  {localeFa
+                    ? "خرید این پلن فعلاً فعال نیست."
+                    : "Checkout is currently unavailable for this plan."}
+                </p>
+              )}
+              {canBuy && payment?.cardToCard && (
+                <p className="mt-2 text-center text-xs text-muted">
+                  {locale === "fa"
+                    ? "تحویل کارت‌به‌کارت پس از تأیید رسید توسط پشتیبانی انجام می‌شود."
+                    : "Card transfers are delivered after receipt approval."}
+                </p>
+              )}
+            </>
+          )}
+          {plan && (
+            <div className={layout.change}>
+              <h3 className="text-sm font-semibold">{localeFa ? "تغییر پلن" : "Change plan"}</h3>
+              {planPicker}
+            </div>
+          )}
+          {plan?.variant && (
+            <details key={plan.id} className="mt-4 rounded-xl border border-border">
+              <summary className="min-h-12 cursor-pointer p-4 text-sm font-medium">
+                {locale === "fa" ? "شرایط اشتراک انتخاب‌شده" : "Selected subscription terms"}
+              </summary>
+              <div className="space-y-3 border-t border-border p-4 text-sm leading-7">
+                <p className="text-muted">
+                  {locale === "fa"
+                    ? "برای پیگیری مشکل، شمارهٔ سفارش و شرح خطا را در تیکت ثبت کن. رمز حساب و کد تأیید را در تیکت ننویس."
+                    : "For support, include the order number and error description in a ticket. Keep passwords and verification codes out of tickets."}
+                </p>
+                <button
+                  type="button"
+                  className="min-h-11 text-primary underline underline-offset-4"
+                  onClick={() => {
+                    setTab("description");
+                    requestAnimationFrame(() => {
+                      document
+                        .getElementById("product-tab-description")
+                        ?.focus({ preventScroll: true });
+                      document.getElementById("product-panel")?.scrollIntoView({ block: "start" });
+                    });
+                  }}
+                >
+                  {locale === "fa"
+                    ? "خواندن توضیحات و شرایط کامل محصول"
+                    : "Read the full product description and terms"}
+                </button>
+              </div>
+            </details>
+          )}
+        </Card>
+        <div className={cn(layout.support, styles.supportNote)}>
+          <span>
+            {locale === "fa"
+              ? "نوع دسترسی و شرایط پلن را پیش از خرید بررسی کن."
+              : "Review access type and plan terms before buying."}
+          </span>
+          <a href="https://t.me/oostaAiSupport" target="_blank" rel="noopener noreferrer">
+            {locale === "fa" ? "پرسش پیش از خرید در تلگرام" : "Ask before buying on Telegram"} ↗
+          </a>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="mt-10">
-        <div className="flex gap-1 border-b border-border">
+      <div className={styles.detailTabs}>
+        <div role="tablist" aria-label={product.name} className="flex gap-1 border-b border-border">
           {(
             [
               ["description", t.tabDescription],
@@ -346,6 +529,27 @@ export function ProductDetailView({
           ).map(([key, label]) => (
             <button
               key={key}
+              role="tab"
+              id={`product-tab-${key}`}
+              aria-controls="product-panel"
+              aria-selected={tab === key}
+              tabIndex={tab === key ? 0 : -1}
+              onKeyDown={(event) => {
+                if (event.altKey || event.ctrlKey || event.metaKey) return;
+                const keys = ["description", "specs", "reviews"] as const;
+                const index = keys.indexOf(key);
+                let next = index;
+                if (event.key === "Home") next = 0;
+                else if (event.key === "End") next = keys.length - 1;
+                else if (event.key === "ArrowRight")
+                  next = (index + (locale === "fa" ? -1 : 1) + keys.length) % keys.length;
+                else if (event.key === "ArrowLeft")
+                  next = (index + (locale === "fa" ? 1 : -1) + keys.length) % keys.length;
+                else return;
+                event.preventDefault();
+                setTab(keys[next]);
+                document.getElementById(`product-tab-${keys[next]}`)?.focus();
+              }}
               onClick={() => setTab(key)}
               className={cn(
                 "border-b-2 px-4 py-3 text-sm transition-colors",
@@ -359,8 +563,19 @@ export function ProductDetailView({
           ))}
         </div>
 
-        <div className="py-6">
-          {tab === "description" && <Markdown text={product.description} className="text-muted" />}
+        <div
+          role="tabpanel"
+          id="product-panel"
+          aria-labelledby={`product-tab-${tab}`}
+          className="py-6"
+        >
+          {tab === "description" && (
+            <Markdown
+              text={product.description}
+              headingOffset={0}
+              className="max-w-4xl text-muted [&_p]:leading-8"
+            />
+          )}
 
           {tab === "specs" &&
             (product.specs.length === 0 ? (
@@ -415,7 +630,7 @@ export function ProductDetailView({
                 <h3 className="font-semibold">{t.writeReview}</h3>
                 {!user ? (
                   <Link
-                    href={`/${locale}/login?next=${encodeURIComponent(`/${locale}/products/${slug}`)}`}
+                    href={loginPath}
                     className="mt-2 inline-block text-sm text-primary hover:underline"
                   >
                     {t.loginToReview}
@@ -428,6 +643,8 @@ export function ProductDetailView({
                         {[1, 2, 3, 4, 5].map((n) => (
                           <button
                             key={n}
+                            aria-label={`${n} / 5`}
+                            aria-pressed={n === rating}
                             type="button"
                             onClick={() => setRating(n)}
                             className={n <= rating ? "text-amber-400" : "text-muted/40"}

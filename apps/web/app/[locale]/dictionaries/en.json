@@ -1,7 +1,11 @@
 {
   "meta": {
-    "title": "oostaAI — Digital products, delivered instantly",
-    "description": "Buy AI accounts, software licenses and gift cards with automatic instant delivery — your purchase is in your dashboard seconds after payment."
+    "title": "Oosta AI — Learning, prompts and digital tools",
+    "description": "Practical AI tutorials, prompts and tool guides, alongside subscriptions, software licenses and digital products.",
+    "catalogTitle": "AI subscriptions, software licenses and digital products",
+    "catalogDescription": "Browse ChatGPT, Claude, Gemini, Cursor, Spotify and other subscriptions with plan details, delivery method and stock status at oostaAI.",
+    "blogTitle": "oostaAI blog: AI tool guides and prompting",
+    "blogDescription": "AI tool comparisons, buying guides, prompting tutorials and practical tips for work and learning."
   },
   "nav": {
     "home": "Home",
@@ -13,7 +17,7 @@
     "logout": "Log out",
     "account": "Account",
     "support": "Support",
-    "blog": "Blog"
+    "blog": "Journal"
   },
   "common": {
     "loading": "Loading…",
@@ -33,8 +37,8 @@
     "somethingWrong": "Something went wrong."
   },
   "home": {
-    "heroTitle": "Everything digital,",
-    "heroSubtitle": "AI accounts, software licenses, and gift cards with secure payment and fully automatic dashboard delivery.",
+    "heroTitle": "AI tools &\ndigital subscriptions",
+    "heroSubtitle": "Find the tool you need and compare plans by price, duration, warranty, and delivery.",
     "browse": "Browse products",
     "browseSecondary": "Read the blog",
     "categories": "Categories",
@@ -88,7 +92,7 @@
     "signupTitle": "Create your account",
     "emailOrPhone": "Email or phone",
     "email": "Email",
-    "phone": "Phone (optional)",
+    "phone": "Phone number",
     "password": "Password",
     "name": "Name",
     "loginCta": "Log in",
@@ -96,7 +100,16 @@
     "haveAccount": "Already have an account?",
     "noAccount": "Don't have an account?",
     "submitting": "Please wait…",
-    "contactHint": "Provide an email or a phone number."
+    "contactHint": "Enter either an email or a phone number",
+    "panelEyebrow": "Oosta account",
+    "panelTitle": "Your purchases and deliveries, in one place",
+    "panelPoints": [
+      "Orders and delivered details stay in your dashboard",
+      "Follow up and get help through support tickets",
+      "Changing your password signs out every other device"
+    ],
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "checkout": {
     "verifying": "Confirming your payment…",
@@ -132,7 +145,47 @@
       "uploadedOn": "Uploaded",
       "viewOrder": "View order",
       "selectFile": "Please choose a receipt file.",
-      "notAvailable": "This order can no longer accept a receipt."
+      "notAvailable": "This order can no longer accept a receipt.",
+      "deskTitle": "Oosta payment desk",
+      "deskIntro": "Make your transfer. Send your receipt here.",
+      "transferStep": "Bank transfer",
+      "receiptStep": "Send receipt",
+      "reviewStep": "Payment review",
+      "destination": "Destination card",
+      "transferNote": "Check the amount and cardholder before transferring",
+      "qaInvoice": "Test invoice for checking a Blu bank deposit",
+      "invoiceBase": "Item subtotal",
+      "invoiceDiscount": "Unique amount discount",
+      "invoiceDeadline": "Transfer deadline",
+      "invoiceExpired": "The transfer deadline has passed. If you already paid, upload your receipt for review.",
+      "amountNote": "Amount due for this order",
+      "dropTitle": "Your receipt goes here",
+      "dropHint": "Drag and drop a file, or choose one from your device",
+      "chooseFile": "Choose receipt",
+      "changeFile": "Replace file",
+      "removeFile": "Remove file",
+      "previewAlt": "Selected receipt preview",
+      "fileHint": "Image or PDF, up to 5 MB",
+      "fileTypeError": "Choose a JPG, PNG, WebP, GIF or PDF receipt",
+      "fileSizeError": "Your receipt must be 5 MB or smaller",
+      "fileEmptyError": "This file is empty. Choose another receipt.",
+      "referenceHint": "Optional: transfer reference or a short note",
+      "bluReferenceRequired": "Enter the bank tracking or reference number.",
+      "reviewNote": "Your receipt has arrived. Payment is confirmed after review. Do not transfer again while waiting.",
+      "anotherReceipt": "Send another receipt",
+      "noRepay": "Payment is confirmed. Do not pay again. Your delivery is being followed up.",
+      "closedTitle": "This payment step is closed",
+      "closedBody": "Follow the status and details on your order page",
+      "copyFailed": "Unable to copy. Select the card number and copy it manually.",
+      "refresh": "Refresh status",
+      "retry": "Try again",
+      "back": "Back to order",
+      "receiptNote": "Send only this order’s receipt. Bank login details are not needed.",
+      "summary": "Order summary",
+      "cardUnavailable": "Destination details are unavailable. Contact support before transferring.",
+      "sent": "Your receipt has arrived",
+      "copying": "Copying…",
+      "statusIntro": "Follow the payment and receipts for this order"
     }
   },
   "dashboard": {
@@ -163,8 +216,11 @@
       "FAILED": "Failed",
       "REJECTED": "Rejected",
       "REFUNDED": "Refunded",
-      "EXPIRED": "Expired"
-    }
+      "EXPIRED": "Expired",
+      "PAID_PENDING_FULFILLMENT": "Payment received; awaiting delivery"
+    },
+    "pendingFulfillmentTitle": "Payment confirmed; awaiting delivery",
+    "pendingFulfillmentBody": "Do not pay again. Your order is waiting for stock and delivery. Contact support for an update."
   },
   "blog": {
     "title": "Blog",
@@ -185,7 +241,11 @@
     "staff": "Support",
     "writeReply": "Write a reply…",
     "created": "Ticket created.",
-    "status": { "OPEN": "Open", "ANSWERED": "Answered", "CLOSED": "Closed" }
+    "status": {
+      "OPEN": "Open",
+      "ANSWERED": "Answered",
+      "CLOSED": "Closed"
+    }
   },
   "admin": {
     "title": "Admin",
@@ -204,7 +264,11 @@
       "writeReply": "Write a reply…",
       "staff": "Staff",
       "you": "Customer",
-      "status": { "OPEN": "Open", "ANSWERED": "Answered", "CLOSED": "Closed" }
+      "status": {
+        "OPEN": "Open",
+        "ANSWERED": "Answered",
+        "CLOSED": "Closed"
+      }
     },
     "blogTab": "Blog",
     "blog": {
@@ -219,6 +283,8 @@
       "draft": "Draft",
       "published": "Published",
       "cover": "Cover image",
+      "coverAlt": "Cover image description (alt)",
+      "coverAltHint": "For screen readers and search; leave empty if the image is decorative.",
       "uploadCover": "Set cover",
       "changeCover": "Change cover",
       "uploadMedia": "Upload media",
@@ -293,6 +359,21 @@
       "usage": "Send it as an X-API-Key header (or Authorization: Bearer). Base URL:"
     },
     "dashboardTab": "Dashboard",
+    "bluStatus": {
+      "title": "Blu receipt checks",
+      "preview": "Preview",
+      "lastCheck": "Last check",
+      "refresh": "Refresh",
+      "loading": "Loading status",
+      "waiting": "Waiting for the first run",
+      "idle": "No receipts to check",
+      "matched": "Receipt matched a bank deposit",
+      "pending": "No matching deposit found yet",
+      "review": "Result needs admin review",
+      "enrollmentRequired": "Sign in to Blu again",
+      "unavailable": "Receipt check status is unavailable",
+      "stale": "The scheduler has been silent for over 10 minutes"
+    },
     "dash": {
       "title": "Dashboard",
       "revenue": "Total revenue",
@@ -415,6 +496,11 @@
       "working": "Working…"
     },
     "receipts": {
+      "bluEvidence": {
+        "matched": "Matched by Blu",
+        "waiting": "Waiting for a Blu match",
+        "review": "Conflicting Blu evidence"
+      },
       "title": "Receipts",
       "tab": "Receipts",
       "pending": "Pending",
@@ -438,10 +524,10 @@
     }
   },
   "footer": {
-    "tagline": "Instant digital goods delivery",
+    "tagline": "Learn. Try. Move your ideas forward.",
     "rights": "All rights reserved.",
     "aboutTitle": "About oostaAI",
-    "aboutDefault": "oostaAI sells AI accounts, software licenses and gift cards with fully automatic delivery — your purchase is in your dashboard seconds after payment.",
+    "aboutDefault": "Your companion for learning AI, writing better prompts and choosing tools for research, content and everyday work.",
     "shopTitle": "Shop",
     "supportTitle": "Customer care",
     "contactTitle": "Contact",

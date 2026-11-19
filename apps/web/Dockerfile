@@ -11,6 +11,10 @@ RUN npm ci
 COPY apps/web ./apps/web
 ARG NEXT_PUBLIC_API_URL=http://localhost:4000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Public site origin (e.g. https://your-domain) for absolute URLs in metadata of
+# pages prerendered here. Empty keeps the old fallback (derived from the API URL).
+ARG NEXT_PUBLIC_WEB_URL=
+ENV NEXT_PUBLIC_WEB_URL=$NEXT_PUBLIC_WEB_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build -w @oosta/web
 

@@ -5,14 +5,19 @@ import { prisma } from "../../lib/prisma";
 import { hashPassword, verifyPassword } from "../../lib/password";
 import { signAccessToken } from "../../lib/jwt";
 import { AppError } from "../../utils/httpError";
-import type { LoginInput, SignupInput } from "./auth.schemas";
+import type { ChangePasswordInput, LoginInput, SignupInput } from "./auth.schemas";
 
-export type PublicUser = Omit<User, "passwordHash">;
+export type PublicUser = Omit<User, "passwordHash" | "sessionVersion">;
 export type AuthResult = { user: PublicUser; token: string };
+const dummyPasswordHash = hashPassword("oosta-account-that-does-not-exist");
 
 function toPublicUser(user: User): PublicUser {
-  const { passwordHash: _passwordHash, ...rest } = user;
+  const { passwordHash: _passwordHash, sessionVersion: _sessionVersion, ...rest } = user;
   return rest;
+}
+
+function issueToken(user: User): string {
+  return signAccessToken({ sub: user.id, role: user.role, sv: user.sessionVersion });
 }
 
 export async function registerUser(input: SignupInput): Promise<AuthResult> {
@@ -44,7 +49,7 @@ export async function registerUser(input: SignupInput): Promise<AuthResult> {
     throw error;
   }
 
-  return { user: toPublicUser(user), token: signAccessToken({ sub: user.id, role: user.role }) };
+  return { user: toPublicUser(user), token: issueToken(user) };
 }
 
 export async function loginUser(input: LoginInput): Promise<AuthResult> {
@@ -53,12 +58,56 @@ export async function loginUser(input: LoginInput): Promise<AuthResult> {
     where: { OR: [{ email: identifier }, { phone: identifier }] },
   });
 
-  // Verify password even when the user is absent? Keep it simple: uniform error message.
-  if (!user || !(await verifyPassword(input.password, user.passwordHash))) {
+  // Keep the expensive password check on both paths to reduce timing enumeration.
+  const validPassword = await verifyPassword(
+    input.password,
+    user?.passwordHash ?? (await dummyPasswordHash),
+  );
+  if (!user || !validPassword) {
     throw new AppError(401, "UNAUTHORIZED", "Invalid credentials");
   }
 
-  return { user: toPublicUser(user), token: signAccessToken({ sub: user.id, role: user.role }) };
+  return { user: toPublicUser(user), token: issueToken(user) };
+}
+
+// Requires the current password, then rotates the hash and bumps sessionVersion in
+// one update so every token issued before the change (other devices, a stolen copy)
+// stops working. Returns a fresh token for the caller's own session.
+export async function changePassword(
+  userId: string,
+  input: ChangePasswordInput,
+): Promise<AuthResult> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError(401, "UNAUTHORIZED", "User no longer exists");
+  if (!(await verifyPassword(input.currentPassword, user.passwordHash))) {
+    // 400, not 401: the session itself is valid and clients drop sessions on 401.
+    throw new AppError(400, "INVALID_CURRENT_PASSWORD", "Current password is incorrect");
+  }
+  const passwordHash = await hashPassword(input.newPassword);
+  let updated: User;
+  try {
+    updated = await prisma.user.update({
+      where: { id: userId, passwordHash: user.passwordHash, sessionVersion: user.sessionVersion },
+      data: { passwordHash, sessionVersion: { increment: 1 } },
+    });
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2025")
+      throw new AppError(
+        409,
+        "CREDENTIALS_CHANGED",
+        "Credentials changed during this request. Sign in again.",
+      );
+    throw error;
+  }
+  return { user: toPublicUser(updated), token: issueToken(updated) };
+}
+
+// "Log out on every device": revokes all existing tokens for this user.
+export async function revokeAllSessions(userId: string): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { sessionVersion: { increment: 1 } },
+  });
 }
 
 export async function getUserById(id: string): Promise<PublicUser> {

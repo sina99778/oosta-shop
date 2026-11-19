@@ -1,6 +1,7 @@
 // Zod schemas for admin (role-guarded) endpoints.
 
 import { z } from "zod";
+import { mappingSchema, variantSchema } from "../suppliers/variant";
 
 const slug = z
   .string()
@@ -47,11 +48,16 @@ export const updateProductSchema = createProductSchema
 export const createPlanSchema = z.object({
   label: z.string().trim().min(1).max(100),
   durationDays: z.coerce.number().int().min(1).nullable().optional(),
-  price: z.coerce.number().positive(),
+  price: z.coerce.number().positive().max(9999999999.99).multipleOf(0.01),
   // number = set a sale price; null = clear it; absent = leave unchanged.
-  salePrice: z.union([z.coerce.number().positive(), z.null()]).optional(),
-  currency: z.string().trim().min(1).max(10).optional(),
+  salePrice: z
+    .union([z.coerce.number().positive().max(9999999999.99).multipleOf(0.01), z.null()])
+    .optional(),
+  currency: z.enum(["IRR", "IRT"]).optional(),
   isActive: z.boolean().optional(),
+  source: z.enum(["INTERNAL", "SUPPLIER"]).optional(),
+  variant: variantSchema.nullable().optional(),
+  supplierMappings: z.array(mappingSchema).max(20).optional(),
 });
 export const updatePlanSchema = createPlanSchema
   .partial()
@@ -81,8 +87,19 @@ export const inventoryQuerySchema = z.object({
 });
 
 export const ordersQuerySchema = z.object({
+  q: z.string().trim().toLowerCase().transform((q) => q.replace(/^#/, ""))
+    .pipe(z.string().regex(/^[a-z0-9]{8,100}$/)).optional(),
   status: z
-    .enum(["PENDING", "PENDING_REVIEW", "PAID", "FAILED", "REJECTED", "REFUNDED", "EXPIRED"])
+    .enum([
+      "PENDING",
+      "PENDING_REVIEW",
+      "PAID",
+      "FAILED",
+      "REJECTED",
+      "REFUNDED",
+      "EXPIRED",
+      "PAID_PENDING_FULFILLMENT",
+    ])
     .optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(50),
@@ -90,6 +107,7 @@ export const ordersQuerySchema = z.object({
 
 // Card-to-card receipts (review queue + full history).
 export const receiptsQuerySchema = z.object({
+  orderId: z.string().regex(/^[a-z0-9]{1,100}$/).optional(),
   status: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(50),

@@ -57,8 +57,12 @@ export function AdminApiKeys({ locale, dict }: { locale: Locale; dict: Dictionar
 
   async function revoke(id: string) {
     if (!token) return;
-    await api.del(`/admin/api-keys/${id}`, token).catch(() => {});
-    setReload((r) => r + 1);
+    try {
+      await api.del(`/admin/api-keys/${id}`, token);
+      setReload((r) => r + 1);
+    } catch {
+      setErr(dict.common.somethingWrong);
+    }
   }
 
   async function copyKey() {
@@ -84,13 +88,15 @@ export function AdminApiKeys({ locale, dict }: { locale: Locale; dict: Dictionar
       <Card className="space-y-3">
         <form onSubmit={create} className="flex flex-wrap items-end gap-2">
           <div className="min-w-48 flex-1">
-            <label className="mb-1 block text-sm text-muted">{t.name}</label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              placeholder="My AI assistant"
-            />
+            <label className="block">
+              <span className="mb-1 block text-sm text-muted">{t.name}</span>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                placeholder="My AI assistant"
+              />
+            </label>
           </div>
           <Button type="submit" disabled={busy}>
             {busy ? <Spinner /> : t.create}
