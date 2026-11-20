@@ -27,7 +27,7 @@
   grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
   gap: clamp(1.5rem, 5vw, 4rem);
   align-items: center;
-  padding-block: clamp(1.5rem, 3vw, 3rem);
+  padding-block: clamp(1.25rem, 2vw, 2rem);
 }
 .heroCopy {
   position: relative;
@@ -43,9 +43,9 @@
   margin-bottom: 20px;
 }
 .heroCopy h1 {
-  font-size: clamp(2rem, 4.25vw, 3.65rem);
+  font-size: clamp(1.85rem, 3.35vw, 3.15rem);
   font-weight: 800;
-  line-height: 1.35;
+  line-height: 1.25;
   text-wrap: balance;
   overflow-wrap: anywhere;
 }
@@ -60,14 +60,18 @@
   margin-top: 12px;
   color: #bdc8d3;
   font-size: 1rem;
-  line-height: 2.2;
+  line-height: 1.85;
 }
 .heroActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 24px;
+  gap: 8px 12px;
   align-items: center;
   margin-top: 0.65rem;
+}
+.heroActions a + a {
+  padding-inline-start: 12px;
+  border-inline-start: 1px solid #516578;
 }
 .heroSearch {
   --c-primary: var(--mint);
@@ -84,7 +88,7 @@
   min-height: 3.15rem;
   padding-inline: 0.85rem;
   border: 1px solid #5b7187;
-  border-radius: 0.35rem;
+  border-radius: var(--radius-control);
   background: #172a40;
   color: #f3f6f8;
   font-size: 1rem;
@@ -148,7 +152,7 @@
   margin: 0;
 }
 .brandStage {
-  width: 400px;
+  width: 320px;
   max-width: 90%;
   aspect-ratio: 1;
   position: relative;
@@ -167,6 +171,7 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
+  filter: saturate(0.7);
   display: block;
 }
 .learning,
@@ -287,9 +292,9 @@
 .promptPaper {
   background: #f3f2e9;
   color: #202f35;
-  box-shadow: 8px 8px 0 #4c746e;
+  border-radius: var(--radius-card);
+  box-shadow: 0 8px 24px rgb(12 35 48 / 20%);
   padding: 28px;
-  transform: rotate(-1deg);
   min-width: 0;
 }
 .promptTop {
@@ -492,9 +497,6 @@
   .home > :not(.hero) {
     margin-inline: 40px;
   }
-  .brandStage {
-    width: 320px;
-  }
   .readingCard {
     grid-template-columns: 120px 1fr;
   }
@@ -568,13 +570,11 @@
     display: contents;
   }
   .heroCopy p,
-  .heroSearch {
-    grid-column: 1 / -1;
-    margin: 0;
-  }
+  .heroSearch,
   .heroCopy .heroActions,
   .heroCopy .shortcuts {
-    display: none;
+    grid-column: 1 / -1;
+    margin: 0;
   }
   .heroCopy h1 {
     font-size: clamp(1.55rem, 5.7vw, 2.4rem);
@@ -659,8 +659,6 @@
   }
   .promptPaper {
     padding: 20px;
-    transform: none;
-    box-shadow: 5px 5px 0 #4c746e;
   }
   .promptLabel {
     font-size: 16px;

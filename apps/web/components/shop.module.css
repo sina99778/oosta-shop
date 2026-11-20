@@ -62,24 +62,9 @@
   font-size: 0.875rem;
   color: var(--c-muted);
 }
-.categoryDisclosure summary::-webkit-details-marker {
-  display: none;
-}
 .categoryDisclosure summary strong {
   color: var(--c-fg);
   font-weight: 600;
-}
-.disclosureArrow {
-  width: 8px;
-  height: 8px;
-  margin-inline-start: auto;
-  margin-inline-end: 4px;
-  border-inline-end: 1.5px solid currentColor;
-  border-block-end: 1.5px solid currentColor;
-  transform: rotate(45deg);
-}
-.categoryDisclosure[open] .disclosureArrow {
-  transform: rotate(225deg);
 }
 .categoryDisclosure[open] .categories {
   padding-block-start: 12px;
@@ -116,7 +101,7 @@
   color: var(--c-fg);
   min-width: 0;
   width: 100%;
-  border-radius: 0.4rem;
+  border-radius: var(--radius-control);
 }
 .searchForm select {
   min-width: 180px;
@@ -235,10 +220,10 @@
 .cardLink:hover .cardMark {
   transform: scale(1.04);
 }
-.cardMark {
-  width: auto !important;
-  height: auto !important;
-  background: transparent !important;
+.cardVisual .cardMark[aria-hidden="true"] {
+  width: auto;
+  height: auto;
+  background: transparent;
   color: var(--c-mint);
   transition: transform 0.35s;
 }
@@ -460,45 +445,29 @@
   white-space: nowrap;
 }
 .detail {
-  max-width: 1248px !important;
-  padding: 32px 40px !important;
+  max-width: 1248px;
+  padding: 32px 40px;
 }
 .detailBreadcrumb {
-  margin-bottom: 28px !important;
-  font-size: 0.8125rem !important;
-  gap: 12px !important;
+  margin-bottom: 28px;
+  font-size: 0.8125rem;
+  gap: 12px;
   line-height: 1.9;
-}
-.detailGrid {
-  gap: 48px !important;
-  align-items: start;
 }
 .gallery {
   position: relative;
   aspect-ratio: 35 / 24;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: var(--c-navy) !important;
+  border-radius: var(--radius-card);
+  background: var(--c-navy);
   display: grid;
   place-items: center;
   overflow: hidden;
-}
-.gallery img {
-  object-fit: contain !important;
-}
-.galleryMark {
-  width: 160px !important;
-  height: 160px !important;
-  background: var(--c-mint) !important;
-  color: #183b31 !important;
-  position: relative;
-  z-index: 1;
 }
 .detailInfo {
   min-width: 0;
 }
 .detailInfo > h1 {
-  font-size: clamp(2rem, 4vw, 2.375rem) !important;
+  font-size: clamp(2rem, 4vw, 2.375rem);
   font-weight: 750;
   line-height: 1.4;
   overflow-wrap: anywhere;
@@ -509,27 +478,11 @@
   line-height: 1.85;
 }
 .planCard {
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  padding: 24px !important;
-  margin-top: 28px !important;
-}
-.planCard label {
-  gap: 16px !important;
-  flex-wrap: wrap;
-  border-radius: 0 !important;
-  padding: 16px !important;
-  min-height: 64px;
-}
-.planCard label > span:last-child {
-  flex-wrap: wrap;
-  gap: 8px !important;
-}
-.planCard button {
-  border-radius: 0 !important;
+  border-radius: var(--radius-card);
+  padding: 24px;
 }
 .detailTabs {
-  margin-top: 48px !important;
+  margin-top: 48px;
 }
 .detailTabs [role="tablist"] {
   gap: 16px;
@@ -574,13 +527,10 @@
     font-size: 36px;
   }
   .detailInfo > h1 {
-    font-size: 34px !important;
-  }
-  .detailGrid {
-    gap: 32px !important;
+    font-size: 34px;
   }
   .detail {
-    padding-inline: 28px !important;
+    padding-inline: 28px;
   }
 }
 @media (max-width: 640px) {
@@ -656,27 +606,13 @@
     font-size: 23px;
   }
   .detail {
-    padding: 24px 20px !important;
+    padding: 24px 20px;
   }
   .detailInfo > h1 {
-    font-size: 32px !important;
-  }
-  .detailGrid {
-    gap: 28px !important;
-  }
-  .galleryMark {
-    width: 128px !important;
-    height: 128px !important;
+    font-size: 32px;
   }
   .planCard {
-    padding: 20px !important;
-  }
-  .planCard label > span:last-child {
-    font-size: 0.9375rem;
-  }
-  .planCard label {
-    padding: 12px !important;
-    gap: 12px !important;
+    padding: 20px;
   }
   .detailPrice {
     flex-wrap: wrap;

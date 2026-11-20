@@ -6,7 +6,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
-import { api, ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorMessage } from "@/lib/api-error-message";
 import { receiptFileError } from "@/lib/receipt-file";
 import { planDisplayLabel } from "@/lib/product-variant";
 import { Container } from "@/components/ui/container";
@@ -72,14 +73,19 @@ export function CardCheckout({
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"card" | "amount" | null>(null);
   const [copying, setCopying] = useState(false);
   const [additional, setAdditional] = useState(false);
   const submitting = useRef(false);
   const [elapsedDeadline, setElapsedDeadline] = useState<string | null>(null);
-  const deadline = data?.order.bluInvoice?.expiresAt ?? data?.order.manualSupplier?.expiresAt;
+  const deadline =
+    data?.order.bluInvoice?.expiresAt ??
+    data?.order.manualSupplier?.expiresAt ??
+    data?.order.cartPayment?.expiresAt;
   const remainingMs =
-    data?.order.bluInvoice?.remainingMs ?? data?.order.manualSupplier?.remainingMs;
+    data?.order.bluInvoice?.remainingMs ??
+    data?.order.manualSupplier?.remainingMs ??
+    data?.order.cartPayment?.remainingMs;
   const orderStatus = data?.order.paymentStatus;
   useEffect(() => {
     if (!deadline || !remainingMs || (orderStatus !== "PENDING" && orderStatus !== "REJECTED"))
@@ -120,11 +126,11 @@ export function CardCheckout({
         </span>
       </Container>
     );
-  if (error || !data)
+  if (!data)
     return (
       <Container className="py-24 text-center">
         <p role="alert" className="mb-4 text-muted">
-          {dict.common.somethingWrong}
+          {apiErrorMessage(error, locale, dict.common.somethingWrong)}
         </p>
         <Button variant="outline" onClick={refetch}>
           {t.retry}
@@ -140,11 +146,16 @@ export function CardCheckout({
     order.paymentProvider === "CARD_TO_CARD" &&
     ["PENDING", "PENDING_REVIEW", "REJECTED"].includes(order.paymentStatus);
   const invoice = order.bluInvoice;
+  const trackingRequired = Boolean(
+    invoice?.stockHeld || invoice?.supplierCheckout || order.manualSupplier || order.cartPayment,
+  );
   const invoiceExpired =
     !!deadline && (invoice?.expired === true || remainingMs === 0 || elapsedDeadline === deadline);
   const transfer = editable && !reviewing && !invoiceExpired;
+  const cartUploadClosed = order.cartPayment && order.paymentStatus === "PENDING" && invoiceExpired;
   const canUpload =
     editable &&
+    !cartUploadClosed &&
     (!order.manualSupplier || order.paymentStatus !== "REJECTED") &&
     (!reviewing || additional);
   const card = order.cardToCard;
@@ -155,22 +166,22 @@ export function CardCheckout({
   const displayNumber = /^\d{16}$/.test(number) ? number.match(/.{4}/g)!.join(" ") : card?.number;
   const step = paid || awaiting ? 4 : reviewing ? 3 : file ? 2 : 1;
 
-  async function copyCard() {
-    if (!card || copying) return;
+  async function copyValue(kind: "card" | "amount") {
+    if ((kind === "card" && !card) || copying) return;
     setCopying(true);
     setCopyMessage(t.copying);
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
-        navigator.clipboard.writeText(number),
+        navigator.clipboard.writeText(kind === "card" ? number : String(order.totalAmount)),
         new Promise<never>((_, reject) => {
           timeout = setTimeout(() => reject(new Error("Clipboard unavailable")), 2000);
         }),
       ]);
-      setCopied(true);
+      setCopied(kind);
       setCopyMessage(t.copied);
     } catch {
-      setCopied(false);
+      setCopied(null);
       setCopyMessage(t.copyFailed);
     } finally {
       clearTimeout(timeout);
@@ -199,15 +210,12 @@ export function CardCheckout({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (submitting.current || !editable) return;
+    if (submitting.current || !canUpload) return;
     if (!file) {
       setFormError(t.selectFile);
       return;
     }
-    if (
-      (invoice?.stockHeld || order.manualSupplier) &&
-      !/^[0-9۰-۹٠-٩]{4,30}$/.test(reference.trim())
-    ) {
+    if (trackingRequired && !/^[0-9۰-۹٠-٩]{4,30}$/.test(reference.trim())) {
       setFormError(t.bluReferenceRequired);
       return;
     }
@@ -225,7 +233,7 @@ export function CardCheckout({
       setAdditional(false);
       refetch();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : dict.common.somethingWrong);
+      setFormError(apiErrorMessage(err, locale, dict.common.somethingWrong));
     } finally {
       submitting.current = false;
       setBusy(false);
@@ -257,6 +265,14 @@ export function CardCheckout({
           </Badge>
         </div>
       </header>
+      {error && (
+        <div role="alert" className="mt-5 flex flex-wrap items-center gap-3 text-sm text-muted">
+          <p>{apiErrorMessage(error, locale, dict.common.somethingWrong)}</p>
+          <Button variant="outline" onClick={refetch}>
+            {t.retry}
+          </Button>
+        </div>
+      )}
       {order.manualSupplier && (
         <p className="mt-5 rounded-xl border border-border bg-card px-4 py-3 text-sm">
           {locale === "fa"
@@ -333,6 +349,19 @@ export function CardCheckout({
           {t.invoiceExpired}
         </p>
       )}
+      {latestRejected && (
+        <div
+          role="status"
+          className="mb-5 rounded-xl border border-danger/30 bg-danger/5 p-4 text-sm"
+        >
+          <p className="font-medium text-danger">{t.rejected}</p>
+          {order.receipts[0].reviewerNote && (
+            <p className="mt-2 break-words leading-6 text-muted">
+              {order.receipts[0].reviewerNote}
+            </p>
+          )}
+        </div>
+      )}
       <div
         className={`grid items-start gap-6 ${transfer || canUpload ? "lg:grid-cols-[1fr_1.05fr]" : ""}`}
       >
@@ -376,13 +405,13 @@ export function CardCheckout({
                   </div>
                   <button
                     type="button"
-                    onClick={copyCard}
+                    onClick={() => copyValue("card")}
                     disabled={copying}
                     aria-busy={copying}
                     className="relative mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#a6efd6] px-4 text-sm font-medium text-[#102e3a] transition-colors hover:bg-[#c2f7e5] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
                   >
-                    <Mark kind={copied ? "check" : "copy"} />
-                    {copied ? t.copied : t.copy}
+                    <Mark kind={copied === "card" ? "check" : "copy"} />
+                    {copied === "card" ? t.copied : t.copy}
                   </button>
                   <p
                     aria-live="polite"
@@ -397,12 +426,34 @@ export function CardCheckout({
                 </p>
               )}
             </div>
-            <div className="rounded-2xl border border-border bg-card p-6">
-              <p className="text-sm text-muted">{t.amount}</p>
+            <div className="rounded-2xl border border-primary/30 bg-card p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm font-medium text-primary">{t.amount}</p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={copying}
+                  onClick={() => copyValue("amount")}
+                >
+                  <Mark kind={copied === "amount" ? "check" : "copy"} />
+                  {copied === "amount"
+                    ? t.copied
+                    : locale === "fa"
+                      ? "کپی مبلغ به " + (order.currency === "IRR" ? "ریال" : "تومان")
+                      : "Copy transfer amount"}
+                </Button>
+              </div>
               <p className="mt-3 text-3xl font-semibold tracking-tight tabular-nums">
                 {formatPrice(order.totalAmount, order.currency, locale)}
               </p>
               <p className="mt-2 text-xs leading-6 text-muted">{t.amountNote}</p>
+              {!invoice && deadline && (
+                <p className="mt-3 text-xs text-muted">
+                  {t.invoiceDeadline}{" "}
+                  <time dateTime={deadline}>{formatDate(deadline, locale)}</time>
+                </p>
+              )}
               {invoice && (
                 <dl className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
                   <div className="flex flex-wrap justify-between gap-x-3">
@@ -438,37 +489,28 @@ export function CardCheckout({
                 <p className="mt-1 text-xs leading-6 text-muted">{t.receiptNote}</p>
               </div>
             </div>
-            {latestRejected && (
-              <div
-                role="status"
-                className="mb-5 rounded-xl border border-danger/30 bg-danger/5 p-4 text-sm"
-              >
-                <p className="font-medium text-danger">{t.rejected}</p>
-                {order.receipts[0].reviewerNote && (
-                  <p className="mt-2 break-words leading-6 text-muted">
-                    {order.receipts[0].reviewerNote}
-                  </p>
-                )}
-              </div>
-            )}
             <form onSubmit={submit}>
               <fieldset disabled={busy} className="min-w-0 space-y-5">
                 <ReceiptPicker file={file} onSelect={selectFile} t={t} busy={busy} />
                 <div>
                   <label htmlFor="receipt-reference" className="mb-2 block text-sm">
-                    {t.reference}
+                    {trackingRequired
+                      ? locale === "fa"
+                        ? "شمارهٔ پیگیری بانکی (الزامی)"
+                        : "Bank tracking number (required)"
+                      : t.reference}
                   </label>
                   <Input
                     id="receipt-reference"
-                    maxLength={200}
+                    required={trackingRequired}
+                    inputMode={trackingRequired ? "numeric" : "text"}
+                    maxLength={trackingRequired ? 30 : 200}
                     value={reference}
                     onChange={(event) => setReference(event.target.value)}
                     aria-describedby="reference-hint"
                   />
                   <p id="reference-hint" className="mt-2 text-xs leading-6 text-muted">
-                    {invoice?.stockHeld || order.manualSupplier
-                      ? t.bluReferenceRequired
-                      : t.referenceHint}
+                    {trackingRequired ? t.bluReferenceRequired : t.referenceHint}
                   </p>
                 </div>
                 {formError && (

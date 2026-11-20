@@ -7,7 +7,8 @@
 
 import type { Request, Response } from "express";
 import { AppError } from "../../utils/httpError";
-import { notifyAdmin } from "../../bot";
+import { notifyNewSignup } from "../../bot";
+import { getWelcomeGift } from "../orders/welcome-gift";
 import {
   clearSessionCookie,
   isTrustedCookieWrite,
@@ -44,7 +45,7 @@ export async function signup(req: Request, res: Response): Promise<void> {
   const result = await registerUser(req.body);
   setSessionCookie(res, result.token);
   res.status(201).json(result);
-  void notifyAdmin(`👤 ثبت‌نام جدید در اوستا\nشناسهٔ عضو: ${result.user.id.slice(-8)}`);
+  void notifyNewSignup(result.user);
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
@@ -58,6 +59,11 @@ export async function me(req: Request, res: Response): Promise<void> {
   // `authenticate` middleware guarantees req.user is set.
   const user = await getUserById(req.user!.id);
   res.json({ user });
+}
+
+export async function inbox(req: Request, res: Response): Promise<void> {
+  const userId = requireUserSession(req);
+  res.json({ welcomeGift: await getWelcomeGift(userId) });
 }
 
 export async function changePassword(req: Request, res: Response): Promise<void> {

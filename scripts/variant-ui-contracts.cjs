@@ -87,12 +87,29 @@ const p = {
   ],
 };
 const load = Module._load;
+let interactive;
+const interactionReact = {
+  ...React,
+  useState(initial) {
+    if (!interactive) return React.useState(initial);
+    const index = interactive.index++;
+    const values = interactive.values;
+    if (!(index in values)) values[index] = initial;
+    return [values[index], (value) => (values[index] = value)];
+  },
+  useRef: (initial) => (interactive ? { current: initial } : React.useRef(initial)),
+  useEffect: (...args) => (interactive ? undefined : React.useEffect(...args)),
+};
+const navigations = [];
+let cartChanges = 0;
 let publishedPosts = [];
 let signedIn = true;
 let viewedProduct = p;
 let paymentOptions = { online: false, cardToCard: false, card: null };
 let requestedCatalog = "";
 Module._load = function (request, ...args) {
+  if (request === "react") return interactionReact;
+  if (request === "@/lib/cart-events") return { notifyCartChanged: () => cartChanges++ };
   if (request === "@/lib/seo")
     return {
       fetchJson: async (url) => {
@@ -112,7 +129,10 @@ Module._load = function (request, ...args) {
         signedIn ? { user: { id: "synthetic" }, token: "synthetic" } : { user: null, token: null },
     };
   if (request === "next/navigation")
-    return { useRouter: () => ({ push: () => {} }), useParams: () => ({ locale: "fa" }) };
+    return {
+      useRouter: () => ({ push: (url) => navigations.push(url) }),
+      useParams: () => ({ locale: "fa" }),
+    };
   if (request === "@/lib/use-api")
     return {
       useApi: (url) => ({
@@ -129,6 +149,7 @@ Module._load = function (request, ...args) {
   return load.call(this, request, ...args);
 };
 const { ProductDetailView } = require("../apps/web/components/product-detail-view.tsx");
+const { SupplierQuotePanel } = require("../apps/web/components/supplier-quote-panel.tsx");
 const { HomeCatalog } = require("../apps/web/components/home-catalog.tsx");
 const { HomeSections } = require("../apps/web/components/home-sections.tsx");
 const {
@@ -137,6 +158,7 @@ const {
 } = require("../apps/web/components/products-browser.tsx");
 Module._load = load;
 const dict = require("../apps/web/app/[locale]/dictionaries/fa.json");
+const en = require("../apps/web/app/[locale]/dictionaries/en.json");
 const html = renderToStaticMarkup(
   React.createElement(ProductDetailView, {
     locale: "fa",
@@ -147,7 +169,7 @@ const html = renderToStaticMarkup(
 );
 assert(html.includes("ضمانت"), "Variant warranty control must be visible");
 assert.match(html, /\/products\/fixture-product\/image\?v=covers-2/);
-const { productImageUrl } = require("../apps/web/lib/api.ts");
+const { api, ApiError, productImageUrl } = require("../apps/web/lib/api.ts");
 assert.match(
   productImageUrl({ ...p, imageVersion: "1780000000000" }),
   /\/products\/fixture-product\/image\?v=1780000000000$/,
@@ -287,15 +309,15 @@ assert(closed.includes("موجودی فروشگاه"));
 assert(closed.includes("تأمین با استعلام"));
 assert(closed.includes("ناموجود"));
 assert(closed.includes("خرید این پلن فعلاً فعال نیست"));
-const onlineButton = `>${dict.common.buyNow}</button>`;
-assert(!closed.includes(onlineButton));
+const cartButton = "افزودن به سبد خرید";
+assert(!closed.includes(cartButton));
 paymentOptions = { online: false, cardToCard: true, card: null };
 const open = renderProduct();
 assert(open.includes("آمادهٔ خرید"));
-assert(open.includes(dict.checkout.payCardToCard));
-assert(!open.includes(onlineButton));
+assert(open.includes(cartButton));
+assert(!open.includes(`>${dict.checkout.payCardToCard}</button>`));
 paymentOptions = { online: true, cardToCard: true, card: null };
-assert(renderProduct().includes(onlineButton));
+assert(renderProduct().includes(cartButton));
 viewedProduct = {
   ...p,
   plans: [{ ...p.plans[0], variant: null, inStock: false, availability: "OUT_OF_STOCK" }],
@@ -303,7 +325,107 @@ viewedProduct = {
 const gone = renderProduct();
 assert(gone.includes("بررسی دوبارهٔ موجودی و قیمت"));
 assert(!gone.includes("۷۷۷٬۷۷۷"));
-assert(!gone.includes(onlineButton));
+assert(!gone.includes(cartButton));
+
+function actionIn(node, action) {
+  if (!React.isValidElement(node)) return undefined;
+  if (node.props.onClick?.name === action) return node.props.onClick;
+  for (const child of React.Children.toArray(node.props.children)) {
+    const found = actionIn(child, action);
+    if (found) return found;
+  }
+}
+
+async function checkCartActions() {
+  const originalPost = api.post;
+  const localPlan = {
+    ...p.plans[0],
+    source: "INTERNAL",
+    quoteRequired: false,
+    availability: "LOCAL_STOCK",
+  };
+  const errors = [
+    [409, "CART_FULL", /Your cart is full/i],
+    [409, "OUT_OF_STOCK", /sold out/i],
+    [409, "ORDER_IN_PROGRESS", /this option already has an open order/i],
+    [401, "UNAUTHORIZED", /sign in again/i],
+    [403, "FORBIDDEN", /access to this action/i],
+  ];
+  try {
+    for (const supplier of [false, true]) {
+      const plan = supplier ? p.plans[0] : localPlan;
+      const states = [];
+      const view = () => {
+        interactive = { values: states, index: 0 };
+        try {
+          return supplier
+            ? SupplierQuotePanel({ plan, token: "synthetic", locale: "en", loginPath: "/en/login" })
+            : ProductDetailView({
+                locale: "en",
+                dict: en,
+                payment: paymentOptions,
+                product: { ...p, plans: [plan] },
+              });
+        } finally {
+          interactive = undefined;
+        }
+      };
+      if (supplier) {
+        api.post = async (url) => {
+          assert.equal(url, "/supplier-quotes");
+          return {
+            quote: {
+              id: "fixture-quote",
+              planId: plan.id,
+              kind: "FIRM",
+              checkoutEnabled: true,
+              currency: "IRR",
+              amount: 10000,
+              range: { min: 10000, max: 10000 },
+              expiresAt: "2099-01-01T00:00:00Z",
+              methods: { online: true },
+            },
+          };
+        };
+        await actionIn(view(), "inquire")();
+      }
+      for (const [status, code, message] of errors) {
+        api.post = async (url, body, token) => {
+          assert.equal(url, "/cart/items");
+          assert.deepEqual(body, { planId: plan.id });
+          assert.equal(token, "synthetic");
+          throw new ApiError("SYNTHETIC_PRIVATE_ERROR", status, code);
+        };
+        await actionIn(view(), "addToCart")();
+        const html = renderToStaticMarkup(view());
+        const alert = html.match(/<p role="alert"[^>]*>([^<]*)<\/p>/)?.[1];
+        assert.match(
+          alert ?? "",
+          message,
+          `${supplier ? "Supplier" : "Local"} add to cart reports ${code}`,
+        );
+        assert.doesNotMatch(html, /SYNTHETIC_PRIVATE_ERROR/);
+      }
+      assert.equal(navigations.length, Number(supplier));
+      assert.equal(cartChanges, Number(supplier));
+      api.post = async () => ({ id: "synthetic-cart-item" });
+      await actionIn(view(), "addToCart")();
+      assert.equal(navigations.at(-1), "/en/cart");
+    }
+    assert.equal(cartChanges, 2);
+    const storefront = require("node:fs").readFileSync(
+      path.resolve(__dirname, "../apps/web/components/storefront.module.css"),
+      "utf8",
+    );
+    const promptShadows = [...storefront.matchAll(/\.promptPaper\s*\{([^}]+)\}/g)].filter(
+      ([, rules]) => rules.includes("box-shadow:"),
+    );
+    assert.equal(promptShadows.length, 1, "The prompt card shares its shadow across breakpoints");
+  } finally {
+    api.post = originalPost;
+  }
+}
+
 async function checkHomepage() {
   const props = { locale: "fa", dict, heroTitle: "اوستا", heroSubtitle: "فروشگاه" };
   const empty = renderToStaticMarkup(await HomeSections(props));
@@ -375,14 +497,17 @@ async function checkHomepage() {
     detailSource.indexOf("layout.terms") < detailSource.indexOf("layout.change"),
     "Show the selected plan summary above the plan picker",
   );
-  assert(detailSource.indexOf('buy("online")') < detailSource.indexOf("layout.change"));
+  assert(detailSource.indexOf("onClick={addToCart}") > 0);
+  assert(detailSource.indexOf("onClick={addToCart}") < detailSource.indexOf("layout.change"));
   assert(
     !detailSource.includes("href={`/${locale}/support`}"),
     "Pre-purchase help must not need login",
   );
   console.log("PASS: localized variants, supplier pricing and published homepage journal");
 }
-checkHomepage().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+checkCartActions()
+  .then(checkHomepage)
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });

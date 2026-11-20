@@ -296,11 +296,10 @@ function ReceiptRow({
         (image.isPdf ? (
           <a
             href={image.url}
-            target="_blank"
-            rel="noopener noreferrer"
+            download="receipt.pdf"
             className="block text-sm text-primary underline"
           >
-            {t.view} (PDF)
+            {fa ? "دانلود رسید (PDF)" : "Download receipt (PDF)"}
           </a>
         ) : (
           // eslint-disable-next-line @next/next/no-img-element

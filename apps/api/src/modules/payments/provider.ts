@@ -62,18 +62,22 @@ function zarinpalBase(sandbox: boolean): string {
   return sandbox ? "https://sandbox.zarinpal.com" : "https://payment.zarinpal.com";
 }
 
+function sendZarinpal(sandbox: boolean, path: string, body: Record<string, unknown>) {
+  return fetch(`${zarinpalBase(sandbox)}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
+  });
+}
+
 async function zarinpalRequest<T>(
   sandbox: boolean,
   path: string,
   body: Record<string, unknown>,
 ): Promise<T> {
   try {
-    const response = await fetch(`${zarinpalBase(sandbox)}${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
-    });
+    const response = await sendZarinpal(sandbox, path, body);
     if (!response.ok) {
       throw new AppError(502, "PAYMENT_GATEWAY_ERROR", `Zarinpal returned HTTP ${response.status}`);
     }
@@ -196,6 +200,45 @@ export async function getPaymentProvider(): Promise<PaymentProviderAdapter> {
   // Block starting a real online payment through the test gateway in production.
   assertOnlinePaymentAllowed(gw);
   return gw.provider === "zarinpal" ? zarinpalProvider : mockProvider;
+}
+
+export async function inquireZarinpalPayment(
+  authority: string,
+  verificationContext: unknown,
+): Promise<"FAILED" | "REVERSED" | "PAID" | "VERIFIED" | "IN_BANK" | "INVALID_AUTHORITY" | null> {
+  const saved = verificationContext as Record<string, unknown> | null;
+  if (
+    typeof saved?.merchantId !== "string" ||
+    typeof saved.sandbox !== "boolean" ||
+    (env.isProduction && saved.sandbox)
+  )
+    return null;
+  const response = await sendZarinpal(saved.sandbox, "/pg/v4/payment/inquiry.json", {
+    merchant_id: saved.merchantId,
+    authority,
+  });
+  if (response.status === 400) {
+    const json = (await response.json().catch(() => null)) as {
+      errors?: { code?: unknown; authority?: unknown };
+    } | null;
+    const errors = json?.errors;
+    const codes: unknown[] = [errors?.code];
+    if (Array.isArray(errors?.authority)) codes.push(...errors.authority);
+    return codes.some((code) => code === -54 || code === "-54") ? "INVALID_AUTHORITY" : null;
+  }
+  if (!response.ok) return null;
+  const json = (await response.json()) as { data?: { code?: number; status?: string } } | null;
+  if (json?.data?.code !== 100) return null;
+  switch (json.data.status) {
+    case "FAILED":
+    case "REVERSED":
+    case "PAID":
+    case "VERIFIED":
+    case "IN_BANK":
+      return json.data.status;
+    default:
+      return null;
+  }
 }
 
 // Payment callbacks must use the provider stored on the order. Looking at the

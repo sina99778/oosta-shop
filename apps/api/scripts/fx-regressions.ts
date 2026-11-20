@@ -153,11 +153,31 @@ async function main() {
     });
     const quote = await call("POST", "/supplier-quotes", { planId: plan.id }, buyerToken);
     assert.equal(quote.statusCode, 200, quote.body);
-    assert.equal(quote.json().quote.amount, 2600000);
+    assert.equal(quote.json().quote.amount, 2626000);
     assert.equal(quote.json().quote.fx.source, "NAVASAN_FREE");
     assert.equal(quote.json().quote.fx.sampled, true);
+    assert.equal(quote.json().quote.fx.referenceCurrency, "USDT");
     assert.equal(quote.json().quote.checkoutEnabled, false);
     assert.equal(requests, 1);
+    const onlyTether = await load();
+    delete onlyTether.snapshot!.rates.USD;
+    await save(onlyTether);
+    const tetherQuote = await call("POST", "/supplier-quotes", { planId: plan.id }, buyerToken);
+    assert.equal(tetherQuote.statusCode, 200, tetherQuote.body);
+    assert.equal(tetherQuote.json().quote.amount, 2626000);
+
+    const onlyFreshDollar = await load();
+    onlyFreshDollar.snapshot!.rates.USD = status.snapshot!.rates.USD;
+    onlyFreshDollar.snapshot!.rates.USDT!.updatedAt = new Date(
+      Date.now() - 11 * 3600000,
+    ).toISOString();
+    await save(onlyFreshDollar);
+    const dollarQuote = await call("POST", "/supplier-quotes", { planId: plan.id }, buyerToken);
+    assert.equal(dollarQuote.statusCode, 200, dollarQuote.body);
+    assert.equal(dollarQuote.json().quote.amount, 2600000);
+    assert.equal(dollarQuote.json().quote.fx.referenceCurrency, "USD");
+
+    await save(onlyTether);
     const old = await load();
     old.attempts = [new Date(Date.now() - FX_INTERVAL_MS - 1000).toISOString()];
     await save(old);

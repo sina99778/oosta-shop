@@ -44,11 +44,18 @@ async function main() {
   process.env.CANBOSO2_API_KEY = "fixture-canboso-two";
   const originalFetch = globalThis.fetch;
   let requests = 0;
+  let transactionsDuringFetch = 0;
+  let failFetch = false;
   globalThis.fetch = async (input, init) => {
     assert.equal(String(input), "https://canboso.com/api/v2/telegram-buyer/products");
     assert.equal(init?.method, "GET");
     assert.equal(init?.redirect, "error");
     requests++;
+    const [row] = await prisma.$queryRaw<{ count: number }[]>`
+      SELECT COUNT(*)::int AS count FROM pg_stat_activity
+      WHERE datname = current_database() AND state = 'idle in transaction'`;
+    transactionsDuringFetch += row.count;
+    if (failFetch) return new Response("Fixture upstream failure", { status: 503 });
     const second =
       (init?.headers as Record<string, string>)["x-buyer-key"] === "fixture-canboso-two";
     return new Response(
@@ -69,9 +76,19 @@ async function main() {
     );
   };
   try {
-    const one = await call("POST", "/admin/suppliers/canboso/sync", {});
+    const [one, same] = await Promise.all([
+      call("POST", "/admin/suppliers/canboso/sync", {}),
+      call("POST", "/admin/suppliers/canboso/sync", {}),
+    ]);
     const two = await call("POST", "/admin/suppliers/canboso2/sync", {});
+    assert.equal(
+      transactionsDuringFetch,
+      0,
+      "Supplier HTTP must run outside database transactions",
+    );
     assert.equal(one.statusCode, 200, one.body);
+    assert.equal(same.statusCode, 200, same.body);
+    assert.deepEqual(same.json().catalog, one.json().catalog);
     assert.equal(two.statusCode, 200, two.body);
     assert.equal(requests, 2);
     const offer1 = one.json().catalog.offers[0],
@@ -455,6 +472,22 @@ async function main() {
       variantKey(readVariant(variant)!, 30),
       variantKey(readVariant({ ...variant, warranty: { kind: "NONE" } })!, 30),
     );
+    const key = "suppliers.catalog.canboso";
+    const staleSnapshot = JSON.stringify({
+      ...one.json().catalog,
+      fetchedAt: new Date(0).toISOString(),
+    });
+    await prisma.siteSetting.update({ where: { key }, data: { value: staleSnapshot } });
+    failFetch = true;
+    const unavailable = await call("POST", "/admin/suppliers/canboso/sync", {});
+    assert.equal(unavailable.statusCode, 502, unavailable.body);
+    assert.equal(unavailable.json().error.code, "SUPPLIER_UNAVAILABLE");
+    assert.doesNotMatch(unavailable.body, /Fixture upstream failure|fixture-canboso-one/);
+    assert.equal((await prisma.siteSetting.findUniqueOrThrow({ where: { key } })).value, staleSnapshot);
+    failFetch = false;
+    const retry = await call("POST", "/admin/suppliers/canboso/sync", {});
+    assert.equal(retry.statusCode, 200, retry.body);
+    assert.notEqual((await prisma.siteSetting.findUniqueOrThrow({ where: { key } })).value, staleSnapshot);
     console.log(
       "PASS: supplier admin access, account isolation, safe quotes, checkout denial, immutable variants and order ownership",
     );

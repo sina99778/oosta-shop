@@ -23,6 +23,7 @@ services:
       SUPPLIER_MANUAL_DELIVERY_HOURS: ${SUPPLIER_MANUAL_DELIVERY_HOURS:-0}
       SUPPLIER_TELEGRAM_ADMIN_USER_ID: ${SUPPLIER_TELEGRAM_ADMIN_USER_ID:-}
     volumes:
+      # Allow the container's node user (UID/GID 1000) to read the host file via a narrow ACL.
       - /opt/oostaAI/shared/suppliers.env:/run/secrets/oosta-suppliers.env:ro
       - /var/lib/oosta-blu-status:/run/oosta-blu-status:ro
     ports:

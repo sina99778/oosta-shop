@@ -102,11 +102,16 @@ const cms = app("p/[slug]/page.tsx");
 const home = app("page.tsx");
 const login = app("login/page.tsx");
 const signup = app("signup/page.tsx");
-const privateLayouts = ["dashboard", "support", "checkout", "admin"].map((segment) => [
-  segment,
-  app(`${segment}/layout.tsx`),
-]);
+const privatePages = [
+  "dashboard/layout.tsx",
+  "support/layout.tsx",
+  "checkout/layout.tsx",
+  "admin/layout.tsx",
+  "cart/page.tsx",
+  "cart/review/[id]/page.tsx",
+].map((file) => [file, app(file)]);
 const sitemap = require("../apps/web/app/sitemap.ts").default;
+const robots = require("../apps/web/app/robots.ts").default;
 const { safeJsonLd } = require("../apps/web/lib/page-metadata.ts");
 Module._load = originalLoad;
 
@@ -156,11 +161,19 @@ async function main() {
     // so inherited og:url/og:image would point at localhost.
     assert.equal(mod.metadata.openGraph, null);
   }
-  for (const [segment, mod] of privateLayouts) {
+  for (const [segment, mod] of privatePages) {
     assert.deepEqual(mod.metadata.robots, { index: false, follow: false }, segment);
     assert.equal(mod.metadata.alternates, null, segment);
     assert.equal(mod.metadata.openGraph, null, segment);
   }
+  const [rule] = robots().rules;
+  for (const locale of ["fa", "en"]) {
+    for (const route of ["cart", "checkout", "login", "signup"]) {
+      assert(rule.disallow.includes(`/${locale}/${route}`));
+    }
+  }
+  assert(rule.disallow.includes("/api/"));
+  assert(rule.allow.includes("/api/products/*/image"));
 
   const canonicalPost = `${SITE}/fa/blog/${post.slug}`;
   for (const locale of ["fa", "en"]) {

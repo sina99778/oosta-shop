@@ -6,13 +6,14 @@ import { authRateLimiter } from "../../middleware/rateLimit";
 import { validate } from "../../middleware/validate";
 import { authenticate } from "../../middleware/auth";
 import { changePasswordSchema, loginSchema, signupSchema } from "./auth.schemas";
-import { changePassword, login, logout, logoutAll, me, signup } from "./auth.controller";
+import { changePassword, inbox, login, logout, logoutAll, me, signup } from "./auth.controller";
 
 export const authRouter = Router();
 
 authRouter.post("/signup", authRateLimiter, validate({ body: signupSchema }), signup);
 authRouter.post("/login", authRateLimiter, validate({ body: loginSchema }), login);
 authRouter.get("/me", authenticate, me);
+authRouter.get("/inbox", authenticate, inbox);
 authRouter.post(
   "/change-password",
   authRateLimiter,

@@ -13,7 +13,7 @@ const passwordField = z
 export const signupSchema = z
   .object({
     name: z.string().trim().min(1, "Name is required").max(100),
-    email: z.email("Invalid email address").optional(),
+    email: z.string().trim().toLowerCase().pipe(z.email("Invalid email address")).optional(),
     phone: z
       .string()
       .trim()
@@ -49,7 +49,7 @@ export const loginSchema = z.object({
     .max(320)
     .transform((value) =>
       value.includes("@")
-        ? value
+        ? value.toLowerCase()
         : value.replace(/[۰-۹٠-٩]/g, (digit) =>
             String(
               "۰۱۲۳۴۵۶۷۸۹".indexOf(digit) >= 0

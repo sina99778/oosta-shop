@@ -872,14 +872,17 @@ async function testCardToCard(): Promise<void> {
   const c2cOrder = obj(body(c2cCreate).order);
   const c2cId = String(c2cOrder.id);
 
-  const uploadReceipt = async () => {
+  const uploadReceipt = async (
+    mimeType = "image/png",
+    file = Buffer.from("89504e470d0a1a0a", "hex"),
+  ) => {
     const b = "----rcp" + Math.floor(Math.random() * 1e9);
     const payload = Buffer.concat([
       Buffer.from(
-        `--${b}\r\nContent-Disposition: form-data; name="receipt"; filename="r.png"\r\nContent-Type: image/png\r\n\r\n`,
+        `--${b}\r\nContent-Disposition: form-data; name="receipt"; filename="receipt"\r\nContent-Type: ${mimeType}\r\n\r\n`,
         "utf8",
       ),
-      Buffer.from("FAKE-RECEIPT"),
+      file,
       Buffer.from(`\r\n--${b}--\r\n`, "utf8"),
     ]);
     return inject(app, {
@@ -893,15 +896,31 @@ async function testCardToCard(): Promise<void> {
       remoteAddress: ip,
     });
   };
-  const up1 = await uploadReceipt();
-  const up2 = await uploadReceipt();
+  const invalidReceipt = await uploadReceipt("IMAGE/PNG", Buffer.from("synthetic receipt"));
   record(
-    "two receipts upload on one order -> 201",
+    "receipt MIME and file signature must match",
+    invalidReceipt.statusCode === 400 && obj(body(invalidReceipt).error).code === "BAD_FILE_TYPE",
+    `status=${invalidReceipt.statusCode}`,
+  );
+  const up1 = await uploadReceipt("Image/PNG");
+  const up2 = await uploadReceipt("Application/PDF", Buffer.from("%PDF-1.7\nsynthetic receipt"));
+  record(
+    "mixed-case PNG and PDF receipts upload on one order -> 201",
     up1.statusCode === 201 && up2.statusCode === 201,
     `s1=${up1.statusCode} s2=${up2.statusCode}`,
   );
   const receiptA = String(body(up1).receiptId);
   const receiptB = String(body(up2).receiptId);
+  const pdf = await get(`/admin/receipts/${receiptB}/image`, adminToken);
+  record(
+    "admin PDF receipt is private, sandboxed and served as an attachment",
+    pdf.statusCode === 200 &&
+      pdf.headers["content-type"] === "application/pdf" &&
+      pdf.headers["cache-control"] === "private, no-store" &&
+      pdf.headers["content-security-policy"] === "sandbox" &&
+      String(pdf.headers["content-disposition"]).startsWith("attachment"),
+    `status=${pdf.statusCode}`,
+  );
 
   const suffixQuery = encodeURIComponent(`#${c2cId.slice(-8).toUpperCase()}`);
   const searchPath = `/admin/orders?q=${suffixQuery}&status=PENDING_REVIEW`;
@@ -944,7 +963,13 @@ async function testCardToCard(): Promise<void> {
       !privateDetails.payload.includes(`c_${suffix}@s.local`),
     "",
   );
-  for (const path of [searchPath, orderPath, scopedReceipts, `/admin/receipts/${receiptA}/image`]) {
+  for (const path of [
+    searchPath,
+    orderPath,
+    scopedReceipts,
+    `/admin/receipts/${receiptA}/image`,
+    `/admin/receipts/${receiptB}/image`,
+  ]) {
     const anonymous = await get(path);
     const regular = await get(path, token);
     record(
@@ -1188,7 +1213,7 @@ async function testBlog(): Promise<void> {
   // Media upload (multipart) + serve
   const boundary = "----blog" + suffix;
   const CRLF = "\r\n";
-  const bytes = Buffer.from("FAKE-PNG-BLOG-MEDIA");
+  const bytes = Buffer.from("89504e470d0a1a0a", "hex");
   const payload = Buffer.concat([
     Buffer.from(
       `--${boundary}${CRLF}Content-Disposition: form-data; name="image"; filename="m.png"${CRLF}Content-Type: image/png${CRLF}${CRLF}`,
@@ -1402,17 +1427,17 @@ async function testPagesAndSettings(): Promise<void> {
       "content-type": "application/json",
       "x-country-code": "ir",
       "user-agent": "Mozilla/5.0 (smoke test)",
-      "ar-real-ip": "5.5.5.5",
+      "ar-real-ip": "198.18.0.80",
     },
     payload: JSON.stringify({ path: `/fa/products?x=1#y` }),
     remoteAddress: ip,
   });
   const visits = await prisma.visit.findMany({ orderBy: { createdAt: "desc" }, take: 1 });
   record(
-    "track -> 204, country+clean path stored",
+    "track -> 204, untrusted country discarded and clean path stored",
     track.statusCode === 204 &&
       (await prisma.visit.count()) === before + 1 &&
-      visits[0]?.country === "IR" &&
+      visits[0]?.country === "??" &&
       visits[0]?.path === "/fa/products",
     `status=${track.statusCode} country=${visits[0]?.country} path=${visits[0]?.path}`,
   );
@@ -1433,7 +1458,7 @@ async function testPagesAndSettings(): Promise<void> {
   // ---- Enamad badge upload / serve / delete ----
   const eBoundary = "----enamad" + suffix;
   const CRLF2 = "\r\n";
-  const eBytes = Buffer.from("FAKE-ENAMAD-PNG");
+  const eBytes = Buffer.from("89504e470d0a1a0a", "hex");
   const ePayload = Buffer.concat([
     Buffer.from(
       `--${eBoundary}${CRLF2}Content-Disposition: form-data; name="image"; filename="e.png"${CRLF2}Content-Type: image/png${CRLF2}${CRLF2}`,

@@ -1,10 +1,59 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { deliverBackup } = require("./telegram-backup.cjs");
+require("tsx/cjs");
+const { deliverBackup } = require("../../apps/api/src/lib/telegram-backup.ts");
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
+
+test("delivers a 51 MB archive in independently downloadable, ordered parts", async () => {
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "oosta-backup-test-"));
+  const archive = path.join(dir, "large.sql.gz.age");
+  const original = Buffer.alloc(51_000_001, 0x45);
+  original[19_000_000] = 0x67;
+  original[38_000_000] = 0xab;
+  await fs.promises.writeFile(archive, original);
+  const parts = [];
+  let retried = false;
+  try {
+    await deliverBackup({
+      chatId: 12345,
+      create: async () => ({ file: archive, cleanup: async () => fs.promises.unlink(archive) }),
+      pause: async () => {},
+      send: async (id, { source, filename: name }) => {
+        const chunks = [];
+        for await (const chunk of source) chunks.push(chunk);
+        const bytes = Buffer.concat(chunks);
+        if (bytes.length > 19_000_000) throw Error("Exceeds provider download limit");
+        if (parts.length === 1 && !retried) {
+          retried = true;
+          throw Error("Temporary failure after reading the second part");
+        }
+        parts.push({ name, bytes });
+        return {
+          message_id: parts.length,
+          chat: { id, type: "private" },
+          document: { file_name: name },
+        };
+      },
+    });
+    assert.deepEqual(
+      parts.map((part) => part.name),
+      [
+        "large.sql.gz.age.part-0001-of-0003",
+        "large.sql.gz.age.part-0002-of-0003",
+        "large.sql.gz.age.part-0003-of-0003",
+      ],
+    );
+    assert.equal(retried, true);
+    assert.deepEqual(Buffer.concat(parts.map((part) => part.bytes)), original);
+    assert.equal(fs.existsSync(archive), false);
+  } finally {
+    await fs.promises.rm(dir, { recursive: true, force: true });
+  }
+});
 
 test("container stdin entrypoint executes and fails closed without a bot token", () => {
   const result = spawnSync(process.execPath, [], {
@@ -25,17 +74,25 @@ function fixture() {
     recipient: "synthetic-recipient",
     create: async () => {
       created++;
+      const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "oosta-backup-test-"));
+      const file = path.join(dir, "synthetic.sql.gz.age");
+      await fs.promises.writeFile(file, "synthetic archive");
       return {
-        file: "/tmp/synthetic.sql.gz.age",
+        file,
         cleanup: async () => {
+          await fs.promises.unlink(file);
+          await fs.promises.rmdir(dir);
           cleaned++;
         },
       };
     },
-    send: async (chat, file) => {
+    send: async (chat, { source, filename }) => {
       sent++;
       assert.equal(chat, 12345);
-      assert(file.endsWith(".sql.gz.age"));
+      assert.equal(filename, "synthetic.sql.gz.age");
+      const chunks = [];
+      for await (const chunk of source) chunks.push(chunk);
+      assert.equal(Buffer.concat(chunks).toString(), "synthetic archive");
       return {
         message_id: 42,
         chat: { id: 12345, type: "private" },

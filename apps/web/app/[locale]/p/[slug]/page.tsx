@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { isLocale } from "@/lib/i18n";
 import { Container } from "@/components/ui/container";
@@ -16,10 +17,10 @@ type PublicPage = {
   updatedAt: string;
 };
 
-async function load(slug: string): Promise<PublicPage | null> {
+const load = cache(async (slug: string): Promise<PublicPage | null> => {
   const data = await fetchJson<{ page: PublicPage }>(`/pages/${encodeURIComponent(slug)}`);
   return data?.page ?? null;
-}
+});
 
 export async function generateMetadata({
   params,

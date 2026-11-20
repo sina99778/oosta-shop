@@ -24,9 +24,15 @@ function SalesChart({
   noData: string;
 }) {
   const fa = locale === "fa";
-  const timeZone = "UTC";
-  const end = new Date();
-  end.setUTCHours(0, 0, 0, 0);
+  const timeZone = "Asia/Tehran";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(new Date());
+  const fields = Object.fromEntries(parts.map(({ type, value }) => [type, Number(value)]));
+  const end = new Date(Date.UTC(fields.year, fields.month - 1, fields.day));
   const byDay = new Map(data.salesByDay.map((day) => [day.day, day]));
   const number = new Intl.NumberFormat(fa ? "fa-IR" : "en-US");
   const date = new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", timeZone });

@@ -64,7 +64,11 @@ export function OrderDetail({
   const cardPending =
     order.paymentProvider === "CARD_TO_CARD" &&
     ["PENDING", "PENDING_REVIEW", "REJECTED"].includes(order.paymentStatus);
-  const expired = order.bluInvoice?.expired;
+  const expired =
+    order.bluInvoice?.expired ||
+    order.bluInvoice?.remainingMs === 0 ||
+    order.manualSupplier?.remainingMs === 0 ||
+    order.cartPayment?.remainingMs === 0;
 
   return (
     <AccountFrame

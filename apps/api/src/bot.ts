@@ -2,14 +2,21 @@
 // TELEGRAM_ADMIN_ID are set. Access is restricted strictly to the admin id.
 // Features: stats, recent orders, and on-demand + scheduled encrypted backups.
 
-import { Telegraf, Markup } from "telegraf";
+import { Telegraf, Markup, type Context } from "telegraf";
 import { message } from "telegraf/filters";
-import path from "node:path";
+import { bold, code, fmt, type FmtString } from "telegraf/format";
 import { env } from "./config/env";
 import { prisma } from "./lib/prisma";
 import { isMaintenance } from "./lib/maintenance";
 import { createEncryptedBackup } from "./lib/backup";
-import { approveAgentAction, pendingAgentActions, isAgentEnabled, runAgent } from "./lib/agent";
+import { deliverBackup } from "./lib/telegram-backup";
+import {
+  approveAgentAction,
+  pendingAgentActions,
+  isAgentEnabled,
+  runAgent,
+  type PendingImage,
+} from "./lib/agent";
 import { isOpenRouterEnabled } from "./lib/openrouter";
 import { getVisitStats } from "./modules/analytics/analytics.service";
 import {
@@ -385,18 +392,15 @@ async function ticketsMessage(): Promise<string> {
 
 async function sendBackup(chatId: number): Promise<void> {
   if (!bot || backupInProgress) return;
+  const telegram = bot.telegram;
   backupInProgress = true;
   try {
-    const { file, cleanup } = await createEncryptedBackup(env.BACKUP_AGE_RECIPIENT);
-    try {
-      await bot.telegram.sendDocument(
-        chatId,
-        { source: file, filename: path.basename(file) },
-        { caption: "بکاپ رمزنگاری‌شدهٔ اوستا" },
-      );
-    } finally {
-      await cleanup();
-    }
+    await deliverBackup({
+      chatId,
+      recipient: env.BACKUP_AGE_RECIPIENT,
+      create: createEncryptedBackup,
+      send: (id, document, caption) => telegram.sendDocument(id, document, { caption }),
+    });
   } finally {
     backupInProgress = false;
   }
@@ -404,7 +408,7 @@ async function sendBackup(chatId: number): Promise<void> {
 
 // Fire-and-forget notification to the admin (used by e.g. the tickets module).
 export async function notifyAdmin(
-  text: string,
+  text: string | FmtString,
   button?: { label: string; data: string },
 ): Promise<void> {
   const adminId = env.TELEGRAM_ADMIN_ID;
@@ -420,6 +424,28 @@ export async function notifyAdmin(
   } catch {
     console.error("[telegram] notifyAdmin failed");
   }
+}
+
+const signupTime = new Intl.DateTimeFormat("fa-IR", {
+  dateStyle: "short",
+  timeStyle: "short",
+  timeZone: "Asia/Tehran",
+});
+
+export function notifyNewSignup(user: {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  createdAt: Date;
+}) {
+  const method = user.email ? (user.phone ? "ایمیل و شمارهٔ موبایل" : "ایمیل") : "شمارهٔ موبایل";
+  return notifyAdmin(fmt`${bold("👤 ثبت‌نام جدید در اوستا")}
+
+${bold("شناسهٔ عضو:")} ${code(user.id.slice(-8))}
+${bold("روش ثبت‌نام:")} ${method}
+${bold("ایمیل:")} ${user.email ? code(user.email) : "ثبت نشده"}
+${bold("شمارهٔ موبایل:")} ${user.phone ? code(user.phone) : "ثبت نشده"}
+${bold("زمان ثبت‌نام (تهران):")} ${signupTime.format(user.createdAt)}`);
 }
 
 export async function notifySupplierReceipt(receiptId: string, orderId: string) {
@@ -781,10 +807,42 @@ export function startBot(): void {
     }
   }
 
+  let lastGenerated: { messageId?: number; image: PendingImage } | undefined;
+  let forgetGenerated: ReturnType<typeof setTimeout> | undefined;
+
+  async function sendLastGenerated(ctx: Context) {
+    const generated = lastGenerated;
+    if (!generated) {
+      await ctx.reply("تصویر آماده‌ای برای ارسال وجود ندارد.");
+      return;
+    }
+    try {
+      const { buffer, mimeType } = generated.image;
+      const sent = await ctx.replyWithDocument(
+        { source: buffer, filename: `oosta-image.${mimeType.split("/")[1]}` },
+        { caption: "تصویر آماده است. برای استفاده از تصویر، به همین پیام پاسخ دهید." },
+      );
+      generated.messageId = sent.message_id;
+    } catch {
+      await ctx.reply("تصویر ساخته شد ولی ارسال نشد. برای ارسال دوباره /lastimage را بفرستید.");
+    }
+  }
+
+  bot.command("lastimage", sendLastGenerated);
   bot.action(/^agent_confirm_([a-f0-9]{24})$/, async (ctx) => {
     await ctx.answerCbQuery();
     try {
-      await ctx.reply(await approveAgentAction(ctx.match[1]));
+      const { message, image } = await approveAgentAction(ctx.match[1]);
+      if (!image) {
+        await ctx.reply(message);
+        return;
+      }
+      lastGenerated = { image };
+      clearTimeout(forgetGenerated);
+      forgetGenerated = setTimeout(() => {
+        lastGenerated = undefined;
+      }, 10 * 60 * 1000).unref();
+      await sendLastGenerated(ctx);
     } catch (error) {
       await ctx.reply(error instanceof Error ? error.message : String(error));
     }
@@ -794,7 +852,9 @@ export function startBot(): void {
   bot.on(message("text"), async (ctx) => {
     const text = ctx.message.text?.trim() ?? "";
     if (!text || text.startsWith("/")) return;
-    await runAgentForChat(ctx.chat.id, text);
+    const replyTo = ctx.message.reply_to_message?.message_id;
+    const image = replyTo && lastGenerated?.messageId === replyTo ? lastGenerated.image : undefined;
+    await runAgentForChat(ctx.chat.id, text, image);
   });
 
   // AI agent with a photo: the caption is the instruction; the image is attached.

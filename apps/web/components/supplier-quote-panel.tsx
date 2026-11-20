@@ -3,11 +3,13 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
+import { apiErrorMessage } from "@/lib/api-error-message";
+import { notifyCartChanged } from "@/lib/cart-events";
 import { trackStorefrontStep } from "@/lib/storefront-metrics";
 import { Button } from "@/components/ui/button";
 import { formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
-import type { PlanDetail, CreateOrderResponse } from "@/lib/types";
+import type { PlanDetail } from "@/lib/types";
 import { availabilityOf } from "@/lib/product-availability";
 type Quote = {
   planId: string;
@@ -129,49 +131,25 @@ export function SupplierQuotePanel({
       if (active.current) setBusy(false);
     }
   }
-  async function buy(method: "online" | "card_to_card") {
+  async function addToCart() {
     if (!token || inFlight.current || !canBuyFirmQuote(quote, plan.id)) return;
     inFlight.current = true;
     setBusy(true);
     setError("");
     try {
-      const result = await api.post<CreateOrderResponse>(
-        "/supplier-checkout/orders",
-        { quoteId: quote.id, method },
-        token,
-      );
-      if (!active.current) return;
-      if (["PAID", "PAID_PENDING_FULFILLMENT"].includes(result.order.paymentStatus)) {
-        router.push(`/${locale}/dashboard`);
-        return;
-      }
-      if (method === "card_to_card" && result.cardToCard) {
-        router.push(`/${locale}/checkout/card/${encodeURIComponent(result.order.id)}`);
-        return;
-      }
-      const url = new URL(result.payment?.redirectUrl ?? "");
-      if (
-        url.protocol !== "https:" &&
-        !(process.env.NODE_ENV !== "production" && url.protocol === "http:")
-      )
-        throw Error("Invalid payment redirect");
-      window.location.assign(url.href);
+      await api.post("/cart/items", { planId: plan.id }, token);
+      notifyCartChanged();
+      if (active.current) router.push(`/${locale}/cart`);
     } catch (error) {
-      if (!active.current) return;
-      if (
-        error instanceof ApiError &&
-        ["SUPPLIER_QUOTE_EXPIRED", "PAYMENT_INITIALIZATION_FAILED"].includes(error.code ?? "")
-      )
-        setQuote(null);
-      setError(
-        error instanceof ApiError && error.code === "PAYMENT_INITIALIZING"
-          ? fa
-            ? "درگاه در حال آماده‌شدن است؛ کمی بعد همین خرید را دوباره امتحان کن."
-            : "Payment is initializing. Retry this same purchase shortly."
-          : fa
-            ? "پرداخت آغاز نشد؛ وضعیت سفارش را بررسی کن و دوباره تلاش کن."
-            : "Payment could not start. Check your orders before retrying.",
-      );
+      if (active.current) {
+        setError(
+          apiErrorMessage(
+            error,
+            locale,
+            fa ? "افزودن به سبد انجام نشد. دوباره تلاش کن." : "Couldn’t add to cart. Please retry.",
+          ),
+        );
+      }
     } finally {
       inFlight.current = false;
       if (active.current) setBusy(false);
@@ -248,42 +226,12 @@ export function SupplierQuotePanel({
                 ? "This purchase price is valid until the quote expires."
                 : "This price is an estimate until the quote expires."}
           </p>
-          {canBuyFirmQuote(quote, plan.id) && quote.methods?.online && (
-            <Button
-              type="button"
-              onClick={() => buy("online")}
-              disabled={busy}
-              className="mt-3 w-full"
-            >
-              {busy
-                ? fa
-                  ? "در حال آماده‌سازی پرداخت…"
-                  : "Preparing payment…"
-                : fa
-                  ? "تأیید قیمت و پرداخت"
-                  : "Confirm price and pay"}
-            </Button>
-          )}
-          {canBuyFirmQuote(quote, plan.id) && quote.methods?.cardToCard && (
-            <Button
-              type="button"
-              onClick={() => buy("card_to_card")}
-              disabled={busy}
-              className="mt-3 w-full"
-            >
-              {busy
-                ? fa
-                  ? "در حال ساخت صورتحساب…"
-                  : "Preparing invoice…"
-                : fa
-                  ? quote.manualSupplier
-                    ? "کارت‌به‌کارت و ثبت رسید"
-                    : "کارت‌به‌کارت با مبلغ یکتا"
-                  : quote.manualSupplier
-                    ? "Bank transfer and receipt"
-                    : "Card transfer with a unique amount"}
-            </Button>
-          )}
+          {canBuyFirmQuote(quote, plan.id) &&
+            (quote.methods?.online || quote.methods?.cardToCard) && (
+              <Button type="button" onClick={addToCart} disabled={busy} className="mt-3 w-full">
+                {fa ? "افزودن به سبد خرید" : "Add to cart"}
+              </Button>
+            )}
         </div>
       )}
       <p className="text-xs leading-6 text-muted">

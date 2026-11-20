@@ -51,7 +51,7 @@ export function Journal({ locale, dict, posts, unavailable }: { locale: Locale; 
           <p>{fa ? "آموزش پرامپت‌نویسی، راهنمای ابزارها و کاربردهای هوش مصنوعی." : "Prompt writing, tool guides and practical uses for AI."}</p>
         </div>
         <div className={styles.brandArt} aria-hidden="true">
-          <Image src="/brand/oosta-ai-mark.png" alt="" width={250} height={250} priority />
+          <Image src="/brand/oosta-hero-v2-320.webp" alt="" width={250} height={250} preload />
         </div>
       </header>
       {featured ? (

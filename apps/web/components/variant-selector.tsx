@@ -97,26 +97,27 @@ export function VariantSelector({
     return translated[val] ?? planOptionValue(val, fa);
   }
   return (
-    <details className="group mt-4 rounded-xl border border-border">
-      <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 p-4 focus-visible:outline-2 focus-visible:outline-primary">
+    <details className="mt-4 rounded-xl border border-border">
+      <summary className="oosta-disclosure min-h-14 p-4 focus-visible:outline-2 focus-visible:outline-primary">
         <span className="min-w-0">
           <span className="block font-medium">
             {fa ? "انتخاب نوع اشتراک" : "Choose subscription"}
           </span>
-          <span className="mt-1 block text-sm text-muted">
+          <span className="mt-1 flex flex-wrap gap-x-2 text-sm text-muted">
             {value ? (
-              <bdi>{planDisplayLabel(plans.find((p) => p.id === value)?.label ?? "", fa)}</bdi>
+              <bdi dir={fa ? "rtl" : "ltr"}>
+                {planDisplayLabel(plans.find((p) => p.id === value)?.label ?? "", fa)}
+              </bdi>
             ) : fa ? (
               "برای انتخاب، گزینه‌ها را باز کن"
             ) : (
               "Expand to choose"
             )}
-            {" · "}
-            {plans.length.toLocaleString(fa ? "fa-IR" : "en-US")} {fa ? "گزینه" : "options"}
+            <span aria-hidden="true">·</span>
+            <bdi>
+              {plans.length.toLocaleString(fa ? "fa-IR" : "en-US")} {fa ? "گزینه" : "options"}
+            </bdi>
           </span>
-        </span>
-        <span aria-hidden="true" className="shrink-0 transition-transform group-open:rotate-180">
-          ⌄
         </span>
       </summary>
       <div className="space-y-4 border-t border-border p-4">
@@ -180,7 +181,7 @@ export function VariantSelector({
               />
               <span className="min-w-0 flex-1">
                 <span className="block font-medium">
-                  <bdi>{planDisplayLabel(p.label, fa)}</bdi>
+                  <bdi dir={fa ? "rtl" : "ltr"}>{planDisplayLabel(p.label, fa)}</bdi>
                 </span>
                 {p.variant && (
                   <span className="mt-2 block text-xs leading-6 text-muted">

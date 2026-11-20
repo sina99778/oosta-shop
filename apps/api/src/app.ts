@@ -25,6 +25,7 @@ import { maintenanceGate } from "./lib/maintenance";
 import { createSupplierCheckout, supplierCheckoutRouter } from "./modules/suppliers/checkout";
 import type { SupplierRegistry } from "./modules/suppliers/fulfillment";
 import { liveSupplierRegistry } from "./modules/suppliers/live-adapters";
+import { cartRouter } from "./modules/orders/cart.routes";
 
 export function createApp(options: { supplierAdapters?: SupplierRegistry } = {}) {
   const app = express();
@@ -39,6 +40,7 @@ export function createApp(options: { supplierAdapters?: SupplierRegistry } = {})
     [
       "/auth",
       "/orders",
+      "/cart",
       "/tickets",
       "/admin",
       "/payments/verify",
@@ -79,6 +81,7 @@ export function createApp(options: { supplierAdapters?: SupplierRegistry } = {})
   app.use("/auth", authRouter);
   app.use(catalogRouter);
   app.use("/orders", ordersRouter);
+  app.use("/cart", cartRouter);
   app.use("/supplier-quotes", supplierQuoteRouter);
   app.use("/supplier-checkout", supplierCheckoutRouter(supplierCheckout));
   app.use("/payments", paymentsRouter);

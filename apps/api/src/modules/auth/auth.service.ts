@@ -5,6 +5,7 @@ import { prisma } from "../../lib/prisma";
 import { hashPassword, verifyPassword } from "../../lib/password";
 import { signAccessToken } from "../../lib/jwt";
 import { AppError } from "../../utils/httpError";
+import { newWelcomeCode } from "../orders/welcome-gift";
 import type { ChangePasswordInput, LoginInput, SignupInput } from "./auth.schemas";
 
 export type PublicUser = Omit<User, "passwordHash" | "sessionVersion">;
@@ -39,6 +40,7 @@ export async function registerUser(input: SignupInput): Promise<AuthResult> {
         email: input.email ?? null,
         phone: input.phone ?? null,
         passwordHash,
+        welcomeGift: { create: { code: newWelcomeCode() } },
       },
     });
   } catch (error) {

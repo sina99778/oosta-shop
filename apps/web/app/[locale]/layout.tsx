@@ -21,7 +21,7 @@ const estedad = localFont({
   src: "../fonts/Estedad-storefront.woff2",
   variable: "--font-estedad",
   weight: "100 900",
-  preload: false,
+  preload: true,
 });
 
 export async function generateMetadata({

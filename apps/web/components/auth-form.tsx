@@ -5,6 +5,7 @@ import type { FormEvent, ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { apiErrorMessage } from "@/lib/api-error-message";
 import { latinDigits, safeReturnPath } from "@/lib/navigation";
 import { rememberPlanReturn } from "@/lib/storefront-metrics";
 import { Container } from "@/components/ui/container";
@@ -61,6 +62,10 @@ export function AuthForm({
       emailInput.current?.focus();
       return;
     }
+    if (mode === "signup" && new TextEncoder().encode(password).length > 72) {
+      setError(a.passwordMax);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -70,12 +75,6 @@ export function AuthForm({
           password,
         );
       } else {
-        if (new TextEncoder().encode(password).length > 72)
-          throw new Error(
-            locale === "fa"
-              ? "رمز عبور نباید بیشتر از ۷۲ بایت باشد."
-              : "Password must not exceed 72 UTF-8 bytes.",
-          );
         await signup({
           name,
           email: email.trim() || undefined,
@@ -86,7 +85,7 @@ export function AuthForm({
       rememberPlanReturn(destination);
       router.replace(destination);
     } catch (err) {
-      setError(err instanceof Error ? err.message : dict.common.somethingWrong);
+      setError(apiErrorMessage(err, locale, dict.common.somethingWrong, mode));
       setSubmitting(false);
     }
   }
@@ -137,6 +136,8 @@ export function AuthForm({
                     ref={emailInput}
                     type="email"
                     autoComplete="email"
+                    placeholder="name@example.com"
+                    dir="ltr"
                     aria-invalid={showContactError || undefined}
                     aria-describedby={showContactError ? "contact-error" : undefined}
                     value={email}
@@ -150,6 +151,8 @@ export function AuthForm({
                     aria-describedby={showContactError ? "contact-error" : undefined}
                     inputMode="tel"
                     autoComplete="tel"
+                    placeholder={a.phoneExample}
+                    dir="ltr"
                     maxLength={20}
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
@@ -174,6 +177,7 @@ export function AuthForm({
                   id="auth-password"
                   type={showPassword ? "text" : "password"}
                   minLength={mode === "signup" ? 8 : undefined}
+                  aria-describedby={mode === "signup" ? "auth-password-hint" : undefined}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -204,6 +208,11 @@ export function AuthForm({
                   </svg>
                 </button>
               </div>
+              {mode === "signup" && (
+                <p id="auth-password-hint" className="mt-2 text-sm text-muted">
+                  {a.passwordHint}
+                </p>
+              )}
             </div>
 
             {error && (

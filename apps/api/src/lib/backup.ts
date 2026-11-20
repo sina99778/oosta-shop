@@ -46,10 +46,9 @@ async function writeBackup(
   const dir = await mkdtemp(path.join(os.tmpdir(), "oosta-backup-"));
   const cleanup = () => rm(dir, { recursive: true, force: true });
   const extension = recipient ? ".sql.gz.age" : ".sql.gz";
-  const file = path.join(
-    dir,
-    `oosta-${new Date().toISOString().replace(/[:.]/g, "-")}${extension}`,
-  );
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const suffix = path.basename(dir).slice("oosta-backup-".length);
+  const file = path.join(dir, `oosta-${timestamp}-${suffix}${extension}`);
   const database = libpq(env.DATABASE_URL);
   const child = spawn(
     "pg_dump",

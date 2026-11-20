@@ -28,5 +28,9 @@ ENV HOSTNAME=0.0.0.0
 COPY --from=build /app/apps/web/.next/standalone ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /app/apps/web/public ./apps/web/public
+# Next writes generated pages and cached images below .next.
+RUN mkdir -p apps/web/.next/cache \
+  && chown -R node:node apps/web/.next/cache apps/web/.next/server
 EXPOSE 3000
+USER node
 CMD ["node", "apps/web/server.js"]

@@ -766,12 +766,18 @@ export async function approveReceipt(
             claim.occurredAt < receipt.order.createdAt ||
             claim.occurredAt.getTime() >= Date.parse(invoice.expiresAt) ||
             Date.now() >= Date.parse(invoice.expiresAt) + 86400000 ||
-            items.length !== 1 ||
-            items[0].quantity !== 1 ||
-            items[0].plan.source !== "INTERNAL" ||
-            items[0].fulfilledItems.length !== 1 ||
-            items[0].fulfilledItems[0].status !== "RESERVED" ||
-            items[0].fulfilledItems[0].planId !== items[0].planId
+            !items.length ||
+            (items.length !== 1 &&
+              (privatePilot ||
+                (receipt.order.paymentMetadata as Prisma.JsonObject).cartStockHeld !== true)) ||
+            items.some(({ quantity, plan, planId, productId, fulfilledItems }) =>
+              quantity !== 1 ||
+              plan.source !== "INTERNAL" ||
+              fulfilledItems.length !== 1 ||
+              fulfilledItems[0].status !== "RESERVED" ||
+              fulfilledItems[0].planId !== planId ||
+              fulfilledItems[0].productId !== productId
+            )
           )
             throw new AppError(409, "BLU_AUTO_NOT_ELIGIBLE", "This receipt requires manual review");
         }
@@ -1081,12 +1087,8 @@ export function generateProductSeo(input: SeoGenerateInput) {
 
 // ---------------- Sales dashboard / analytics ----------------
 export async function getStats() {
-  const [paidAgg, totalOrders, pendingReview, customers] = await Promise.all([
-    prisma.order.aggregate({
-      where: { paymentStatus: "PAID" },
-      _sum: { totalAmount: true },
-      _count: { _all: true },
-    }),
+  const [paidOrders, totalOrders, pendingReview, customers] = await Promise.all([
+    prisma.order.count({ where: { paymentStatus: "PAID" } }),
     prisma.order.count(),
     prisma.order.count({ where: { paymentStatus: "PENDING_REVIEW" } }),
     prisma.user.count({ where: { role: "USER" } }),
@@ -1097,11 +1099,11 @@ export async function getStats() {
       SELECT COALESCE(SUM(CASE WHEN currency = 'IRT' THEN "totalAmount" * 10 ELSE "totalAmount" END), 0)::float AS revenue FROM orders
       WHERE "paymentStatus" = 'PAID' AND "paidAt" >= NOW() - INTERVAL '30 days'`,
     prisma.$queryRaw<{ day: string; count: number; revenue: number }[]>`
-      SELECT to_char(date_trunc('day', "paidAt"), 'YYYY-MM-DD') AS day,
+      SELECT to_char(("paidAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Tehran', 'YYYY-MM-DD') AS day,
              COUNT(*)::int AS count,
              COALESCE(SUM(CASE WHEN currency = 'IRT' THEN "totalAmount" * 10 ELSE "totalAmount" END), 0)::float AS revenue
       FROM orders
-      WHERE "paymentStatus" = 'PAID' AND "paidAt" >= NOW() - INTERVAL '13 days'
+      WHERE "paymentStatus" = 'PAID' AND "paidAt" >= (NOW() AT TIME ZONE 'UTC') - INTERVAL '13 days'
       GROUP BY 1 ORDER BY 1`,
     prisma.$queryRaw<{ revenue: number }[]>`
       SELECT COALESCE(SUM(CASE WHEN currency = 'IRT' THEN "totalAmount" * 10 ELSE "totalAmount" END), 0)::float AS revenue
@@ -1160,7 +1162,7 @@ export async function getStats() {
     currency: "IRR",
     revenueTotal: revenueTotalRows[0]?.revenue ?? 0,
     revenue30: revenue30Rows[0]?.revenue ?? 0,
-    paidOrders: paidAgg._count._all,
+    paidOrders,
     totalOrders,
     pendingReview,
     customers,

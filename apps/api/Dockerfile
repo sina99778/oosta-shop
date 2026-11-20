@@ -9,7 +9,8 @@ RUN npm ci
 COPY tsconfig.base.json ./
 COPY apps/api ./apps/api
 RUN npm run prisma:generate -w @oosta/api \
-  && npm run build -w @oosta/api
+  && npm run build -w @oosta/api \
+  && npm prune --omit=dev --ignore-scripts
 
 # ---- Runtime stage ----
 FROM node:24-alpine AS runtime
@@ -20,12 +21,13 @@ RUN apk add --no-cache postgresql16-client \
   || apk add --no-cache postgresql17-client \
   || apk add --no-cache postgresql-client
 RUN apk add --no-cache age
-# Full node_modules (incl. Prisma CLI for migrate deploy) hoisted at the repo root.
+# Production dependencies include the Prisma CLI for migrate deploy.
 COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/apps/api/dist ./dist
 COPY --from=build /app/apps/api/package.json ./package.json
 COPY --from=build /app/apps/api/prisma ./prisma
 EXPOSE 4000
+USER node
 # Apply pending migrations, then start the server. `exec` makes node PID 1 so it
 # receives SIGTERM directly (graceful shutdown) instead of being SIGKILLed.
-CMD ["sh", "-c", "npx prisma migrate deploy && exec node dist/index.js"]
+CMD ["sh", "-c", "/app/node_modules/.bin/prisma migrate deploy && exec node dist/index.js"]

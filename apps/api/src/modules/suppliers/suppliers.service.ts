@@ -25,6 +25,7 @@ import {
 
 const prefix = "suppliers.catalog.";
 const parsedCatalogs = new Map<string, { value: string; catalog: Catalog | null }>();
+const runningSyncs = new Map<SupplierId, Promise<Catalog>>();
 export async function catalogs(
   client: Pick<Prisma.TransactionClient, "siteSetting"> = prisma,
 ): Promise<Map<SupplierId, Catalog>> {
@@ -53,33 +54,45 @@ export async function catalogs(
   }
   return map;
 }
-export async function syncCatalog(id: SupplierId): Promise<Catalog> {
-  return prisma.$transaction(
-    async (tx) => {
-      const [lock] = await tx.$queryRaw<
-        { locked: boolean }[]
-      >`SELECT pg_try_advisory_xact_lock(hashtext(${prefix + id})) AS locked`;
-      if (!lock.locked) throw new AppError(409, "SYNC_BUSY", "A catalog update is already running");
-      const previous = await tx.siteSetting.findUnique({ where: { key: prefix + id } });
-      if (previous) {
-        try {
-          const c = catalogSchema.parse(JSON.parse(previous.value));
-          const age = Date.now() - Date.parse(c.fetchedAt);
-          if (c.supplier === id && age >= 0 && age < 20000) return c;
-        } catch {
-          /* Replace corrupt cache. */
-        }
-      }
-      const catalog = await fetchCatalog(id);
-      await tx.siteSetting.upsert({
-        where: { key: prefix + id },
-        create: { key: prefix + id, value: JSON.stringify(catalog) },
-        update: { value: JSON.stringify(catalog) },
-      });
-      return catalog;
-    },
-    { timeout: 20000, maxWait: 3000 },
-  );
+function recentCatalog(id: SupplierId, value: string | undefined): Catalog | null {
+  if (!value) return null;
+  try {
+    const catalog = catalogSchema.parse(JSON.parse(value));
+    const age = Date.now() - Date.parse(catalog.fetchedAt);
+    return catalog.supplier === id && age >= 0 && age < 20000 ? catalog : null;
+  } catch {
+    return null;
+  }
+}
+
+async function refreshCatalog(id: SupplierId): Promise<Catalog> {
+  const key = prefix + id;
+  const where = { key };
+  const prior = recentCatalog(id, (await prisma.siteSetting.findUnique({ where }))?.value);
+  if (prior) return prior;
+
+  const catalog = await fetchCatalog(id);
+  const value = JSON.stringify(catalog);
+  return prisma.$transaction(async (tx) => {
+    const [lock] = await tx.$queryRaw<
+      { locked: boolean }[]
+    >`SELECT pg_try_advisory_xact_lock(hashtext(${key})) AS locked`;
+    if (!lock.locked) throw new AppError(409, "SYNC_BUSY", "A catalog update is already running");
+
+    // Another replica may have saved a fresh snapshot during the HTTP request.
+    const current = recentCatalog(id, (await tx.siteSetting.findUnique({ where }))?.value);
+    if (current) return current;
+    await tx.siteSetting.upsert({ where, create: { key, value }, update: { value } });
+    return catalog;
+  });
+}
+
+export function syncCatalog(id: SupplierId): Promise<Catalog> {
+  const running = runningSyncs.get(id);
+  if (running) return running;
+  const sync = refreshCatalog(id).finally(() => runningSyncs.delete(id));
+  runningSyncs.set(id, sync);
+  return sync;
 }
 export async function supplierOverview() {
   const all = await catalogs();

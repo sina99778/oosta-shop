@@ -105,7 +105,8 @@ async function main() {
       "content-type": "multipart/form-data; boundary=synthetic-receipt-boundary",
     },
     payload: Buffer.from(
-      '--synthetic-receipt-boundary\r\nContent-Disposition: form-data; name="reference"\r\n\r\n001234\r\n--synthetic-receipt-boundary\r\nContent-Disposition: form-data; name="receipt"; filename="fixture.png"\r\nContent-Type: image/png\r\n\r\nsynthetic-image\r\n--synthetic-receipt-boundary--\r\n',
+      '--synthetic-receipt-boundary\r\nContent-Disposition: form-data; name="reference"\r\n\r\n001234\r\n--synthetic-receipt-boundary\r\nContent-Disposition: form-data; name="receipt"; filename="fixture.png"\r\nContent-Type: image/png\r\n\r\n\x89PNG\r\n\x1a\n\r\n--synthetic-receipt-boundary--\r\n',
+      "latin1",
     ),
   });
   assert.equal(late.statusCode, 201, late.body);
@@ -221,7 +222,8 @@ async function main() {
       "content-type": "multipart/form-data; boundary=synthetic-receipt-boundary",
     },
     payload: Buffer.from(
-      '--synthetic-receipt-boundary\r\nContent-Disposition: form-data; name="reference"\r\n\r\n001234\r\n--synthetic-receipt-boundary\r\nContent-Disposition: form-data; name="receipt"; filename="fixture.png"\r\nContent-Type: image/png\r\n\r\nsynthetic-image\r\n--synthetic-receipt-boundary--\r\n',
+      '--synthetic-receipt-boundary\r\nContent-Disposition: form-data; name="reference"\r\n\r\n001234\r\n--synthetic-receipt-boundary\r\nContent-Disposition: form-data; name="receipt"; filename="fixture.png"\r\nContent-Type: image/png\r\n\r\n\x89PNG\r\n\x1a\n\r\n--synthetic-receipt-boundary--\r\n',
+      "latin1",
     ),
   });
   assert.equal(proof.statusCode, 201, proof.body);

@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 async function main() {
-  const email = process.env.ADMIN_EMAIL?.trim();
+  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     throw new Error("Set ADMIN_EMAIL to bootstrap an administrator");
   const existing = await prisma.user.findUnique({ where: { email } });

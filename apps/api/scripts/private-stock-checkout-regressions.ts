@@ -195,7 +195,8 @@ async function main() {
         "content-type": "multipart/form-data; boundary=held-receipt",
       },
       payload: Buffer.from(
-        '--held-receipt\r\nContent-Disposition: form-data; name="reference"\r\n\r\n001234\r\n--held-receipt\r\nContent-Disposition: form-data; name="receipt"; filename="fixture.png"\r\nContent-Type: image/png\r\n\r\nsynthetic-image\r\n--held-receipt--\r\n',
+        '--held-receipt\r\nContent-Disposition: form-data; name="reference"\r\n\r\n001234\r\n--held-receipt\r\nContent-Disposition: form-data; name="receipt"; filename="fixture.png"\r\nContent-Type: image/png\r\n\r\n\x89PNG\r\n\x1a\n\r\n--held-receipt--\r\n',
+        "latin1",
       ),
     });
     assert.equal(proof.statusCode, 201, proof.body);

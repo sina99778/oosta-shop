@@ -16,6 +16,14 @@ assert.equal(minimatch("src/app.js", "src/**/*.ts", { dot: true }), false);
 assert.equal(minimatch("outside/app.ts", "src/**/*.ts", { dot: true }), false);
 console.log("PASS: TypeScript lint uses a patched matcher and preserves project-file matching");
 
+const fromPrisma = createRequire(require.resolve("@prisma/config"));
+const { version: effectVersion } = fromPrisma("effect/package.json");
+const [effectMajor, effectMinor, effectPatch] = effectVersion.split(".").map(Number);
+assert(
+  effectMajor === 3 && (effectMinor > 22 || (effectMinor === 22 && effectPatch >= 1)),
+  `Prisma config requires a patched Effect 3 release: ${effectVersion}`,
+);
+
 // Exercise Prisma's c12 loader as well as the merge function itself, without a database.
 async function checkPrismaLoader() {
   const fs = require("node:fs/promises");

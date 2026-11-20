@@ -126,23 +126,26 @@ export async function quotePricing(policy: Pricing) {
     Date.parse(state.expiresAt) <= now
   )
     throw new AppError(503, "PRICING_UNAVAILABLE", "Sampled exchange rate is unavailable");
-  const rates = usableFxRates(state.snapshot, now);
-  if (!Object.keys(rates).length)
+  const sampledRates = usableFxRates(state.snapshot, now);
+  const referenceCurrency = sampledRates.USDT ? "USDT" : "USD";
+  const referenceRate = sampledRates[referenceCurrency];
+  const referenceTime = state.snapshot.rates[referenceCurrency]?.updatedAt;
+  if (!referenceRate || !referenceTime)
     throw new AppError(503, "PRICING_UNAVAILABLE", "Sampled exchange rate is too old");
-  const timestamps = Object.entries(state.snapshot.rates)
-    .filter(([currency]) => currency in rates)
-    .map(([, rate]) => Date.parse(rate.updatedAt));
+  // Navasan pricing uses fresh Tether as the Toman reference for USD-listed supplier costs.
+  const rates = { ...sampledRates, USD: referenceRate };
   return {
     // Fresh estimate calculation time is separate from the explicitly disclosed original FX times.
     policy: { ...policy, rates, updatedAt: new Date(now).toISOString(), ttlSeconds: 60 },
     fx: {
       source: "NAVASAN_FREE" as const,
+      referenceCurrency,
       sampled: true,
       fetchedAt: state.snapshot.fetchedAt,
-      updatedAt: new Date(Math.min(...timestamps)).toISOString(),
+      updatedAt: referenceTime,
       refreshIntervalHours: 8,
     },
-    rateExpiresAt: Math.min(...timestamps) + FX_MAX_AGE_MS,
+    rateExpiresAt: Date.parse(referenceTime) + FX_MAX_AGE_MS,
   };
 }
 export function startFxRefresh(): () => void {

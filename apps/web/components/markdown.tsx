@@ -7,8 +7,27 @@
 // http(s)/root-relative URLs are accepted, so no HTML injection is possible.
 
 import type { ReactNode } from "react";
+import Link from "next/link";
+import { safeReturnPath } from "@/lib/navigation";
 
-const safe = (url: string) => /^https?:\/\//i.test(url) || url.startsWith("/");
+function safeUrl(url: string): string | null {
+  if (/^https?:\/\//i.test(url)) return URL.canParse(url) ? url : null;
+  const path = safeReturnPath(url, "");
+  return path && !path.startsWith("//") ? path : null;
+}
+
+function markdownLink(href: string, label: string, key: string) {
+  const className = "text-primary hover:underline";
+  return href.startsWith("/") ? (
+    <Link href={href} key={key} prefetch={false} className={className}>
+      {label}
+    </Link>
+  ) : (
+    <a href={href} key={key} target="_blank" rel="noopener noreferrer" className={className}>
+      {label}
+    </a>
+  );
+}
 
 const INLINE_SPLIT =
   /(!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|\*[^*\n]+\*|`[^`\n]+`)/g;
@@ -31,14 +50,15 @@ function inline(text: string, keyPrefix: string, preview: boolean): ReactNode[] 
       );
     }
     const img = part.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
-    if (img && safe(img[2])) {
-      if (preview && !/^\/(?:api\/)?blog-media\/[a-z0-9-]+$/i.test(img[2])) {
+    const imageUrl = img && safeUrl(img[2]);
+    if (img && imageUrl) {
+      if (preview && !/^\/(?:api\/)?blog-media\/[a-z0-9-]+$/i.test(imageUrl)) {
         return <span key={key}>{img[1] || img[2]}</span>;
       }
       return (
         <img
           key={key}
-          src={img[2]}
+          src={imageUrl}
           alt={img[1]}
           loading="lazy"
           decoding="async"
@@ -47,24 +67,15 @@ function inline(text: string, keyPrefix: string, preview: boolean): ReactNode[] 
       );
     }
     const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-    if (link && safe(link[2])) {
+    const href = link && safeUrl(link[2]);
+    if (link && href) {
       if (preview)
         return (
           <span key={key} className="text-primary">
             {link[1]}
           </span>
         );
-      return (
-        <a
-          key={key}
-          href={link[2]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary hover:underline"
-        >
-          {link[1]}
-        </a>
-      );
+      return markdownLink(href, link[1], key);
     }
     return part;
   });
@@ -79,8 +90,9 @@ function aparatHash(url: string): string | null {
   return m ? m[1] : null;
 }
 
-function videoEmbed(url: string, key: string): ReactNode {
-  if (!safe(url)) return null;
+function videoEmbed(value: string, key: string): ReactNode {
+  const url = safeUrl(value);
+  if (!url) return null;
   const yt = youtubeId(url);
   const ap = aparatHash(url);
   if (yt || ap) {
@@ -106,17 +118,7 @@ function videoEmbed(url: string, key: string): ReactNode {
       </video>
     );
   }
-  return (
-    <a
-      key={key}
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-primary hover:underline"
-    >
-      {url}
-    </a>
-  );
+  return markdownLink(url, value, key);
 }
 
 // Longest prefix first so "### " is not swallowed by "## ".

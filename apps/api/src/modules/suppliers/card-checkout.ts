@@ -16,6 +16,7 @@ export function supplierCardReady(gateway: GatewayConfig) {
     });
     return (
       env.BLU_AUTO_APPROVE_ENABLED &&
+      !env.SUPPLIER_MANUAL_APPROVAL &&
       gateway.cardEnabled &&
       key.asymmetricKeyType === "ed25519" &&
       Buffer.from(env.BLU_TRACKING_HMAC_KEY ?? "", "base64").length === 32 &&
@@ -61,7 +62,7 @@ export async function confirmSupplierCardPayment(
     quote.plan.source !== "SUPPLIER" ||
     quote.userId !== order.userId ||
     user?.role !== "USER" ||
-    (automatic && !env.BLU_AUTO_APPROVE_ENABLED) ||
+    (automatic && (!env.BLU_AUTO_APPROVE_ENABLED || env.SUPPLIER_MANUAL_APPROVAL)) ||
     order.paymentProvider !== "CARD_TO_CARD" ||
     order.paymentStatus !== "PENDING_REVIEW" ||
     order.paidAt ||

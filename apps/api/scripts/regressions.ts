@@ -101,7 +101,8 @@ async function main() {
       },
     });
   const online = await order();
-  await Promise.all(Array.from({ length: 8 }, () => deliverOrder(online.id, "ref")));
+  const transitions = await Promise.all(Array.from({ length: 8 }, () => deliverOrder(online.id, "ref")));
+  assert.equal(transitions.filter(Boolean).length, 1, "only the fulfillment winner may send a sale notification");
   assert.equal(
     await prisma.inventoryItem.count({ where: { orderItem: { orderId: online.id } } }),
     1,
@@ -123,10 +124,19 @@ async function main() {
 
   const card = await order("CARD_TO_CARD");
   const file = { buffer: Buffer.from("synthetic receipt"), mimetype: "image/png" };
+  const mixedCaseFile = { buffer: Buffer.from("89504e470d0a1a0a", "hex"), mimetype: "IMAGE/PNG" };
+  await assert.rejects(uploadReceipt(user.id, card.id, { ...file, mimetype: "IMAGE/SVG+XML" }), {
+    code: "BAD_FILE_TYPE",
+  });
   const receipts = await Promise.all([
-    uploadReceipt(user.id, card.id, file),
+    uploadReceipt(user.id, card.id, mixedCaseFile),
     uploadReceipt(user.id, card.id, file),
   ]);
+  assert.equal(
+    (await prisma.receipt.findUniqueOrThrow({ where: { id: receipts[0].receiptId } })).mimeType,
+    "image/png",
+  );
+  await assert.rejects(uploadReceipt("another-buyer", card.id, mixedCaseFile), { code: "NOT_FOUND" });
   await Promise.allSettled([
     approveReceipt(receipts[0].receiptId, {}),
     approveReceipt(receipts[1].receiptId, {}),

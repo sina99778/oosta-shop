@@ -153,7 +153,7 @@ export async function HomeSections({
                 }
                 fetchPriority="high"
                 className={styles.brandImage}
-                sizes="(max-width: 700px) 80px, (max-width: 900px) 260px, (max-width: 1250px) 320px, 400px"
+                sizes="(max-width: 700px) 80px, (max-width: 900px) 260px, 320px"
               />
             </div>
           </figure>
@@ -174,7 +174,7 @@ export async function HomeSections({
             </div>
             <Link prefetch={false} href={`/${locale}/blog`} className={styles.textLink}>
               {fa ? "همهٔ مقاله‌ها" : "All articles"}
-              <span aria-hidden="true">←</span>
+              <span aria-hidden="true">{fa ? "←" : "→"}</span>
             </Link>
           </div>
           <div className={styles.readingGrid}>

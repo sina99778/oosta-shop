@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { inject } from "light-my-request";
 import { prisma } from "../src/lib/prisma";
 import { createApp } from "../src/app";
+import { signAccessToken } from "../src/lib/jwt";
 import { listProductsQuery } from "../src/modules/catalog/catalog.schemas";
 import type { Prisma } from "@prisma/client";
 
@@ -104,6 +105,22 @@ async function main() {
   assert.equal(recommended[0].id, known.id);
   assert.equal((await items("recommended", 2, 1))[0].id, recommended[1].id);
   assert.equal((await items("recommended", 5, 1)).length, 0);
+  const setOrder = (token: string) =>
+    inject(app, {
+      method: "PATCH",
+      url: `/admin/products/${obscure.id}`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { sortOrder: 10 },
+    });
+  assert.equal((await setOrder(signAccessToken({ sub: user.id, role: "USER" }))).statusCode, 403);
+  const admin = await prisma.user.create({
+    data: { name: "Sorting admin", role: "ADMIN", passwordHash: "unused" },
+  });
+  const pin = await setOrder(signAccessToken({ sub: admin.id, role: "ADMIN" }));
+  assert.equal(pin.statusCode, 200, pin.body);
+  for (const sort of ["recommended", "newest"]) {
+    assert.equal((await items(sort, 1, 1))[0].id, obscure.id);
+  }
   const available = await items("available");
   assert.equal(available[0].id, obscure.id);
   assert.equal(available[0].availability, "LOCAL_STOCK");

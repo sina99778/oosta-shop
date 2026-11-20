@@ -92,13 +92,18 @@ async function main() {
         env,
       ),
     );
-    if (process.argv.includes("--supplier-wallet-only")) {
+    const focusedScript = process.argv.includes("--cart-only")
+      ? "cart-regressions"
+      : process.argv.includes("--supplier-wallet-only")
+        ? "supplier-wallet-regressions"
+        : null;
+    if (focusedScript) {
       console.log(
         run(
           process.execPath,
           [
             path.join(root, "node_modules/tsx/dist/cli.mjs"),
-            "apps/api/scripts/supplier-wallet-regressions.ts",
+            `apps/api/scripts/${focusedScript}.ts`,
           ],
           env,
         ),
@@ -282,16 +287,15 @@ async function main() {
         { ...env, DATABASE_URL: env.DATABASE_URL + "&connection_limit=1&pool_timeout=3" },
       ),
     );
-    console.log(
-      run(
-        process.execPath,
-        [
-          path.join(root, "node_modules/tsx/dist/cli.mjs"),
-          "apps/api/scripts/supplier-wallet-regressions.ts",
-        ],
-        env,
-      ),
-    );
+    for (const script of ["supplier-wallet-regressions", "cart-regressions"]) {
+      console.log(
+        run(
+          process.execPath,
+          [path.join(root, "node_modules/tsx/dist/cli.mjs"), `apps/api/scripts/${script}.ts`],
+          env,
+        ),
+      );
+    }
   } finally {
     if (started)
       run(executable("pg_ctl"), ["-D", path.join(dir, "data"), "-m", "fast", "-w", "stop"], env);

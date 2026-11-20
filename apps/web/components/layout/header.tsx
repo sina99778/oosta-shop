@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { useApi } from "@/lib/use-api";
+import { cartChangedEvent } from "@/lib/cart-events";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { LocaleSwitcher } from "./locale-switcher";
@@ -34,7 +36,12 @@ export function Header({
   dict: NavDict;
   themeLabel: string;
 }) {
-  const { user, logout, loading } = useAuth();
+  const { user, token, logout, loading } = useAuth();
+  const cartSession = user?.role === "USER" ? token : null;
+  const { data: cart, refetch } = useApi<{ count: number }>(
+    cartSession ? "/cart/count" : null,
+    cartSession ?? undefined,
+  );
   const pathname = usePathname();
   const [openPath, setOpenPath] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -44,12 +51,30 @@ export function Header({
   const fa = locale === "fa";
   const base = `/${locale}`;
   const menuLabel = fa ? "منوی اصلی" : "Main menu";
+  const cartLabel = fa ? "سبد خرید" : "Cart";
+  const count = cart?.count ? cart.count.toLocaleString(fa ? "fa-IR" : "en-US") : null;
+
+  useEffect(() => {
+    if (!cartSession) return;
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible") refetch();
+    };
+    const timer = setInterval(refreshVisible, 60000);
+    document.addEventListener("visibilitychange", refreshVisible);
+    window.addEventListener(cartChangedEvent, refetch);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshVisible);
+      window.removeEventListener(cartChangedEvent, refetch);
+    };
+  }, [cartSession, refetch]);
 
   const routes = [
     { href: base, label: dict.home },
     { href: `${base}/products`, label: dict.products },
     { href: `${base}/blog`, label: dict.blog },
     { href: `${base}/support`, label: dict.support },
+    { href: `${base}/cart`, label: cartLabel },
     ...(user ? [{ href: `${base}/dashboard`, label: dict.dashboard }] : []),
     ...(user?.role === "ADMIN" ? [{ href: `${base}/admin`, label: dict.admin }] : []),
   ];
@@ -57,6 +82,7 @@ export function Header({
   function navigation() {
     return routes.map(({ href, label }) => {
       const active = pathname === href || (href !== base && pathname.startsWith(`${href}/`));
+      const cartCount = href === `${base}/cart` ? count : null;
       return (
         <Link
           prefetch={false}
@@ -65,8 +91,14 @@ export function Header({
           className={styles.navLink}
           onClick={() => setOpenPath(null)}
           aria-current={active ? "page" : undefined}
+          aria-label={cartCount ? `${label} (${cartCount})` : undefined}
         >
           {label}
+          {cartCount && (
+            <span aria-hidden="true" className={styles.cartCount}>
+              {cartCount}
+            </span>
+          )}
         </Link>
       );
     });

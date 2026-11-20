@@ -73,6 +73,18 @@
   color: var(--c-muted);
   border-radius: 0.6rem;
 }
+.cartCount {
+  min-width: 1.4rem;
+  padding-inline: 0.3rem;
+  margin-inline-start: 0.35rem;
+  border-radius: 999px;
+  background: var(--c-mint);
+  color: var(--c-navy);
+  font-size: 0.75rem;
+  font-weight: 750;
+  line-height: 1.4rem;
+  font-variant-numeric: tabular-nums;
+}
 .navLink:hover {
   background: var(--c-card);
   color: var(--c-fg);

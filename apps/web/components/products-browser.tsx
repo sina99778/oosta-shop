@@ -142,10 +142,9 @@ export async function ProductsBrowser({
             </p>
           )}
           <details className={styles.categoryDisclosure}>
-            <summary>
+            <summary className="oosta-disclosure">
               <span>{fa ? "دسته‌بندی محصولات" : "Product categories"}</span>
               <strong>{categoryName}</strong>
-              <span className={styles.disclosureArrow} aria-hidden="true" />
             </summary>
             <nav
               className={styles.categories}

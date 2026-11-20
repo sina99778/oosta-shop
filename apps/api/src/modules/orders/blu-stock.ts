@@ -4,12 +4,13 @@ import { AppError } from "../../utils/httpError";
 
 export async function claimAvailableStock(
   tx: Prisma.TransactionClient,
-  item: { id: string; planId: string; quantity: number },
+  item: { id: string; planId: string; quantity: number; productId?: string },
   status: "RESERVED" | "SOLD",
 ) {
   const rows = await tx.$queryRaw<{ id: string }[]>`
     SELECT id FROM inventory_items
     WHERE "planId" = ${item.planId} AND status = 'AVAILABLE'
+      ${item.productId ? Prisma.sql`AND "productId" = ${item.productId}` : Prisma.empty}
     ORDER BY "createdAt", id
     LIMIT ${item.quantity}
     FOR UPDATE SKIP LOCKED`;

@@ -13,7 +13,7 @@ export function AccountFrame({
   children,
 }: {
   locale: Locale;
-  section: "orders" | "support" | "security";
+  section: "orders" | "inbox" | "support" | "security";
   title: ReactNode;
   detail?: ReactNode;
   action?: ReactNode;
@@ -28,6 +28,12 @@ export function AccountFrame({
           aria-current={section === "orders" ? "location" : undefined}
         >
           {fa ? "سفارش‌ها" : "Orders"}
+        </Link>
+        <Link
+          href={`/${locale}/dashboard/inbox`}
+          aria-current={section === "inbox" ? "location" : undefined}
+        >
+          {fa ? "صندوق پیام" : "Inbox"}
         </Link>
         <Link
           href={`/${locale}/support`}

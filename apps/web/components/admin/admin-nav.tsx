@@ -85,7 +85,7 @@ export function AdminNav({
     <>
       <div className={styles.topbar}>
         <Link href={base} className={styles.brand}>
-          <Image src="/brand/oosta-ai-mark.png" width={38} height={38} alt="" />
+          <Image src="/brand/oosta-mark-v1-96.webp" width={38} height={38} alt="" />
           <span>{fa ? "مدیریت اوستا" : "Oosta admin"}</span>
         </Link>
         <div className={styles.topActions}>

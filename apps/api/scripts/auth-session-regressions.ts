@@ -2,6 +2,8 @@
 // auth, password change, and server-side revocation of every older token.
 // Runs only through `npm run test:isolated` (disposable database, synthetic users).
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { inject } from "light-my-request";
 import { createApp } from "../src/app";
 import { env } from "../src/config/env";
@@ -21,8 +23,43 @@ function sessionCookie(setCookie: string | string[] | undefined): string {
 }
 const cookiePair = (cookie: string) => cookie.split(";")[0];
 
+function checkCanonicalEmailMigration() {
+  const database = new URL(process.env.DATABASE_URL!);
+  database.searchParams.delete("schema");
+  const migration = readFileSync(
+    new URL(
+      "../prisma/migrations/20261120000200_canonical_user_email/migration.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const fixture = `
+    SET search_path TO pg_temp;
+    CREATE TEMP TABLE "users" (id text PRIMARY KEY, email text UNIQUE);
+    INSERT INTO "users" VALUES ('upper', '  Legacy@EXAMPLE.INVALID '), ('phone', NULL);
+  `;
+  const migrate = (additional: string) =>
+    spawnSync("psql", ["-X", "-At", "-q", "--dbname", database.href], {
+      input: `${fixture}\n${additional}\n${migration}\nSELECT email FROM "users" WHERE id = 'upper';`,
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 10000,
+    });
+
+  const normalized = migrate("");
+  assert.equal(normalized.status, 0, normalized.error?.message);
+  assert.equal(normalized.stderr, "");
+  assert.equal(normalized.stdout.trim(), "legacy@example.invalid");
+
+  const collision = migrate("INSERT INTO \"users\" VALUES ('lower', 'legacy@example.invalid');");
+  assert.equal(collision.status, 0, collision.error?.message);
+  assert.match(collision.stderr, /Canonical email migration blocked by legacy account collisions/);
+  assert.equal(collision.stdout.trimEnd(), "  Legacy@EXAMPLE.INVALID");
+}
+
 async function main() {
   assert.equal(process.env.ISOLATED_REGRESSION_DB, "1", "Use the isolated test runner");
+  checkCanonicalEmailMigration();
   const app = createApp();
   const email = "session-regression@example.invalid";
   const password = "Original-Pass-1";
@@ -34,9 +71,24 @@ async function main() {
     url: "/auth/signup",
     remoteAddress: nextIp(),
     headers: { ...json, origin: ORIGIN },
-    payload: JSON.stringify({ name: "Session user", email, password }),
+    payload: JSON.stringify({
+      name: "Session user",
+      email: `  ${email.toUpperCase()}  `,
+      password,
+    }),
   });
   assert.equal(signup.statusCode, 201, signup.body);
+  assert.equal(signup.json().user.email, email);
+  const caseDuplicate = await inject(app, {
+    method: "POST",
+    url: "/auth/signup",
+    remoteAddress: nextIp(),
+    headers: { ...json, origin: ORIGIN },
+    payload: { name: "Duplicate", email: email.toUpperCase(), password },
+  });
+  assert.equal(caseDuplicate.statusCode, 409, caseDuplicate.body);
+  assert.equal(caseDuplicate.headers["set-cookie"], undefined);
+  assert.equal(await prisma.welcomeGift.count({ where: { user: { email } } }), 1);
   const signupCookie = sessionCookie(signup.headers["set-cookie"]);
   assert.match(signupCookie, /;\s*HttpOnly/i);
   assert.match(signupCookie, /;\s*SameSite=Lax/i);
@@ -88,7 +140,7 @@ async function main() {
       url: "/auth/login",
       remoteAddress: nextIp(),
       headers: { ...json, origin: ORIGIN },
-      payload: JSON.stringify({ identifier: email, password }),
+      payload: JSON.stringify({ identifier: `  ${email.toUpperCase()}  `, password }),
     });
     assert.equal(prodLogin.statusCode, 200, prodLogin.body);
     assert.match(sessionCookie(prodLogin.headers["set-cookie"]), /;\s*Secure/i);

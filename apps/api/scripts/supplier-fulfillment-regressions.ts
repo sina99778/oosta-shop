@@ -1,9 +1,13 @@
 import type { SupplierId } from "../src/modules/suppliers/catalog";
 import assert from "node:assert/strict";
 import { createHash, createHmac, generateKeyPairSync, randomUUID, sign } from "node:crypto";
+import { mock } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { Prisma } from "@prisma/client";
 import { inject } from "light-my-request";
+import { Telegraf, Telegram } from "telegraf";
 import { createApp } from "../src/app";
+import { startBot } from "../src/bot";
 import { signAccessToken } from "../src/lib/jwt";
 import { env } from "../src/config/env";
 import { uploadReceipt } from "../src/modules/orders/orders.service";
@@ -768,6 +772,15 @@ async function main() {
     (await prisma.receipt.findUniqueOrThrow({ where: { id: receipt.receiptId } })).status,
     "PENDING",
   );
+  Object.assign(env, { SUPPLIER_MANUAL_APPROVAL: true });
+  assert.equal((await sendBank()).statusCode, 200);
+  assert.equal(
+    (await prisma.order.findUniqueOrThrow({ where: { id: cardStored.id } })).paymentStatus,
+    "PENDING_REVIEW",
+    "Enabling automatic Blu for stock must preserve manual supplier approval",
+  );
+  assert.equal(buys, 0);
+  Object.assign(env, { SUPPLIER_MANUAL_APPROVAL: false });
   assert.equal((await sendBank()).statusCode, 200);
   assert.equal(
     (await prisma.order.findUniqueOrThrow({ where: { id: cardStored.id } })).paymentStatus,
@@ -1067,24 +1080,104 @@ async function main() {
   const mq = await call("/supplier-checkout/quotes", { planId: m.product.plans[0].id });
   assert.equal(mq.statusCode, 201, mq.body);
   assert.deepEqual(mq.json().quote.methods, { online: false, cardToCard: true });
-  const mo = await call("/supplier-checkout/orders", {
-    quoteId: mq.json().quote.id,
+  process.env.OOSTA_DISCOUNT_CODES = "SUPPLIERCART:5";
+  const line = await call("/cart/items", { planId: m.product.plans[0].id });
+  assert.equal(line.statusCode, 201, line.body);
+  const cartPath = "/cart/items/" + line.json().id;
+  const cartReview = await call(cartPath + "/review", { code: "SUPPLIERCART" });
+  assert.equal(cartReview.statusCode, 200, cartReview.body);
+  const cartInvoice = cartReview.json().invoice;
+  assert.equal(cartInvoice.subtotal, String(mq.json().quote.amount));
+  assert(Number(cartInvoice.total) < Number(cartInvoice.subtotal));
+  const cartPayment = {
+    quoteId: cartInvoice.quoteId,
+    code: "SUPPLIERCART",
+    subtotal: cartInvoice.subtotal,
+    total: cartInvoice.total,
     method: "card_to_card",
-  });
+  };
+  supplierCost = "7";
+  assert.equal((await call(cartPath + "/pay", cartPayment)).json().error.code, "CART_CHANGED");
+  supplierCost = "8";
+  const mo = await call(cartPath + "/pay", cartPayment);
   assert.equal(mo.statusCode, 201, mo.body);
   const orderId = mo.json().order.id;
-  assert.equal(mo.json().cardToCard.amount, mq.json().quote.amount);
+  assert.equal(mo.json().cardToCard.amount, Number(cartInvoice.total));
+  assert.equal((await call(cartPath + "/pay", cartPayment)).json().order.id, orderId);
   const manualJob = await prisma.supplierFulfillment.findUniqueOrThrow({ where: { orderId } });
   assert.equal(manualJob.walletExposure, null);
   await assert.rejects(dispatchManualSupplier(manualJob.id, manualAdmin.id, m.registry));
   const file = { buffer: Buffer.from("synthetic PNG"), mimetype: "image/png" };
-  const mr = await uploadReceipt(m.user.id, orderId, file, "01234567");
+  assert(!env.TELEGRAM_BOT_TOKEN);
+  const chatId = 917000002;
+  const documents: { chat_id: number; caption: string; reply_markup: unknown }[] = [];
+  mock.method(Telegraf.prototype, "launch", async () => {});
+  mock.method(Telegram.prototype, "callApi", async (method: string, payload: unknown) => {
+    if (method === "sendDocument") documents.push(payload as (typeof documents)[number]);
+    return {};
+  });
+  Object.assign(env, {
+    TELEGRAM_BOT_TOKEN: "1002:SYNTHETIC",
+    TELEGRAM_ADMIN_ID: chatId,
+    BACKUP_INTERVAL_HOURS: 0,
+  });
+  startBot();
+  const orderURL = "/orders/" + orderId;
+  const buyerOrder = () => inject(manualApp, { method: "GET", url: orderURL, headers: mHeaders });
+  const upload = (reference: string) =>
+    inject(manualApp, {
+      method: "POST",
+      url: orderURL + "/receipt",
+      headers: { ...mHeaders, "content-type": "multipart/form-data; boundary=cart-proof" },
+      payload: Buffer.concat([
+        Buffer.from([
+          "--cart-proof",
+          'Content-Disposition: form-data; name="reference"',
+          "",
+          reference,
+          "--cart-proof",
+          'Content-Disposition: form-data; name="receipt"; filename="fixture.png"',
+          "Content-Type: image/png",
+          "",
+          "",
+        ].join("\r\n")),
+        Buffer.from("89504e470d0a1a0a", "hex"),
+        Buffer.from("\r\n--cart-proof--\r\n"),
+      ]),
+    });
+  assert.equal((await buyerOrder()).json().order.paymentStatus, "PENDING");
+  assert.equal((await upload("")).json().error.code, "BLU_REFERENCE_REQUIRED");
+  assert.equal(documents.length, 0);
+  const sent = await upload("۰۱۲۳۴۵۶۷");
+  assert.equal(sent.statusCode, 201, sent.body);
+  const mr = sent.json<{ receiptId: string; paymentStatus: string }>();
+  assert.equal(mr.paymentStatus, "PENDING_REVIEW");
+  const reviewing = await buyerOrder();
+  assert.equal(reviewing.json().order.paymentStatus, "PENDING_REVIEW");
+  assert.equal(reviewing.json().order.receipts[0].reference, "01234567");
+  assert.deepEqual(reviewing.json().order.items[0].credentials, []);
+  for (let attempt = 0; attempt < 20 && !documents.length; attempt++) await delay(50);
+  assert.equal(documents.length, 1, "A valid supplier receipt should alert the Telegram admin");
+  assert.equal(documents[0].chat_id, chatId);
+  assert(documents[0].caption.includes(orderId.slice(-8)));
+  assert(JSON.stringify(documents[0].reply_markup).includes("rcp_ok_" + mr.receiptId));
+  assert(JSON.stringify(documents[0].reply_markup).includes("rcp_no_" + mr.receiptId));
   await assert.rejects(approveReceipt(mr.receiptId, {}, true));
-  const approvals = await Promise.allSettled([
-    approveReceipt(mr.receiptId, {}, false, manualAdmin.id),
-    approveReceipt(mr.receiptId, {}, false, manualAdmin.id),
-  ]);
-  assert.equal(approvals.filter((result) => result.status === "fulfilled").length, 1);
+  const approvalUrl = "/admin/receipts/" + mr.receiptId + "/approve";
+  assert.equal((await call(approvalUrl, {})).statusCode, 403);
+  const approve = () =>
+    inject(manualApp, {
+      method: "POST",
+      url: approvalUrl,
+      payload: "{}",
+      headers: {
+        ...headers,
+        authorization: "Bearer " + signAccessToken({ sub: manualAdmin.id, role: "ADMIN" }),
+      },
+    });
+  const approvals = await Promise.all([approve(), approve()]);
+  assert.deepEqual(approvals.map(({ statusCode }) => statusCode).sort(), [200, 409]);
+  assert.equal((await buyerOrder()).json().order.paymentStatus, "PAID_PENDING_FULFILLMENT");
   await manualApp.locals.supplierCheckout.sweep();
   assert.equal(buys, 0);
   assert.equal(
@@ -1122,6 +1215,22 @@ async function main() {
   ]);
   assert(dispatch.some((result) => result.status === "fulfilled"));
   assert.equal(buys, 1);
+  const delivered = await buyerOrder();
+  assert.equal(delivered.statusCode, 200);
+  assert.match(String(delivered.headers["cache-control"]), /private.*no-store/);
+  assert.equal(delivered.json().order.paymentStatus, "PAID");
+  assert.equal(delivered.json().order.items[0].credentials.length, 1);
+  assert(delivered.body.includes("Synthetic-only-1"));
+  const bystander = await inject(manualApp, {
+    method: "GET",
+    url: orderURL,
+    headers: { authorization: "Bearer " + signAccessToken({ sub: manual.user.id, role: "USER" }) },
+  });
+  assert.equal(bystander.statusCode, 404);
+  assert(!bystander.body.includes("Synthetic-only-1"));
+  console.log(
+    "PASS: cart to supplier card receipt, stubbed Telegram notification, buyer-visible status and exactly-once owner delivery",
+  );
   assert.equal(
     (await prisma.order.findUniqueOrThrow({ where: { id: orderId } })).paymentStatus,
     "PAID",

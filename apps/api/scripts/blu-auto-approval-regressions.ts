@@ -44,7 +44,7 @@ async function main() {
   env.BLU_STOCK_CHECKOUT_ENABLED = true;
   Object.assign(env, { BLU_AUTO_APPROVE_ENABLED: true });
   let serial = 0;
-  async function fixture() {
+  async function fixture(lineCount = 1) {
     const amount = 500000 - ++serial * 10,
       now = Date.now();
     const metadata = {
@@ -58,6 +58,7 @@ async function main() {
       amountIrr: String(amount),
       expiresAt: new Date(now + 600000).toISOString(),
       stockHeld: true,
+      ...(lineCount > 1 ? { cartStockHeld: true } : {}),
     };
     const order = await prisma.order.create({
       data: {
@@ -70,27 +71,32 @@ async function main() {
         bluInvoiceKey: metadata.iban + ":" + amount,
         paymentMetadata: metadata,
         items: {
-          create: {
+          create: Array.from({ length: lineCount }, (_, index) => ({
             productId: product.id,
             planId: plan.id,
             quantity: 1,
-            unitPrice: 500000,
-            lineTotal: 500000,
-          },
+            unitPrice: Math.floor(amount / lineCount) + (index === 0 ? amount % lineCount : 0),
+            lineTotal: Math.floor(amount / lineCount) + (index === 0 ? amount % lineCount : 0),
+          })),
         },
       },
       include: { items: true },
     });
-    const unit = await prisma.inventoryItem.create({
-      data: {
-        productId: product.id,
-        planId: plan.id,
-        type: "LICENSE",
-        status: "RESERVED",
-        orderItemId: order.items[0].id,
-        licenseKey: "SYNTHETIC-AUTO-" + serial,
-      },
-    });
+    const units = await Promise.all(
+      order.items.map((item) =>
+        prisma.inventoryItem.create({
+          data: {
+            productId: product.id,
+            planId: plan.id,
+            type: "LICENSE",
+            status: "RESERVED",
+            orderItemId: item.id,
+            licenseKey: "SYNTHETIC-AUTO-" + serial,
+          },
+        }),
+      ),
+    );
+    const unit = units[0];
     const receipt = await prisma.receipt.create({
       data: {
         orderId: order.id,
@@ -265,8 +271,29 @@ async function main() {
     (await prisma.receipt.findUniqueOrThrow({ where: { id: paymentOnly.receipt.id } })).status,
     "PENDING",
   );
+
+  const cart = await fixture(2);
+  assert.equal((await cart.send()).statusCode, 200);
+  assert.equal(await cart.state(), "PAID", "one verified payment should deliver the full cart");
+  assert.equal(
+    await prisma.inventoryItem.count({
+      where: { orderItem: { orderId: cart.order.id }, status: "SOLD" },
+    }),
+    2,
+  );
+
+  const incompleteCart = await fixture(2);
+  await prisma.inventoryItem.delete({ where: { id: incompleteCart.unit.id } });
+  assert.equal((await incompleteCart.send()).statusCode, 200);
+  assert.equal(await incompleteCart.state(), "PENDING_REVIEW");
+  assert.equal(
+    await prisma.inventoryItem.count({
+      where: { orderItem: { orderId: incompleteCart.order.id }, status: "RESERVED" },
+    }),
+    1,
+  );
   console.log(
-    "PASS: automatic signed-event delivery, concurrent replay, kill switch, persisted-proof recovery, tampered destination/amount/time denial, review/reference guards and no payment-only QA fulfillment",
+    "PASS: automatic signed-event delivery including complete cart, incomplete cart denial, concurrent replay, kill switch, persisted-proof recovery, tampered destination/amount/time denial, review/reference guards and no payment-only QA fulfillment",
   );
 }
 main()

@@ -12,6 +12,7 @@ import { getGatewayConfig, isOnlinePaymentBlocked } from "../../lib/gatewayConfi
 import { readBluInvoice, reserveBluInvoice } from "../orders/blu-invoice";
 import { supplierCardReady } from "./card-checkout";
 import { manualSupplierCardReady, readManualSupplier } from "./manual-payment";
+import { assertNoWelcomeCheckout, isWelcomeCode } from "../orders/welcome-gift";
 import { notifyAdmin } from "../../bot";
 import {
   processSupplierFulfillment,
@@ -22,7 +23,15 @@ import {
   supplierSupported,
 } from "./fulfillment";
 import { reserveWallet, settleWallet } from "./wallet-budget";
+import { expireOnlineSupplierOrder } from "./online-order-expiry";
 import { readVariant, supplierIds, variantKey } from "./variant";
+import {
+  cartChanged,
+  cartSignature,
+  checkedCartTotal,
+  lockCartLine,
+  type CartPayment,
+} from "../orders/cart-state";
 
 const selectionSchema = z
   .object({
@@ -146,6 +155,7 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
       },
     };
     if (order.paidAt) return summary;
+    if (order.paymentStatus === "EXPIRED") throw expired();
     if (order.paymentProvider === "CARD_TO_CARD") {
       const blu = readBluInvoice(order.paymentMetadata);
       const manual = readManualSupplier(order.paymentMetadata);
@@ -184,13 +194,43 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
     userId: string,
     quoteId: string,
     method: "online" | "card_to_card" = "online",
+    cart?: CartPayment,
   ) {
     if (!available) throw unavailable();
+    if (cart) {
+      const pending = await prisma.supplierCheckoutQuote.findFirst({
+        where: { id: quoteId, userId },
+        include: { plan: { include: { product: { select: { type: true } } } } },
+      });
+      if (!pending || pending.expiresAt <= new Date()) throw expired();
+      if (!pending.orderId) {
+        const original = selectionSchema.parse(pending.selection);
+        const manual = (pending.snapshot as Prisma.JsonObject).manualSupplier === true;
+        const fresh = await selectSupplierPurchase(
+          { ...pending.plan, productType: pending.plan.product.type },
+          registry,
+          undefined,
+          manual,
+        ).catch(() => {
+          throw cartChanged();
+        });
+        if (
+          !fresh.price.eq(pending.amount) ||
+          fresh.offer.supplier !== original.supplier ||
+          fresh.offer.externalId !== original.externalId ||
+          fresh.offer.fingerprint !== original.fingerprint ||
+          fresh.quote.currency !== original.currency ||
+          !new Prisma.Decimal(fresh.quote.cost).eq(original.maximumCost)
+        )
+          throw cartChanged();
+      }
+    }
     const provider = method === "online" ? await getPaymentProvider() : null;
     const gateway = method === "card_to_card" ? await getGatewayConfig() : null;
     const reserved = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR NO KEY UPDATE`;
       await tx.$queryRaw`SELECT id FROM supplier_checkout_quotes WHERE id = ${quoteId} FOR UPDATE`;
-      const q = await tx.supplierCheckoutQuote.findFirst({
+      let q = await tx.supplierCheckoutQuote.findFirst({
         where: { id: quoteId, userId },
         include: {
           plan: { include: { product: { select: { isActive: true, name: true } } } },
@@ -200,6 +240,10 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
       if (!q) throw new AppError(404, "NOT_FOUND", "Quote not found");
       if (q.user.role !== "USER") throw new AppError(403, "FORBIDDEN", "Customer account required");
       if (q.orderId) {
+        if (cart) {
+          const line = await lockCartLine(tx, userId, cart.lineId);
+          if (line.orderId !== q.orderId || line.planId !== q.planId) throw cartChanged();
+        }
         const existing = await tx.order.findUniqueOrThrow({
           where: { id: q.orderId },
           select: { paidAt: true, paymentProvider: true },
@@ -208,6 +252,40 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
           throw new AppError(409, "QUOTE_ALREADY_USED", "This quote already has a payment method");
         if (!existing.paidAt && q.expiresAt.getTime() <= Date.now()) throw expired();
         return { id: q.orderId, created: false };
+      }
+      await assertNoWelcomeCheckout(tx, userId);
+      if (cart) {
+        const line = await lockCartLine(tx, userId, cart.lineId);
+        if (
+          line.orderId ||
+          line.planId !== q.planId ||
+          line.expiresAt <= new Date() ||
+          line.signature !== cartSignature(q.plan)
+        )
+          throw cartChanged();
+        const invoice = await checkedCartTotal(tx, userId, q.amount, cart);
+        if (invoice.discount.gt(0)) {
+          await tx.supplierCheckoutQuote.update({
+            where: { id: q.id },
+            data: {
+              amount: invoice.total,
+              snapshot: {
+                ...(q.snapshot as Prisma.JsonObject),
+                cartSubtotal: invoice.subtotal.toString(),
+                cartDiscount: invoice.discount.toString(),
+              },
+            },
+          });
+          q = {
+            ...q,
+            amount: invoice.total,
+            snapshot: {
+              ...(q.snapshot as Prisma.JsonObject),
+              cartSubtotal: invoice.subtotal.toString(),
+              cartDiscount: invoice.discount.toString(),
+            },
+          };
+        }
       }
       if (q.expiresAt.getTime() <= Date.now()) throw expired();
       const variant = readVariant(q.plan.variant);
@@ -241,7 +319,6 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
             "SUPPLIER_QUOTE_EXPIRED",
             "Request a fresh price before transferring",
           );
-        await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
         if (
           await tx.order.count({
             where: {
@@ -271,6 +348,7 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
       const order = await tx.order.create({
         data: {
           userId,
+          welcomeGift: isWelcomeCode(cart?.code),
           totalAmount: amount,
           currency: "IRR",
           paymentStatus: "PENDING",
@@ -321,6 +399,8 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
         },
       });
       await tx.supplierCheckoutQuote.update({ where: { id: q.id }, data: { orderId: order.id } });
+      if (cart)
+        await tx.cartLine.update({ where: { id: cart.lineId }, data: { orderId: order.id } });
       if (adapter.capabilities.walletExposure && !manual) {
         const job = await tx.supplierFulfillment.findUniqueOrThrow({
           where: { orderId: order.id },
@@ -369,8 +449,15 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
       const url = new URL(payment.redirectUrl);
       if (!["https:", ...(!env.isProduction ? ["http:"] : [])].includes(url.protocol))
         throw new Error("Invalid payment redirect");
-      await prisma.order.update({
-        where: { id: order.id },
+      await prisma.order.updateMany({
+        where: {
+          id: order.id,
+          paymentProvider: provider.name,
+          paymentStatus: "PENDING",
+          paymentAuthority: null,
+          paidAt: null,
+          paymentRefId: null,
+        },
         data: {
           paymentAuthority: payment.authority,
           paymentMetadata: {
@@ -382,7 +469,7 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
         },
       });
     } catch {
-      await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "FAILED" } });
+      await expireOnlineSupplierOrder(order.id, null);
       throw new AppError(
         502,
         "PAYMENT_INITIALIZATION_FAILED",
@@ -415,9 +502,11 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
   async function verify(authority: string, status: string) {
     const initial = await prisma.order.findUnique({
       where: { paymentAuthority: authority },
-      include: { supplierCheckoutQuote: { select: { id: true } } },
+      include: { supplierCheckoutQuote: { select: { userId: true } } },
     });
     if (!initial?.supplierCheckoutQuote) return null;
+    if (initial.supplierCheckoutQuote.userId !== initial.userId)
+      throw new AppError(409, "ORDER_CLOSED", "Order is closed");
     const result = async () => {
       const current = await prisma.order.findUniqueOrThrow({ where: { id: initial.id } });
       return {
@@ -431,13 +520,18 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
       };
     };
     if (initial.paymentStatus === "PAID") return result();
-    if (["REFUNDED", "EXPIRED"].includes(initial.paymentStatus))
+    if (initial.paymentStatus === "REFUNDED")
       throw new AppError(409, "ORDER_CLOSED", "Order is closed");
+    if (
+      initial.paymentStatus === "EXPIRED" &&
+      (initial.paymentProvider !== "ZARINPAL" || status !== "OK")
+    )
+      return result();
+    const context = initial.paymentMetadata as Prisma.JsonObject | null;
     if (initial.paymentStatus === "PAID_PENDING_FULFILLMENT" && initial.paidAt) {
-      await recover(initial.id);
+      if (context?.lateCartPayment !== true) await recover(initial.id);
       return result();
     }
-    const context = initial.paymentMetadata as Record<string, Prisma.JsonValue> | null;
     const verified =
       status === "OK"
         ? await getPaymentProviderForOrder(initial.paymentProvider).verifyPayment({
@@ -447,28 +541,55 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
             verificationContext: context?.verificationContext,
           })
         : { success: false, refId: null };
-    await prisma.$transaction(async (tx) => {
+    const late = await prisma.$transaction(async (tx) => {
       await lockOrder(tx, initial.id);
       const current = await tx.order.findUniqueOrThrow({ where: { id: initial.id } });
-      if (current.paidAt || ["PAID", "REFUNDED", "EXPIRED"].includes(current.paymentStatus)) return;
+      if (
+        current.paidAt ||
+        current.paymentRefId ||
+        current.paymentAuthority !== authority ||
+        current.paymentProvider !== initial.paymentProvider ||
+        !current.totalAmount.eq(initial.totalAmount) ||
+        current.currency !== initial.currency ||
+        !["PENDING", "FAILED", "EXPIRED"].includes(current.paymentStatus)
+      )
+        return;
       if (!verified.success || !verified.refId) {
-        await tx.order.update({ where: { id: current.id }, data: { paymentStatus: "FAILED" } });
+        if (current.paymentStatus !== "EXPIRED")
+          await tx.order.update({ where: { id: current.id }, data: { paymentStatus: "FAILED" } });
         return;
       }
+      const job = await tx.supplierFulfillment.findUnique({ where: { orderId: current.id } });
+      const closed = current.paymentStatus === "EXPIRED" || job?.state === "NO_CHARGE";
+      if (closed && current.paymentProvider !== "ZARINPAL") return;
       await tx.order.update({
         where: { id: current.id },
         data: {
           paymentStatus: "PAID_PENDING_FULFILLMENT",
           paidAt: new Date(),
           paymentRefId: verified.refId,
+          ...(closed && {
+            paymentMetadata: {
+              ...(current.paymentMetadata as Prisma.JsonObject),
+              lateCartPayment: true,
+            },
+          }),
         },
       });
       await tx.supplierFulfillment.updateMany({
-        where: { orderId: current.id, state: "AWAITING_PAYMENT" },
-        data: { state: "READY" },
+        where: {
+          orderId: current.id,
+          state: { in: closed ? ["AWAITING_PAYMENT", "NO_CHARGE"] : ["AWAITING_PAYMENT"] },
+        },
+        data: { state: closed ? "REVIEW" : "READY" },
       });
+      return closed;
     });
-    await recover(initial.id);
+    if (late) {
+      void notifyAdmin(
+        `پرداخت آنلاین سفارش تأمین‌کننده #${initial.id.slice(-8)} پس از انقضای فاکتور تأیید شد و در انتظار بررسی است.`,
+      ).catch(() => {});
+    } else if (late === false) await recover(initial.id);
     return result();
   }
   async function sweep() {
@@ -478,6 +599,7 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
         state: "AWAITING_PAYMENT",
         walletExposure: { not: null },
         expiresAt: { lte: new Date() },
+        order: { paymentProvider: "CARD_TO_CARD" },
       },
       select: { id: true, orderId: true },
       take: 20,
@@ -490,7 +612,13 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
           where: { id: row.orderId },
           include: { bluBankClaim: true },
         });
-        if (job.state !== "AWAITING_PAYMENT" || order.paidAt || order.bluBankClaim) return;
+        if (
+          job.state !== "AWAITING_PAYMENT" ||
+          order.paymentProvider !== "CARD_TO_CARD" ||
+          order.paidAt ||
+          order.bluBankClaim
+        )
+          return;
         if (
           order.bluInvoiceKey &&
           (await tx.bluBankObservation.findFirst({
@@ -508,6 +636,20 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
           data: { state: "NO_CHARGE" },
         });
       });
+    const expiredMocks = await prisma.order.findMany({
+      where: {
+        paidAt: null,
+        paymentProvider: "MANUAL",
+        paymentStatus: { in: ["PENDING", "FAILED"] },
+        supplierCheckoutQuote: { isNot: null },
+        supplierFulfillment: { state: "AWAITING_PAYMENT", expiresAt: { lte: new Date() } },
+      },
+      select: { id: true, paymentAuthority: true },
+      orderBy: { createdAt: "asc" },
+      take: 20,
+    });
+    for (const order of expiredMocks)
+      await expireOnlineSupplierOrder(order.id, order.paymentAuthority);
     const jobs = await prisma.supplierFulfillment.findMany({
       where: {
         state: { in: ["READY", "SENDING", "PENDING", "UNCERTAIN"] },

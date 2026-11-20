@@ -170,6 +170,10 @@ export async function getReceiptImage(req: Request, res: Response): Promise<void
   const { data, mimeType } = await admin.getReceiptImage(String(req.params.id));
   res.setHeader("Content-Type", mimeType);
   res.setHeader("Cache-Control", "private, no-store");
+  if (mimeType === "application/pdf") {
+    res.setHeader("Content-Disposition", 'attachment; filename="receipt.pdf"');
+    res.setHeader("Content-Security-Policy", "sandbox");
+  }
   res.send(data);
 }
 export async function approveReceipt(req: Request, res: Response): Promise<void> {

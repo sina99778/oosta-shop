@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { api, ApiError, assetUrl, productImageUrl } from "@/lib/api";
+import { api, assetUrl, productImageUrl } from "@/lib/api";
+import { apiErrorMessage } from "@/lib/api-error-message";
+import { notifyCartChanged } from "@/lib/cart-events";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,7 +26,7 @@ import { planDisplayLabel, variantDescription } from "@/lib/product-variant";
 import { availabilityLabel, availabilityOf, canBuyPlan } from "@/lib/product-availability";
 import type { Locale } from "@/lib/i18n";
 import type { CheckoutMethods } from "@/lib/product-availability";
-import type { CreateOrderResponse, PaymentMethod, ProductDetail } from "@/lib/types";
+import type { ProductDetail } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 
 function stars(n: number): string {
@@ -53,7 +55,7 @@ export function ProductDetailView({
   const [selectedPlan, setSelectedPlan] = useState<string | null | undefined>(undefined);
   const [activeImage, setActiveImage] = useState(0);
   const [tab, setTab] = useState<"description" | "specs" | "reviews">("description");
-  const [buying, setBuying] = useState<PaymentMethod | null>(null);
+  const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState<string | null>(null);
 
   // Review form
@@ -86,6 +88,7 @@ export function ProductDetailView({
   const plan = product.plans.find((p) => p.id === activePlanId) ?? null;
   const canBuy = !!plan && canBuyPlan(plan, payment);
   const localeFa = locale === "fa";
+  const numbers = new Intl.NumberFormat(localeFa ? "fa-IR" : "en-US", { maximumFractionDigits: 1 });
   const staleSelection = requestedPlanId !== undefined && !requestedPlan && !plan;
   const returnPath = `/${locale}/products/${encodeURIComponent(slug)}${plan ? `?plan=${encodeURIComponent(plan.id)}` : ""}`;
   const loginPath = `/${locale}/login?next=${encodeURIComponent(returnPath)}`;
@@ -121,34 +124,22 @@ export function ProductDetailView({
     left: t.left,
   };
 
-  async function buy(method: PaymentMethod) {
-    const methodEnabled = method === "online" ? payment?.online : payment?.cardToCard;
-    if (!plan || !canBuy || !methodEnabled || buying !== null) return;
+  async function addToCart() {
+    if (!plan || !canBuy || buying) return;
     if (!user || !token) {
       loginForPlan();
       return;
     }
-    setBuying(method);
+    setBuying(true);
     setBuyError(null);
     try {
-      const res = await api.post<CreateOrderResponse>(
-        "/orders",
-        { items: [{ planId: plan.id, quantity: 1 }], method },
-        token,
-      );
-      if (method === "card_to_card") {
-        router.push(`/${locale}/checkout/card/${res.order.id}`);
-        return;
-      }
-      if (res.payment?.redirectUrl) {
-        window.location.assign(res.payment.redirectUrl);
-        return;
-      }
-      setBuyError(dict.common.somethingWrong);
-      setBuying(null);
-    } catch (e) {
-      setBuyError(e instanceof ApiError ? e.message : dict.common.somethingWrong);
-      setBuying(null);
+      await api.post("/cart/items", { planId: plan.id }, token);
+      notifyCartChanged();
+      router.push(`/${locale}/cart`);
+    } catch (error) {
+      setBuyError(apiErrorMessage(error, locale, dict.common.somethingWrong));
+    } finally {
+      setBuying(false);
     }
   }
 
@@ -175,7 +166,7 @@ export function ProductDetailView({
       setComment("");
       setReviewMsg(t.reviewThanks);
     } catch (e) {
-      setReviewMsg(e instanceof ApiError ? e.message : dict.common.somethingWrong);
+      setReviewMsg(apiErrorMessage(e, locale, dict.common.somethingWrong));
     } finally {
       setReviewBusy(false);
     }
@@ -191,13 +182,18 @@ export function ProductDetailView({
     />
   ) : (
     <details className="mt-3 rounded-xl border border-border" open={product.plans.length === 1}>
-      <summary className="min-h-14 cursor-pointer p-4 font-medium">
-        {locale === "fa" ? "انتخاب نوع اشتراک" : "Choose subscription"}
-        {plan && (
-          <bdi className="mt-1 block text-sm font-normal text-muted">
-            {planDisplayLabel(plan.label, localeFa)}
-          </bdi>
-        )}
+      <summary className="oosta-disclosure min-h-14 p-4 font-medium">
+        <span className="min-w-0">
+          {locale === "fa" ? "انتخاب نوع اشتراک" : "Choose subscription"}
+          {plan && (
+            <bdi
+              dir={localeFa ? "rtl" : "ltr"}
+              className="mt-1 block text-sm font-normal text-muted"
+            >
+              {planDisplayLabel(plan.label, localeFa)}
+            </bdi>
+          )}
+        </span>
       </summary>
       <div className="max-h-[32rem] space-y-2 overflow-y-auto border-t border-border p-4">
         {product.plans.map((pl) => (
@@ -281,7 +277,7 @@ export function ProductDetailView({
                 src={images[activeImage] ?? images[0]}
                 fetchPriority="high"
                 alt={product.name}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain"
               />
             </div>
             {images.length > 1 && (
@@ -289,7 +285,7 @@ export function ProductDetailView({
                 {images.map((src, i) => (
                   <button
                     key={i}
-                    aria-label={`${product.name} — ${i + 1}`}
+                    aria-label={`${product.name} — ${numbers.format(i + 1)}`}
                     aria-pressed={activeImage === i}
                     onClick={() => setActiveImage(i)}
                     className={cn(
@@ -313,7 +309,10 @@ export function ProductDetailView({
             {product.isFeatured && <Badge tone="primary">{t.featured}</Badge>}
             {plan?.onSale && (
               <Badge tone="sale">
-                {plan.discountPercent}% {t.off}
+                {new Intl.NumberFormat(localeFa ? "fa-IR" : "en-US", { style: "percent" }).format(
+                  plan.discountPercent / 100,
+                )}{" "}
+                {t.off}
               </Badge>
             )}
           </div>
@@ -323,10 +322,11 @@ export function ProductDetailView({
           </h1>
 
           {product.rating.count > 0 && (
-            <p className="mt-2 text-sm text-amber-400">
+            <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
               {stars(product.rating.average)}{" "}
               <span className="text-muted">
-                {product.rating.average} · {product.rating.count} {t.reviewsCount}
+                {numbers.format(product.rating.average)} · {numbers.format(product.rating.count)}{" "}
+                {t.reviewsCount}
               </span>
             </p>
           )}
@@ -410,44 +410,18 @@ export function ProductDetailView({
               {plan.availableStock.toLocaleString(locale)} {t.left}
             </p>
           )}
-          {buyError && <p className="mt-3 text-sm text-danger">{buyError}</p>}
+          {buyError && (
+            <p role="alert" className="mt-3 text-sm text-danger">
+              {buyError}
+            </p>
+          )}
 
           {plan && !plan.quoteRequired && availabilityOf(plan) === "LOCAL_STOCK" && (
             <>
-              {canBuy && payment?.online && (
-                <Button
-                  className="mt-4 w-full"
-                  size="lg"
-                  disabled={buying !== null}
-                  onClick={() => buy("online")}
-                >
-                  {buying === "online" ? (
-                    <>
-                      <Spinner /> {t.purchasing}
-                    </>
-                  ) : !user ? (
-                    t.loginToBuy
-                  ) : (
-                    dict.common.buyNow
-                  )}
-                </Button>
-              )}
-
-              {canBuy && payment?.cardToCard && (
-                <Button
-                  className="mt-2 w-full"
-                  size="lg"
-                  variant="outline"
-                  disabled={buying !== null}
-                  onClick={() => buy("card_to_card")}
-                >
-                  {buying === "card_to_card" ? (
-                    <>
-                      <Spinner /> {dict.checkout.cardToCard.uploading}
-                    </>
-                  ) : (
-                    dict.checkout.payCardToCard
-                  )}
+              {canBuy && (
+                <Button className="mt-4 w-full" size="lg" disabled={buying} onClick={addToCart}>
+                  {buying ? <Spinner /> : null}
+                  {localeFa ? "افزودن به سبد خرید" : "Add to cart"}
                 </Button>
               )}
 
@@ -475,7 +449,7 @@ export function ProductDetailView({
           )}
           {plan?.variant && (
             <details key={plan.id} className="mt-4 rounded-xl border border-border">
-              <summary className="min-h-12 cursor-pointer p-4 text-sm font-medium">
+              <summary className="oosta-disclosure min-h-12 p-4 text-sm font-medium">
                 {locale === "fa" ? "شرایط اشتراک انتخاب‌شده" : "Selected subscription terms"}
               </summary>
               <div className="space-y-3 border-t border-border p-4 text-sm leading-7">
@@ -524,7 +498,7 @@ export function ProductDetailView({
             [
               ["description", t.tabDescription],
               ["specs", t.tabSpecs],
-              ["reviews", `${t.tabReviews} (${product.rating.count})`],
+              ["reviews", `${t.tabReviews} (${numbers.format(product.rating.count)})`],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -609,7 +583,7 @@ export function ProductDetailView({
                         <span className="font-medium flex items-center gap-2">
                           {r.userName}
                           {r.isPendingLocal && (
-                            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-normal text-amber-500">
+                            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-normal text-amber-800 dark:text-amber-300">
                               {dict.admin.reviews.pending}
                             </span>
                           )}
@@ -618,7 +592,7 @@ export function ProductDetailView({
                           {formatDate(r.createdAt, locale)}
                         </span>
                       </div>
-                      <p className="text-amber-400">{stars(r.rating)}</p>
+                      <p className="text-amber-700 dark:text-amber-400">{stars(r.rating)}</p>
                       {r.comment && <p className="mt-1 text-sm">{r.comment}</p>}
                     </div>
                   ))}
@@ -647,7 +621,9 @@ export function ProductDetailView({
                             aria-pressed={n === rating}
                             type="button"
                             onClick={() => setRating(n)}
-                            className={n <= rating ? "text-amber-400" : "text-muted/40"}
+                            className={
+                              n <= rating ? "text-amber-700 dark:text-amber-400" : "text-muted"
+                            }
                           >
                             ★
                           </button>

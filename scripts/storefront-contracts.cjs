@@ -7,6 +7,24 @@ process.env.TSX_TSCONFIG_PATH = path.resolve(__dirname, "../apps/web/tsconfig.js
 require("tsx/cjs");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
+const { ApiError } = require("../apps/web/lib/api.ts");
+const { apiErrorMessage } = require("../apps/web/lib/api-error-message.ts");
+assert.match(
+  apiErrorMessage(new ApiError("Invalid credentials", 401, "UNAUTHORIZED"), "fa", "retry", "login"),
+  /رمز عبور/,
+);
+assert.match(
+  apiErrorMessage(new ApiError("Receipt upload limit", 429, "RECEIPT_LIMIT"), "fa", "retry"),
+  /سقف ارسال رسید/,
+);
+assert.match(
+  apiErrorMessage(new ApiError("Too many attempts", 429, "RATE_LIMITED"), "en", "retry"),
+  /Too many attempts/,
+);
+assert.equal(
+  apiErrorMessage(new ApiError("internal detail", 500, "UNKNOWN"), "fa", "retry"),
+  "retry",
+);
 let fixture = {
   id: "synthetic-order",
   totalAmount: 100,
@@ -52,7 +70,9 @@ Module._load = function (request, ...args) {
               ? { ticket }
               : url === "/orders"
                 ? { orders: [{ ...fixture, itemCount: 1 }] }
-                : { order: fixture },
+                : url === "/cart/count"
+                  ? { count: 2 }
+                  : { order: fixture },
         loading: false,
         error: null,
         refetch: () => {},
@@ -127,6 +147,9 @@ const dict = require("../apps/web/app/[locale]/dictionaries/fa.json");
 const signup = renderToStaticMarkup(
   React.createElement(AuthForm, { mode: "signup", locale: "fa", dict }),
 );
+assert(signup.includes("ایمیل (اختیاری)") && signup.includes("شماره موبایل (اختیاری)"));
+assert.match(signup, /aria-describedby="auth-password-hint"/);
+assert.match(signup, /id="auth-password-hint"[^>]*>حداقل ۸ کاراکتر/);
 assert.match(
   signup,
   /<fieldset[^>]*>\s*<legend[^>]*>[^<]+<\/legend>[\s\S]*?type="email"[\s\S]*?type="tel"[\s\S]*?<\/fieldset>/,
@@ -141,10 +164,13 @@ assert.match(header(), /<a(?=[^>]*href="\/fa\/products")(?=[^>]*aria-current="pa
 assert.match(header(), /aria-expanded="false" aria-controls="mobile-navigation"/);
 assert.match(header(), /<nav id="mobile-navigation"[^>]*hidden=""/);
 assert(!header().includes('href="/fa/admin"'));
+assert(!header().includes('aria-label="سبد خرید (۲)"'));
 headerUser = { role: "USER", name: "Fixture" };
 assert(!header().includes('href="/fa/admin"'));
+assert(header().includes('aria-label="سبد خرید (۲)"'));
 headerUser = { role: "ADMIN", name: "Fixture admin" };
 assert(header().includes('href="/fa/admin"'));
+assert(!header().includes('aria-label="سبد خرید (۲)"'));
 const footer = renderToStaticMarkup(
   React.createElement(Footer, {
     locale: "fa",
@@ -182,6 +208,18 @@ fixture = { ...fixture, paymentStatus: "PENDING" };
 assert(render().includes("/fa/checkout/card/synthetic-order"));
 fixture = { ...fixture, id: "synthetic12345678", bluInvoice: { expired: true, discount: 0 } };
 assert(!render().includes("/fa/checkout/card/synthetic12345678"));
+for (const type of ["manualSupplier", "cartPayment"]) {
+  fixture = {
+    ...fixture,
+    bluInvoice: null,
+    cartPayment: null,
+    manualSupplier: null,
+    [type]: { remainingMs: 0 },
+  };
+  assert(!render().includes("/fa/checkout/card/synthetic12345678"), `expires ${type}`);
+  fixture[type].remainingMs = 1000;
+  assert(render().includes("/fa/checkout/card/synthetic12345678"));
+}
 assert(render().includes("/fa/support?order=12345678#new-ticket"));
 fixture = {
   ...fixture,
@@ -231,6 +269,7 @@ Promise.resolve(config.headers?.())
     assert.equal(headers["x-content-type-options"], "nosniff");
     assert.match(headers["content-security-policy"] || "", /frame-ancestors 'none'/);
     console.log("PASS: frontend responses block framing and MIME sniffing");
+    require("./web-query-regressions.cjs");
   })
   .catch((error) => {
     console.error(error);

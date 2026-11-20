@@ -9,7 +9,7 @@ const nap = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function main() {
   const scenario = process.argv[2] || "hydration";
-  assert(["hydration", "logout", "late401"].includes(scenario));
+  assert(["hydration", "logout", "late401", "checkoutRefresh", "cartPaidRetry"].includes(scenario));
   const root = path.resolve(__dirname, "..");
   const app = path.join(root, "apps/web/.next/standalone/apps/web");
   assert(fs.existsSync(path.join(app, "server.js")), "Build the web app first");
@@ -81,9 +81,23 @@ async function main() {
       phone: null,
       role: "USER",
     };
-    let currentUser = null;
+    const checkoutOrder = {
+      id: "synthetic-checkout",
+      totalAmount: 400,
+      createdAt: "2026-11-20T10:00:00Z",
+      currency: "IRR",
+      paymentProvider: "CARD_TO_CARD",
+      paymentStatus: "PENDING",
+      cartPayment: { expiresAt: new Date(Date.now() + 60_000).toISOString(), remainingMs: 60_000 },
+      cardToCard: { number: "0000000000000000", holder: "Synthetic", bank: "Fixture" },
+      items: [],
+      receipts: [],
+    };
+    let currentUser = ["checkoutRefresh", "cartPaidRetry"].includes(scenario) ? user : null;
     let heldMe;
     let heldOrders;
+    let checkoutReads = 0;
+    let paymentAttempts = 0;
     let logoutFailures = 0;
     const respond = (requestId, responseCode, body) =>
       call("Fetch.fulfillRequest", {
@@ -133,6 +147,31 @@ async function main() {
       } else if (route === "/orders" && scenario === "late401") {
         heldOrders = requestId;
         return;
+      } else if (route === "/orders/synthetic-checkout") {
+        if (checkoutReads++ > 0) {
+          heldOrders = requestId;
+          return;
+        }
+        action = respond(requestId, 200, { order: checkoutOrder });
+      } else if (route === "/cart/count") {
+        action = respond(requestId, 200, { count: 2 });
+      } else if (route === "/cart/items/synthetic-line/review") {
+        action = respond(requestId, 200, {
+          invoice: {
+            id: "synthetic-line",
+            currency: "IRR",
+            items: [{ id: "synthetic-line", product: "Synthetic", label: "Demo", amount: "400" }],
+            subtotal: "400",
+            discount: "0",
+            total: "400",
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            methods: { online: true, cardToCard: false },
+          },
+        });
+      } else if (route === "/cart/items/synthetic-line/pay") {
+        action = respond(requestId, 201, {
+          order: { ...checkoutOrder, paymentStatus: ++paymentAttempts === 1 ? "PENDING" : "PAID" },
+        });
       } else action = call("Fetch.continueRequest", { requestId });
       action.catch((error) => {
         console.error(error);
@@ -158,8 +197,71 @@ async function main() {
     await call("Network.enable");
     await call("Network.setBlockedURLs", { urls: ["*://*/api/track", "*://*/track"] });
     await call("Fetch.enable", {
-      patterns: [{ urlPattern: "*://*/auth/*" }, { urlPattern: "*://*/orders*" }],
+      patterns: [
+        { urlPattern: "*://*/auth/*" },
+        { urlPattern: "*://*/orders*" },
+        { urlPattern: "*://*/cart/count" },
+        { urlPattern: "*://*/cart/items/*" },
+      ],
     });
+    if (scenario === "checkoutRefresh") {
+      await call("Page.navigate", { url: origin + "/fa/checkout/card/synthetic-checkout" });
+      await call("Page.bringToFront");
+      await until('!!document.querySelector("#receipt-reference")', "receipt form");
+      await until(`!!document.querySelector("header [aria-label='سبد خرید (۲)']")`, "cart badge");
+      await evaluate(`(() => {
+        const input = document.querySelector('#receipt-reference');
+        window.originalReceiptInput = input;
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '12345');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        document.dispatchEvent(new Event('visibilitychange'));
+      })()`);
+      for (let i = 0; i < 100 && !heldOrders; i++) await nap(100);
+      assert(heldOrders, "Hold the visibility-triggered refresh");
+      const formPreserved = `document.querySelector('#receipt-reference') === window.originalReceiptInput && window.originalReceiptInput.value === '12345'`;
+      assert(
+        await evaluate(formPreserved),
+        "A pending refresh must preserve the mounted input and its draft",
+      );
+      await respond(heldOrders, 503, { error: { code: "INTERNAL_SERVER_ERROR" } });
+      await until('!!document.querySelector("main [role=alert]")', "refresh failure");
+      assert(await evaluate(formPreserved), "A temporary outage must preserve the draft");
+      heldOrders = null;
+      await evaluate("document.dispatchEvent(new Event('visibilitychange'))");
+      for (let i = 0; i < 100 && !heldOrders; i++) await nap(100);
+      assert(heldOrders, "Hold the retry after the temporary outage");
+      await respond(heldOrders, 403, { error: { code: "FORBIDDEN" } });
+      await until(
+        '!document.querySelector("#receipt-reference")',
+        "access denial clears receipt form",
+      );
+      console.log(
+        "PASS: checkout browser preserves receipt draft on refresh and clears data on access denial",
+      );
+      return;
+    }
+    if (scenario === "cartPaidRetry") {
+      const reviewPath = "/en/cart/review/synthetic-line";
+      await call("Page.navigate", { url: origin + reviewPath });
+      const payButton = `[...document.querySelectorAll('main button')].find(b => b.innerText === 'Confirm and pay online')`;
+      await until(`Boolean(${payButton})`, "cart payment button");
+      await evaluate(`${payButton}.click()`);
+      await until(
+        '!!document.querySelector("main [role=alert]")',
+        "unpaid response cannot omit redirect",
+      );
+      assert.equal(await evaluate("location.pathname"), reviewPath);
+      await evaluate(`${payButton}.click()`);
+      await until(
+        `location.pathname === '/en/dashboard/orders/synthetic-checkout'`,
+        "paid retry opens the order",
+      );
+      assert.equal(paymentAttempts, 2);
+      console.log(
+        "PASS: an online cart retry opens the owner’s already-paid order without a gateway redirect",
+      );
+      return;
+    }
     await call("Page.navigate", { url: origin + "/fa/login?next=/fa/dashboard/security" });
     await until('!!document.querySelector("input[autocomplete=username]")', "login form");
     await evaluate(`(() => { const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set;

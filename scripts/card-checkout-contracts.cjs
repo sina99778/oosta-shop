@@ -9,6 +9,8 @@ const { renderToStaticMarkup } = require("react-dom/server");
 let state = "PENDING_REVIEW";
 let failed = false;
 let bluInvoice;
+let cartPayment;
+let manualSupplier;
 let effects = [];
 let refreshes = 0;
 const fixture = {
@@ -38,7 +40,11 @@ Module._load = function (request, ...args) {
   if (request === "@/lib/use-api")
     return {
       useApi: () => ({
-        data: failed ? null : { order: { ...fixture, paymentStatus: state, bluInvoice } },
+        data: failed
+          ? null
+          : {
+              order: { ...fixture, paymentStatus: state, bluInvoice, cartPayment, manualSupplier },
+            },
         loading: false,
         error: failed ? new Error("Fixture outage") : null,
         refetch: () => {
@@ -140,6 +146,29 @@ bluInvoice = { ...bluInvoice, expired: true, remainingMs: 0 };
 assert(!render().includes("SYNTHETIC_DESTINATION"), "Expired invoices conceal a stale card DTO");
 assert(render().includes('type="file"'), "Expired invoices accept a receipt for a late payment");
 bluInvoice = undefined;
+cartPayment = { expiresAt: "2026-11-05T00:30:00Z", remainingMs: 0 };
+assert(
+  !render().includes('type="file"'),
+  "An expired cart still waiting for payment blocks uploads",
+);
+state = "REJECTED";
+fixture.receipts[0] = {
+  ...fixture.receipts[0],
+  status: "REJECTED",
+  reviewerNote: "SYNTHETIC_REVIEWER_NOTE",
+};
+const rejected = render();
+assert(rejected.includes('type="file"'), "A rejected cart receipt can be replaced after expiry");
+assert(rejected.includes("SYNTHETIC_REVIEWER_NOTE"));
+assert(!rejected.includes("SYNTHETIC_DESTINATION"), "An expired cart hides bank details");
+manualSupplier = { ...cartPayment, deliveryHours: null };
+cartPayment = undefined;
+const manualRejected = render();
+assert(!manualRejected.includes('type="file"'), "A rejected manual supplier order blocks uploads");
+assert(
+  manualRejected.includes("SYNTHETIC_REVIEWER_NOTE"),
+  "Show the reviewer note without an upload form",
+);
 failed = true;
 assert(render().includes("تلاش دوباره"), "Order fetch failure must offer retry");
 console.log(

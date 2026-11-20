@@ -21,6 +21,15 @@ const legacyBody = renderToStaticMarkup(
 );
 assert.match(legacyBody, /<h3[^>]*>Existing section<\/h3>/);
 assert.match(legacyBody, /<h4[^>]*>Existing subsection<\/h4>/);
+const links = renderToStaticMarkup(
+  React.createElement(Markdown, {
+    text: "[Internal](/fa/products/chatgpt) [External](https://example.test) [Network path](//example.test) [Backslash](/\\example.test) [Normalized](/p/..//example.test) [Control](/\texample.test) ![Image](//example.test/image.png)",
+  }),
+);
+assert.match(links, /<a(?![^>]*target=)[^>]*href="\/fa\/products\/chatgpt"[^>]*>Internal<\/a>/);
+assert.match(links, /<a[^>]*href="https:\/\/example\.test"[^>]*target="_blank"/);
+assert.equal((links.match(/<a\b/g) ?? []).length, 2);
+assert(!links.includes("<img"));
 const product = {
   id: "synthetic-product",
   slug: "synthetic",
@@ -80,8 +89,10 @@ const page = require("../apps/web/app/[locale]/products/[slug]/page.tsx");
 const sitemap = require("../apps/web/app/sitemap.ts").default;
 Module._load = originalLoad;
 const props = { params: Promise.resolve({ locale: "fa", slug: product.slug }) };
-async function graphs() {
-  const html = renderToStaticMarkup(await page.default(props));
+async function graphs(locale = "fa") {
+  const html = renderToStaticMarkup(
+    await page.default({ params: Promise.resolve({ locale, slug: product.slug }) }),
+  );
   const script = html.match(/<script[^>]+application\/ld\+json[^>]*>(.*?)<\/script>/s);
   assert(script);
   const data = JSON.parse(script[1]);
@@ -118,12 +129,23 @@ async function main() {
   );
   const breadcrumb = available.find((entry) => entry["@type"] === "BreadcrumbList");
   assert.equal(breadcrumb.itemListElement.at(-1).item, metadata.alternates.canonical);
+  const englishBreadcrumb = (await graphs("en")).entities.find(
+    (entry) => entry["@type"] === "BreadcrumbList",
+  );
+  assert.equal(
+    englishBreadcrumb.itemListElement.at(-1).item,
+    "https://oostaai.store/en/products/synthetic",
+  );
   payment = { online: false, cardToCard: false };
-  assert(!(await graphs()).entities.find((entry) => entry["@type"] === "Product").offers);
+  assert(!(await graphs()).entities.some((entry) => entry["@type"] === "Product"));
   product.plans[0].quoteRequired = true;
   product.plans[0].source = "SUPPLIER";
   payment = { online: true, cardToCard: true };
-  assert(!(await graphs()).entities.find((entry) => entry["@type"] === "Product").offers);
+  assert(!(await graphs()).entities.some((entry) => entry["@type"] === "Product"));
+  product.rating = { average: 4.5, count: 2 };
+  const rated = (await graphs()).entities.find((entry) => entry["@type"] === "Product");
+  assert.equal(rated.aggregateRating.reviewCount, 2);
+  assert(!rated.offers);
   product.name = "</script><script>unsafe()</script>";
   assert(!(await graphs()).html.includes("</script><script>unsafe()"));
   product.image = "javascript:unsafe()";

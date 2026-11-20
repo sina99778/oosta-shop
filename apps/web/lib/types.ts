@@ -239,6 +239,7 @@ export type ReceiptInfo = {
 };
 
 export type OrderDetail = {
+  cartPayment?: { expiresAt: string; remainingMs: number } | null;
   manualSupplier?: { expiresAt: string; remainingMs: number; deliveryHours: number | null } | null;
   isSupplierQa?: boolean;
   supplierQaKind?: "API_TEST" | "REAL_STOCK" | null;
@@ -262,6 +263,7 @@ export type OrderDetail = {
     qaOnly?: boolean;
     stockHeld?: boolean;
     privateStockQa?: boolean;
+    supplierCheckout?: boolean;
   } | null;
 };
 

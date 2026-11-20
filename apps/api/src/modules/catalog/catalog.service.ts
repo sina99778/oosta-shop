@@ -297,7 +297,7 @@ export async function listProducts(query: ListProductsQuery) {
     ? await prisma.product.findMany({
         where,
         orderBy,
-        select: { id: true, slug: true, createdAt: true },
+        select: { id: true, slug: true, createdAt: true, sortOrder: true },
       })
     : null;
   if (ranked) {
@@ -318,9 +318,11 @@ export async function listProducts(query: ListProductsQuery) {
       ranked.sort((a, b) => (sales.get(b.id) ?? 0) - (sales.get(a.id) ?? 0) || familiarFirst(a, b));
     } else {
       ranked.sort(
-        query.sort === "recommended"
-          ? familiarFirst
-          : (a, b) => b.createdAt.getTime() - a.createdAt.getTime() || a.id.localeCompare(b.id),
+        (a, b) =>
+          Math.max(0, b.sortOrder) - Math.max(0, a.sortOrder) ||
+          (query.sort === "recommended" ? familiarFirst(a, b) : 0) ||
+          b.createdAt.getTime() - a.createdAt.getTime() ||
+          a.id.localeCompare(b.id),
       );
     }
   }
@@ -329,7 +331,6 @@ export async function listProducts(query: ListProductsQuery) {
     where: pageIds ? { ...where, id: { in: pageIds } } : where,
     include: { category: true, plans: { where: { isActive: true } } },
     omit: omitImageData,
-    // Manual ordering wins (higher sortOrder pins earlier), newest breaks ties.
     orderBy,
   });
 

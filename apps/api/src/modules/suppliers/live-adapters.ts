@@ -158,7 +158,7 @@ function venteResult(
   if (order.items.length !== 1) throw new Error("Delivery unavailable");
   return { state: "COMPLETE", ...paid, credential: credential(order.items[0].account_data, type) };
 }
-function canbosoResult(raw: unknown, input: { reference: string; externalId: string }) {
+export function canbosoResult(raw: unknown, input: { reference: string; externalId: string }) {
   const data = z
     .object({
       success: z.literal(true),
@@ -177,7 +177,7 @@ function canbosoResult(raw: unknown, input: { reference: string; externalId: str
           .array(
             z.object({
               user: text,
-              password: text,
+              password: z.string().max(10000),
               verifyEmail: z.string().max(1000).nullish(),
               expiryText: z.string().max(1000).nullish(),
               otherInfo: z.string().max(6000).nullish(),
@@ -188,6 +188,20 @@ function canbosoResult(raw: unknown, input: { reference: string; externalId: str
     })
     .parse(raw);
   const account = data.delivery.accounts[0];
+  let accountEmail = account.user;
+  let accountPassword = account.password;
+  // Some CapCut deliveries put the entire email|password record in user.
+  if (accountPassword === "") {
+    const parts = accountEmail.split("|");
+    if (
+      parts.length !== 2 ||
+      !z.email().safeParse(parts[0]).success ||
+      !parts[1].trim() ||
+      /[\r\n]/.test(parts[1])
+    )
+      throw new Error("Invalid packed supplier account");
+    [accountEmail, accountPassword] = parts;
+  }
   const notes = [
     account.verifyEmail ? "ایمیل بازیابی: " + account.verifyEmail : null,
     account.expiryText ? "انقضا: " + account.expiryText : null,
@@ -204,8 +218,8 @@ function canbosoResult(raw: unknown, input: { reference: string; externalId: str
     supplierOrderId: data.order.orderCode,
     credential: {
       type: "ACCOUNT",
-      accountEmail: account.user,
-      accountPassword: account.password,
+      accountEmail,
+      accountPassword,
       ...(notes ? { deliveryInstructions: notes } : {}),
     },
   };

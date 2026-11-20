@@ -105,74 +105,73 @@ export default async function ProductDetailPage({
     undefined,
   );
   const url = productUrl(CONTENT_LOCALE, p.slug);
-  const jsonLd = p
-    ? {
-        "@type": "Product",
-        "@id": `${url}#product`,
-        url,
-        sku: p.id,
-        name: p.name,
-        description: p.shortDescription || p.description.replace(/[#*]/g, "").slice(0, 200),
-        image: imageFor(p) ? [imageFor(p)] : undefined,
-        category: p.category.name,
-        offers: offer
-          ? {
-              "@type": "Offer",
-              url,
-              price: offer.price,
-              priceCurrency: "IRR",
-              availability: "https://schema.org/InStock",
-            }
-          : undefined,
-        aggregateRating:
-          p.rating.count > 0
+  const jsonLd =
+    offer || p.rating.count > 0
+      ? {
+          "@type": "Product",
+          "@id": `${url}#product`,
+          url,
+          sku: p.id,
+          name: p.name,
+          description: p.shortDescription || p.description.replace(/[#*]/g, "").slice(0, 200),
+          image: imageFor(p) ? [imageFor(p)] : undefined,
+          category: p.category.name,
+          offers: offer
             ? {
-                "@type": "AggregateRating",
-                ratingValue: p.rating.average,
-                reviewCount: p.rating.count,
+                "@type": "Offer",
+                url,
+                price: offer.price,
+                priceCurrency: "IRR",
+                availability: "https://schema.org/InStock",
               }
             : undefined,
-      }
-    : null;
+          aggregateRating:
+            p.rating.count > 0
+              ? {
+                  "@type": "AggregateRating",
+                  ratingValue: p.rating.average,
+                  reviewCount: p.rating.count,
+                }
+              : undefined,
+        }
+      : null;
 
   return (
     <>
-      {jsonLd && (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: safeJsonLd({
-              "@context": "https://schema.org",
-              "@graph": [
-                jsonLd,
-                {
-                  "@type": "BreadcrumbList",
-                  itemListElement: [
-                    {
-                      "@type": "ListItem",
-                      position: 1,
-                      name: locale === "fa" ? "خانه" : "Home",
-                      item: `${siteUrl()}/${locale}`,
-                    },
-                    {
-                      "@type": "ListItem",
-                      position: 2,
-                      name: p.category.name,
-                      item: `${siteUrl()}/${locale}/products?category=${encodeURIComponent(p.category.slug)}`,
-                    },
-                    {
-                      "@type": "ListItem",
-                      position: 3,
-                      name: p.name,
-                      item: url,
-                    },
-                  ],
-                },
-              ],
-            }),
-          }}
-        />
-      )}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: safeJsonLd({
+            "@context": "https://schema.org",
+            "@graph": [
+              ...(jsonLd ? [jsonLd] : []),
+              {
+                "@type": "BreadcrumbList",
+                itemListElement: [
+                  {
+                    "@type": "ListItem",
+                    position: 1,
+                    name: locale === "fa" ? "خانه" : "Home",
+                    item: `${siteUrl()}/${locale}`,
+                  },
+                  {
+                    "@type": "ListItem",
+                    position: 2,
+                    name: p.category.name,
+                    item: `${siteUrl()}/${locale}/products?category=${encodeURIComponent(p.category.slug)}`,
+                  },
+                  {
+                    "@type": "ListItem",
+                    position: 3,
+                    name: p.name,
+                    item: productUrl(locale, p.slug),
+                  },
+                ],
+              },
+            ],
+          }),
+        }}
+      />
       <ProductDetailView
         key={JSON.stringify([p.id, requestedPlanId])}
         requestedPlanId={requestedPlanId}

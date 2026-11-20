@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { getDictionary } from "../../dictionaries";
 import { isLocale } from "@/lib/i18n";
@@ -14,10 +15,10 @@ import {
   safeJsonLd,
 } from "@/lib/page-metadata";
 
-async function load(slug: string): Promise<BlogPostDetail | null> {
+const load = cache(async (slug: string): Promise<BlogPostDetail | null> => {
   const data = await fetchJson<{ post: BlogPostDetail }>(`/blog/${encodeURIComponent(slug)}`, 0);
   return data?.post ?? null;
-}
+});
 
 export async function generateMetadata({
   params,

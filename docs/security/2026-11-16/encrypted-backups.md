@@ -1,12 +1,36 @@
 # Encrypted backups and recovery
 
-The Telegram admin bot sends only `.sql.gz.age` database backups to the configured private admin chat. PostgreSQL output is compressed and streamed directly into age, so the outgoing backup does not create a plaintext archive on disk. The recipient is a native age public key. Missing or invalid configuration prevents sending. Manual and scheduled attempts share a process lock. The admin token and the database password are not included in command arguments or backup failure messages.
+The Telegram admin bot sends encrypted database backups to the configured private admin chat. PostgreSQL output is compressed and streamed directly into age. A backup larger than 19,000,000 bytes is streamed from the same ciphertext file as consecutive numbered documents. Each document fits both Telegram's upload and Bot API download limits. Missing or invalid configuration prevents sending. The admin token and the database password are excluded from backup failure messages.
 
 The Windows recovery key is in the operator's profile under `%LOCALAPPDATA%\OostaRecovery\backup-key.txt`, with access restricted to that Windows account. Install age on a trusted recovery machine and store a second protected copy of the recovery key separately. Production only receives the public recipient. Keep old recovery keys while their encrypted backups are retained.
 
 ## Recovery drill
 
-1. Obtain an archive produced by the store through a trusted channel. Keep its SHA-256 digest alongside any copy maintained outside Telegram.
+1. Obtain an archive through a trusted channel. For a multipart backup, download every document with the same timestamped archive name. Save the names intact in an empty private directory. Check that numbering starts at 1, ends at the stated total and contains every part exactly once. Concatenate the parts in filename order to recover the original `.sql.gz.age`.
+
+   ```powershell
+   $archiveName = 'oosta-2026-11-20T03-15-00-000Z-Example.sql.gz.age' # use the actual archive name
+   $parts = @(Get-ChildItem -File -Filter "$archiveName.part-*" | Sort-Object Name)
+   if (!$parts.Count -or $parts[0].Name -notmatch '\.part-(\d+)-of-(\d+)$') {
+     throw 'Missing or invalid backup parts'
+   }
+   $width = $Matches[1].Length
+   $total = [int]$Matches[2]
+   if ($parts.Count -ne $total) { throw 'Incomplete backup' }
+   for ($i = 0; $i -lt $total; $i++) {
+     $expected = "$archiveName.part-" + ($i + 1).ToString("D$width") + '-of-' + $total.ToString("D$width")
+     if ($parts[$i].Name -cne $expected) { throw "Missing backup part $expected" }
+   }
+   $archive = [IO.File]::Open((Join-Path (Get-Location).Path $archiveName), 'CreateNew')
+   try {
+     foreach ($part in $parts) {
+       $inputPart = $part.OpenRead()
+       try { $inputPart.CopyTo($archive) } finally { $inputPart.Dispose() }
+     }
+   } finally { $archive.Dispose() }
+   ```
+
+   Keep a SHA-256 digest alongside any copy maintained outside Telegram.
 2. On a trusted machine, decrypt into a private directory and verify the age command exits successfully before using the unpacked SQL.
 
    ```powershell
