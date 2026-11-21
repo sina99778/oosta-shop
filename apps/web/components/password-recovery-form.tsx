@@ -10,6 +10,7 @@ import type { Locale } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Input } from "@/components/ui/input";
+import { PasswordStrength } from "@/components/password-strength";
 import styles from "./auth.module.css";
 
 const textLink =
@@ -27,6 +28,7 @@ export function PasswordRecoveryForm({
   const { retrySession } = useAuth();
   const { recovery, passwordHint, passwordMax, submitting } = dict.auth;
   const [token, setToken] = useState<string | null>();
+  const [password, setPassword] = useState("");
   const [success, setSuccess] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +68,7 @@ export function PasswordRecoveryForm({
       if (isReset) {
         await api.post("/auth/reset-password", { token, newPassword });
         setToken(null);
+        setPassword("");
         retrySession();
       } else {
         await api.post("/auth/forgot-password", {
@@ -121,13 +124,20 @@ export function PasswordRecoveryForm({
                     name="newPassword"
                     minLength={8}
                     autoComplete="new-password"
-                    aria-describedby="reset-password-hint"
+                    aria-describedby="reset-password-hint reset-password-strength"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
                     required
                   />
                 </label>
                 <p id="reset-password-hint" className="text-sm text-muted">
                   {passwordHint}
                 </p>
+                <PasswordStrength
+                  id="reset-password-strength"
+                  locale={locale}
+                  password={password}
+                />
                 <label className="block text-sm">
                   <span className="mb-1 block">{recovery.confirmPassword}</span>
                   <Input

@@ -94,6 +94,7 @@ const { TicketList } = require("../apps/web/components/tickets/ticket-list.tsx")
 const { TicketThread } = require("../apps/web/components/tickets/ticket-thread.tsx");
 const { DashboardOrders } = require("../apps/web/components/dashboard-orders.tsx");
 const { AccountRecoveryEmail } = require("../apps/web/components/account-recovery-email.tsx");
+const { passwordStrength } = require("../apps/web/components/password-strength.tsx");
 const { Button } = require("../apps/web/components/ui/button.tsx");
 const { Header } = require("../apps/web/components/layout/header.tsx");
 const { AuthForm } = require("../apps/web/components/auth-form.tsx");
@@ -167,8 +168,14 @@ const dict = require("../apps/web/app/[locale]/dictionaries/fa.json");
 const signup = renderToStaticMarkup(
   React.createElement(AuthForm, { mode: "signup", locale: "fa", dict }),
 );
-assert(signup.includes("ایمیل (اختیاری)") && signup.includes("شماره موبایل (اختیاری)"));
-assert.match(signup, /aria-describedby="auth-password-hint"/);
+assert.equal(passwordStrength(""), 0);
+assert.equal(passwordStrength("password123!password123!"), 1);
+assert.equal(passwordStrength("Baltic7x"), 2);
+assert.equal(passwordStrength("L9!vR3-wheel-juniper"), 3);
+assert(signup.includes("شماره موبایل (اختیاری)"));
+assert.match(signup, /<input[^>]*type="email"[^>]*required/);
+assert(signup.includes('id="auth-password-strength"'));
+assert.match(signup, /aria-describedby="auth-password-hint auth-password-strength"/);
 assert.match(signup, /id="auth-password-hint"[^>]*>حداقل ۸ کاراکتر/);
 assert.match(
   signup,
@@ -320,11 +327,18 @@ assert(profile.includes("حساب من"));
 assert(profile.includes("خریدار نمونه"));
 assert(profile.includes("shop-fixture@example.invalid"));
 assert(profile.includes('id="account-orders"'));
+assert(!profile.includes("خریدهای من"));
 assert(profile.includes("/fa/dashboard/security#recovery-code"));
 const security = customerPage(AccountRecoveryEmail);
 assert.match(security, /name="code"[^>]*|autocomplete="one-time-code"/i);
 assert(security.includes('id="recovery-code"'));
 assert(security.includes('name="password"'));
+const resumedSignup = renderToStaticMarkup(
+  React.createElement(AuthForm, { mode: "signup", locale: "fa", dict }),
+);
+assert(resumedSignup.includes("تکمیل ثبت‌نام"));
+assert(resumedSignup.includes('name="code"'));
+assert(!resumedSignup.includes('id="auth-password"'));
 headerUser = { ...headerUser, recoveryEmailVerified: true };
 assert(!customerPage(AccountRecoveryEmail).includes('name="code"'));
 

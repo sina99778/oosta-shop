@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { AccountFrame } from "@/components/account-frame";
 import { AccountRecoveryEmail } from "@/components/account-recovery-email";
+import { PasswordStrength } from "@/components/password-strength";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -129,8 +130,10 @@ export function AccountSecurity({ locale }: { locale: Locale }) {
                 required
                 minLength={8}
                 autoComplete="new-password"
+                aria-describedby="account-password-strength"
               />
             </Field>
+            <PasswordStrength id="account-password-strength" locale={locale} password={next} />
             <Field label={fa ? "تکرار رمز عبور جدید" : "Confirm new password"}>
               <Input
                 type="password"

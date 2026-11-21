@@ -96,7 +96,7 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
         className={styles.purchaseSection}
         aria-labelledby="account-orders-title"
       >
-        <h2 id="account-orders-title">{fa ? "خریدهای من" : "My purchases"}</h2>
+        <h2 id="account-orders-title">{d.orders}</h2>
         {loading ? (
           <div className={styles.panel} role="status">
             <Spinner className="size-6" />

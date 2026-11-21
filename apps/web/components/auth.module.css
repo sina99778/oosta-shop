@@ -107,6 +107,37 @@
   outline: 2px solid var(--c-accent);
   outline-offset: 1px;
 }
+.strength {
+  display: grid;
+  gap: 0.35rem;
+  margin-block-start: 0.7rem;
+  font-size: 0.8rem;
+  color: var(--c-muted);
+}
+.strength p {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.strengthBars {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
+}
+.strengthBars span {
+  height: 0.3rem;
+  background: var(--c-border);
+  border-radius: 999px;
+}
+.strength[data-strength="1"] span[data-filled="true"] {
+  background: var(--c-danger-text);
+}
+.strength[data-strength="2"] span[data-filled="true"] {
+  background: #a66e19;
+}
+.strength[data-strength="3"] span[data-filled="true"] {
+  background: #2e9c77;
+}
 @media (max-width: 767px) {
   .shell {
     grid-template-columns: minmax(0, 1fr);

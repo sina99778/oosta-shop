@@ -9,7 +9,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import styles from "./account.module.css";
 
-export function AccountRecoveryEmail({ locale }: { locale: Locale }) {
+export function AccountRecoveryEmail({
+  locale,
+  onboarding = false,
+  initialDeliveryRequested,
+  requesting = false,
+  onVerified,
+}: {
+  locale: Locale;
+  onboarding?: boolean;
+  initialDeliveryRequested?: boolean;
+  requesting?: boolean;
+  onVerified?: () => void;
+}) {
   const { retrySession, token, user } = useAuth();
   const [deliveryRequested, setDeliveryRequested] = useState<boolean>();
   const [busy, setBusy] = useState<"verify" | "request" | null>(null);
@@ -18,13 +30,14 @@ export function AccountRecoveryEmail({ locale }: { locale: Locale }) {
   const fa = locale === "fa";
   const showCode = user?.role === "USER" && Boolean(user.email) && !user.recoveryEmailVerified;
   useEffect(() => {
-    if (showCode && window.location.hash === "#recovery-code") codeInput.current?.focus();
-  }, [showCode]);
+    if (showCode && (onboarding || window.location.hash === "#recovery-code"))
+      codeInput.current?.focus();
+  }, [showCode, onboarding]);
   if (user?.role !== "USER" || !user.email) return null;
 
   async function submit(event: FormEvent<HTMLFormElement>, form: "verify" | "request") {
     event.preventDefault();
-    if (busy) return;
+    if (busy || requesting) return;
     const element = event.currentTarget;
     const data = new FormData(element);
     setError(null);
@@ -37,6 +50,7 @@ export function AccountRecoveryEmail({ locale }: { locale: Locale }) {
           token ?? undefined,
         );
         retrySession();
+        onVerified?.();
       } else {
         const result = await api.post<{ deliveryRequested?: boolean }>(
           "/auth/recovery-email/request",
@@ -63,8 +77,9 @@ export function AccountRecoveryEmail({ locale }: { locale: Locale }) {
     }
   }
 
+  const delivery = deliveryRequested ?? initialDeliveryRequested;
   const codeGuidance =
-    deliveryRequested === false
+    delivery === false
       ? fa
         ? "درخواست ارسال تازه ثبت نشد. کد قبلی را امتحان کنید. اگر آن را دریافت نکرده‌اید، پس از پایان مهلت ۱۵ دقیقه‌ای دوباره درخواست بدهید."
         : "No new send was requested. Try your previous code. If it did not arrive, try again after the 15-minute window."
@@ -73,9 +88,18 @@ export function AccountRecoveryEmail({ locale }: { locale: Locale }) {
         : "Check your inbox and spam folder for the code. It expires after 15 minutes.";
 
   return (
-    <section className={styles.panel} aria-labelledby="recovery-email-title">
+    <section
+      className={onboarding ? undefined : styles.panel}
+      aria-labelledby="recovery-email-title"
+    >
       <h2 id="recovery-email-title" className="text-lg font-bold">
-        {fa ? "ایمیل بازیابی حساب" : "Recovery email"}
+        {onboarding
+          ? fa
+            ? "تأیید ایمیل ثبت‌نام"
+            : "Verify your sign-up email"
+          : fa
+            ? "ایمیل بازیابی حساب"
+            : "Recovery email"}
       </h2>
       {user.recoveryEmailVerified ? (
         <p role="status" className="mt-2 text-sm text-success">
@@ -89,7 +113,12 @@ export function AccountRecoveryEmail({ locale }: { locale: Locale }) {
               : "Enter the verification code for this address here."}{" "}
             <bdi>{user.email}</bdi>
           </p>
-          {deliveryRequested !== undefined && (
+          {requesting && (
+            <p role="status" className="mt-3 text-sm text-muted">
+              {fa ? "در حال درخواست کد تأیید…" : "Requesting a verification code…"}
+            </p>
+          )}
+          {delivery !== undefined && (
             <p role="status" className="mt-3 text-sm text-muted">
               {codeGuidance}
             </p>
@@ -116,7 +145,11 @@ export function AccountRecoveryEmail({ locale }: { locale: Locale }) {
                   {error.message}
                 </p>
               )}
-              <Button type="submit" disabled={busy !== null} aria-busy={busy === "verify"}>
+              <Button
+                type="submit"
+                disabled={busy !== null || requesting}
+                aria-busy={busy === "verify"}
+              >
                 {fa ? "تأیید ایمیل" : "Verify email"}
               </Button>
             </form>
@@ -143,7 +176,7 @@ export function AccountRecoveryEmail({ locale }: { locale: Locale }) {
               <Button
                 type="submit"
                 variant="outline"
-                disabled={busy !== null}
+                disabled={busy !== null || requesting}
                 aria-busy={busy === "request"}
               >
                 {fa ? "ارسال کد به ایمیل" : "Send verification code"}
