@@ -73,6 +73,10 @@
   color: var(--c-muted);
   border-radius: 0.6rem;
 }
+.cartIcon {
+  flex: none;
+  margin-inline-end: 0.4rem;
+}
 .cartCount {
   min-width: 1.4rem;
   padding-inline: 0.3rem;
@@ -84,6 +88,28 @@
   font-weight: 750;
   line-height: 1.4rem;
   font-variant-numeric: tabular-nums;
+}
+.mobileCart {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+}
+.mobileCart .cartIcon,
+.mobileCart .cartCount {
+  margin: 0;
+}
+.mobileCart .cartCount {
+  position: absolute;
+  inset-block-start: -0.22rem;
+  inset-inline-end: -0.2rem;
+  min-width: 1.14rem;
+  line-height: 1.14rem;
+}
+.mobileCart[aria-current="page"] {
+  color: var(--c-primary);
+  border-color: var(--c-primary);
 }
 .navLink:hover {
   background: var(--c-card);
@@ -246,6 +272,7 @@
     border-inline-start: 1px solid var(--c-border);
   }
   .menuButton,
+  .mobileCart,
   .mobileNav {
     display: none;
   }

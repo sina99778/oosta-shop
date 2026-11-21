@@ -18,6 +18,11 @@ enum Role {
   ADMIN
 }
 
+enum RecoveryChallengeKind {
+  RESET
+  VERIFY
+}
+
 enum ProductType {
   ACCOUNT
   LICENSE
@@ -77,6 +82,7 @@ model User {
   id           String   @id @default(cuid())
   name         String
   email        String?  @unique
+  verifiedRecoveryEmail String?
   phone        String?  @unique
   passwordHash String
   // Bumped on password change / logout-all; tokens carrying an older value are revoked.
@@ -91,10 +97,25 @@ model User {
   supplierCheckoutQuotes SupplierCheckoutQuote[]
   cartLines CartLine[]
   welcomeGift WelcomeGift?
+  passwordReset PasswordReset?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
   @@map("users")
+}
+
+model PasswordReset {
+  userId         String   @id
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash      String   @unique
+  kind           RecoveryChallengeKind
+  email          String
+  sessionVersion Int
+  requestedAt    DateTime
+  expiresAt      DateTime
+  usedAt         DateTime?
+
+  @@map("password_resets")
 }
 
 model Category {

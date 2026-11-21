@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ProductSearchForm } from "./product-search-form";
 import { fetchJson } from "@/lib/seo";
+import { getSiteSettings, telegramSupportHref } from "@/lib/settings";
 import { ProductCard } from "@/components/product-card";
 import { Button } from "@/components/ui/button";
 import type { Locale } from "@/lib/i18n";
@@ -51,9 +52,10 @@ export async function ProductsBrowser({
   const query = new URLSearchParams({ page: String(page), pageSize: "12", sort });
   if (category) query.set("category", category);
   if (term) query.set("q", term);
-  const [products, categories] = await Promise.all([
+  const [products, categories, settings] = await Promise.all([
     fetchJson<Paginated<ProductSummary>>(`/products?${query}`, 0),
     fetchJson<{ categories: Category[] }>("/categories"),
+    getSiteSettings(),
   ]);
   const labels = {
     from: dict.common.from,
@@ -261,7 +263,7 @@ export async function ProductsBrowser({
                 : "Tell us what you want to do. The right choice starts with your needs."}
             </p>
           </div>
-          <a href="https://t.me/oostaAiSupport" target="_blank" rel="noopener noreferrer">
+          <a href={telegramSupportHref(settings)} target="_blank" rel="noopener noreferrer">
             {fa ? "مشاورهٔ پیش از خرید در تلگرام" : "Ask on Telegram before buying"} ↗
           </a>
         </aside>

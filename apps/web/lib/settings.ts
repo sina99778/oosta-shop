@@ -35,6 +35,18 @@ export async function getSiteSettings(): Promise<SiteSettings> {
   return (await getSiteConfig()).settings;
 }
 
+export function telegramSupportHref(settings: SiteSettings): string {
+  const setting = settings.contactTelegram?.trim() ?? "";
+  const chat = /^(?:@|https?:\/\/(?:t\.me|telegram\.me)\/)?([a-z][a-z0-9_]{4,31})\/?$/i.exec(
+    setting,
+  )?.[1];
+  const deepLink =
+    /^https?:\/\/(?:t\.me|telegram\.me)\/((?:m\/|joinchat\/|\+)[a-z0-9_-]+)\/?$/i.exec(
+      setting,
+    )?.[1];
+  return `https://t.me/${chat ?? deepLink ?? "oostaAiSupport"}`;
+}
+
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const hex = (value: string | undefined): string | null => (value && HEX.test(value) ? value : null);
 

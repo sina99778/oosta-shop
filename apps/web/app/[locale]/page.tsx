@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { getDictionary } from "./dictionaries";
 import { isLocale } from "@/lib/i18n";
-import { getSiteSettings, localizedSetting } from "@/lib/settings";
+import { getSiteSettings, localizedSetting, telegramSupportHref } from "@/lib/settings";
 import { HomeSections } from "@/components/home-sections";
 import { homeJsonLd, safeJsonLd } from "@/lib/page-metadata";
 
@@ -24,7 +24,13 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
           __html: safeJsonLd(homeJsonLd(locale, dict.meta.title, dict.meta.description)),
         }}
       />
-      <HomeSections locale={locale} dict={dict} heroTitle={heroTitle} heroSubtitle={heroSubtitle} />
+      <HomeSections
+        locale={locale}
+        dict={dict}
+        heroTitle={heroTitle}
+        heroSubtitle={heroSubtitle}
+        supportHref={telegramSupportHref(settings)}
+      />
     </>
   );
 }

@@ -5,6 +5,7 @@ import { getDictionary } from "../../dictionaries";
 import { isLocale } from "@/lib/i18n";
 import { ProductDetailView } from "@/components/product-detail-view";
 import { fetchJson, siteUrl } from "@/lib/seo";
+import { getSiteSettings, telegramSupportHref } from "@/lib/settings";
 import { productImageUrl } from "@/lib/api";
 import type { PaymentConfig, ProductDetail } from "@/lib/types";
 import { availabilityOf, canBuyPlan } from "@/lib/product-availability";
@@ -84,7 +85,11 @@ export default async function ProductDetailPage({
   if (!isLocale(locale)) notFound();
   const rawPlan = (await searchParams)?.plan;
   const requestedPlanId = Array.isArray(rawPlan) ? "" : rawPlan;
-  const [dict, p] = await Promise.all([getDictionary(locale), loadProduct(slug)]);
+  const [dict, p, settings] = await Promise.all([
+    getDictionary(locale),
+    loadProduct(slug),
+    getSiteSettings(),
+  ]);
   // A missing/inactive product must be a real 404 (matches blog/[slug] and p/[slug]),
   // not a 200 soft-404 that search engines penalize.
   if (!p) notFound();
@@ -178,6 +183,7 @@ export default async function ProductDetailPage({
         locale={locale}
         product={p}
         payment={payment ? { online: payment.online, cardToCard: payment.cardToCard } : null}
+        supportHref={telegramSupportHref(settings)}
         dict={dict}
       />
     </>

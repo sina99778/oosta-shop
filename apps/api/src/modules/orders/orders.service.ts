@@ -22,6 +22,7 @@ import type { CreateOrderInput } from "./orders.schemas";
 import { readBluInvoice, reserveBluInvoice } from "./blu-invoice";
 import { claimAvailableStock, releaseExpiredBluStock } from "./blu-stock";
 import { canDeliverPrivateBluStock } from "./blu-private-stock";
+import { renewalEstimate } from "./renewals";
 
 export function bluStockVerifierReady() {
   try {
@@ -43,6 +44,7 @@ type OrderWithItems = Prisma.OrderGetPayload<{
   include: {
     items: { include: { product: true; plan: true; fulfilledItems: true } };
     receipts: true;
+    user: { select: { role: true } };
   };
 }>;
 type FulfilledItem = OrderWithItems["items"][number]["fulfilledItems"][number];
@@ -73,6 +75,7 @@ async function serializeOrderDetail(order: OrderWithItems) {
   const cart = readCartCard(order.paymentMetadata);
   const remainingMs = invoice ? Math.max(0, Date.parse(invoice.expiresAt) - Date.now()) : 0;
   const expired = !!invoice && remainingMs === 0;
+  const now = new Date();
   return {
     bluInvoice: invoice
       ? {
@@ -128,6 +131,7 @@ async function serializeOrderDetail(order: OrderWithItems) {
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
       lineTotal: Number(item.lineTotal),
+      renewal: renewalEstimate(order, item, now),
       // The account vault: delivered credentials, exposed only for paid orders.
       credentials: paid ? item.fulfilledItems.map(credentialOf) : [],
     })),
@@ -626,6 +630,7 @@ export async function getOrderDetail(userId: string, orderId: string) {
     include: {
       items: { include: { product: true, plan: true, fulfilledItems: true } },
       receipts: { orderBy: { createdAt: "desc" } },
+      user: { select: { role: true } },
     },
   });
   if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");

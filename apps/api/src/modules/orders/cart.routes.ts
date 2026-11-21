@@ -9,6 +9,7 @@ import { quote } from "../suppliers/suppliers.service";
 import type { SupplierCheckout } from "../suppliers/checkout";
 import { getPaymentConfig } from "./orders.service";
 import { cartPlanPrice, createInternalCartOrder } from "./cart-checkout";
+import { assertRenewalCartPlan } from "./renewals";
 import {
   CART_LIFETIME,
   cartChanged,
@@ -132,11 +133,14 @@ cartRouter.get("/", async (req, res) => {
 });
 cartRouter.post(
   "/items",
-  validate({ body: z.object({ planId: id }).strict() }),
+  validate({ body: z.object({ planId: id, renewalOrderItemId: id.optional() }).strict() }),
   async (req, res) => {
     await releaseExpiredCart();
     const userId = req.user!.id;
     const idOfPlan: string = req.body.planId;
+    const renewalOrderItemId: string | undefined = req.body.renewalOrderItemId;
+    if (renewalOrderItemId)
+      await assertRenewalCartPlan(prisma, userId, renewalOrderItemId, idOfPlan);
     const current = await prisma.productPlan.findUnique({
       where: { id: idOfPlan },
       include: planInclude,
@@ -161,6 +165,7 @@ cartRouter.post(
         signature !== cartSignature(plan)
       )
         throw cartChanged();
+      if (renewalOrderItemId) await assertRenewalCartPlan(tx, userId, renewalOrderItemId, idOfPlan);
       const existing = await tx.cartLine.findUnique({
         where: { userId_planId: { userId, planId: idOfPlan } },
       });

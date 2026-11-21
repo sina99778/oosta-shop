@@ -71,7 +71,7 @@ Module._load = function (request, ...args) {
         fetches++;
         if (route.startsWith("/blog/")) return { post };
         if (route === "/blog") return { posts: [post] };
-        if (route.startsWith("/pages/")) return { page: cmsPage };
+        if (route === "/pages/about") return { page: cmsPage };
         if (route === "/pages") return { pages: [cmsPage] };
         if (route.startsWith("/products?")) return { items: [], pagination: { totalPages: 1 } };
         return null;
@@ -79,7 +79,11 @@ Module._load = function (request, ...args) {
     };
   if (/dictionaries$/.test(request)) return { getDictionary };
   if (request === "@/lib/settings")
-    return { getSiteSettings: async () => ({}), localizedSetting: () => undefined };
+    return {
+      getSiteSettings: async () => ({}),
+      localizedSetting: () => undefined,
+      telegramSupportHref: () => "https://t.me/FixtureSupport",
+    };
   if (request === "next/server") return { connection: async () => undefined };
   if (request === "next/navigation")
     return {
@@ -90,6 +94,7 @@ Module._load = function (request, ...args) {
         throw new Error("REDIRECT");
       },
     };
+  if (request === "@/components/ui/container") return { Container: ({ children }) => children };
   if (request.startsWith("@/components/"))
     return new Proxy({}, { get: (_target, key) => (key === "__esModule" ? false : stubComponent) });
   return originalLoad.call(this, request, ...args);
@@ -214,6 +219,14 @@ async function main() {
   const postEntry = (await sitemap()).find((entry) => entry.url === canonicalPost);
   assert.equal(postEntry.lastModified.toISOString(), post.updatedAt);
   assert(urls.includes(`${SITE}/fa/p/about`));
+  for (const slug of ["terms", "return-policy", "privacy-policy"]) {
+    const canonical = `${SITE}/fa/p/${slug}`;
+    const metadata = await cms.generateMetadata(params("fa", { slug }));
+    assert.equal(metadata.alternates.canonical, canonical);
+    const html = renderToStaticMarkup(await cms.default(params("fa", { slug })));
+    assert.match(html, /<h1[^>]*>[^<]+<\/h1>/);
+  }
+  await assert.rejects(cms.default(params("fa", { slug: "missing" })), /NOT_FOUND/);
   assert(urls.includes(`${SITE}/en/products`) && urls.includes(`${SITE}/en/blog`));
   assert(!urls.some((url) => /\/en\/(blog|p|products)\/./.test(url)));
 

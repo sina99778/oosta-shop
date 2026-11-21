@@ -112,7 +112,26 @@
       "Changing your password signs out every other device"
     ],
     "showPassword": "Show password",
-    "hidePassword": "Hide password"
+    "hidePassword": "Hide password",
+    "recovery": {
+      "forgot": "Forgot your password?",
+      "requestTitle": "Reset your password",
+      "requestHint": "Enter the verified email linked to your Oosta account.",
+      "email": "Email address",
+      "send": "Send reset link",
+      "sent": "If that email is verified on an eligible account, check your inbox and spam folder for a reset link.",
+      "back": "Back to log in",
+      "resetTitle": "Choose a new password",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm new password",
+      "mismatch": "The passwords don’t match.",
+      "save": "Set new password",
+      "saved": "Your password was changed. Log in with your new password.",
+      "invalid": "This reset link is invalid, expired, or already used.",
+      "requestAgain": "Request a new link",
+      "unavailable": "Email recovery is temporarily unavailable.",
+      "contact": "Contact support"
+    }
   },
   "checkout": {
     "verifying": "Confirming your payment…",

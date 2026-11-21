@@ -3,6 +3,17 @@ import type { RequestHandler } from "express";
 let maintenance = false;
 let active = 0;
 export const isMaintenance = () => maintenance;
+
+// Work committed by an accepted HTTP request may keep using the database after its response.
+export async function trackMaintenanceWork<T>(run: () => Promise<T>): Promise<T> {
+  active++;
+  try {
+    return await run();
+  } finally {
+    active--;
+  }
+}
+
 export const maintenanceGate: RequestHandler = (req, res, next) => {
   if (req.path.startsWith("/health")) {
     next();

@@ -20,6 +20,13 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: "/:locale(en|fa)/:recovery(forgot-password|reset-password)",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
     ];
   },
 };

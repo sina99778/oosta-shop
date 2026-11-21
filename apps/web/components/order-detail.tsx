@@ -1,8 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
+import { api } from "@/lib/api";
+import { apiErrorMessage } from "@/lib/api-error-message";
+import { notifyCartChanged } from "@/lib/cart-events";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +21,7 @@ import styles from "./account.module.css";
 import { planDisplayLabel, variantDescription } from "@/lib/product-variant";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
-import type { Credential, OrderDetail as OrderDetailDto } from "@/lib/types";
+import type { Credential, OrderDetail as OrderDetailDto, OrderItemDetail } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 
 export function OrderDetail({
@@ -68,7 +73,7 @@ export function OrderDetail({
     order.bluInvoice?.expired ||
     order.bluInvoice?.remainingMs === 0 ||
     order.manualSupplier?.remainingMs === 0 ||
-    order.cartPayment?.remainingMs === 0;
+    (order.paymentStatus === "PENDING" && order.cartPayment?.remainingMs === 0);
 
   return (
     <AccountFrame
@@ -141,6 +146,15 @@ export function OrderDetail({
                   </span>
                 </div>
 
+                {item.renewal && (
+                  <SubscriptionRenewal
+                    renewal={item.renewal}
+                    orderItemId={item.id}
+                    locale={locale}
+                    fallbackError={dict.common.somethingWrong}
+                  />
+                )}
+
                 <div className="mt-4">
                   <p className="mb-2 text-sm font-medium">{d.vault}</p>
                   {item.credentials.length === 0 ? (
@@ -211,9 +225,17 @@ export function OrderDetail({
                     ? "مهلت پرداخت این سفارش تمام شده است. برای پیگیری به پشتیبانی پیام بده."
                     : "The payment window has expired. Contact support if you need help."}
                 </p>
+              ) : order.paymentStatus === "REJECTED" && order.manualSupplier ? (
+                <Link className={styles.action} href={supportLink}>
+                  {fa ? "پیگیری رسید از پشتیبانی" : "Contact support about the receipt"}
+                </Link>
               ) : (
                 <Link className={styles.action} href={`/${locale}/checkout/card/${order.id}`}>
-                  {d.completePayment}
+                  {order.paymentStatus === "REJECTED"
+                    ? fa
+                      ? "ارسال مجدد رسید"
+                      : "Resubmit receipt"
+                    : d.completePayment}
                 </Link>
               ))}
           </section>
@@ -256,6 +278,83 @@ export function OrderDetail({
         </aside>
       </div>
     </AccountFrame>
+  );
+}
+
+function SubscriptionRenewal({
+  renewal,
+  orderItemId,
+  locale,
+  fallbackError,
+}: {
+  renewal: NonNullable<OrderItemDetail["renewal"]>;
+  orderItemId: string;
+  locale: Locale;
+  fallbackError: string;
+}) {
+  const { token } = useAuth();
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fa = locale === "fa";
+  const days = renewal.daysRemaining;
+  const remainingLabel = fa
+    ? days > 0
+      ? `حدود ${days.toLocaleString("fa-IR")} روز مانده`
+      : "زمان تخمینی اشتراک به پایان رسیده"
+    : days > 0
+      ? `About ${days} ${days === 1 ? "day" : "days"} remaining`
+      : "Estimated subscription period ended";
+
+  async function addToCart() {
+    if (!renewal.planId || !token || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(
+        "/cart/items",
+        { planId: renewal.planId, renewalOrderItemId: orderItemId },
+        token,
+      );
+      notifyCartChanged();
+      router.push(`/${locale}/cart`);
+    } catch (error) {
+      setError(apiErrorMessage(error, locale, fallbackError));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 space-y-2 border-t border-border pt-3">
+      <div className={styles.factRow}>
+        <div>
+          <p className="text-sm font-semibold text-foreground">{remainingLabel}</p>
+          <p className="mt-1 text-sm text-muted">
+            {fa ? "پایان تقریبی اشتراک" : "Estimated subscription end"}{" "}
+            <time dateTime={renewal.estimatedEndAt}>
+              {formatDate(renewal.estimatedEndAt, locale)}
+            </time>
+          </p>
+        </div>
+        {renewal.planId && (
+          <Button size="sm" onClick={addToCart} disabled={busy} aria-busy={busy}>
+            {busy
+              ? fa
+                ? "در حال افزودن به سبد خرید…"
+                : "Adding to cart…"
+              : fa
+                ? "افزودن تمدید به سبد خرید"
+                : "Add renewal to cart"}
+          </Button>
+        )}
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 

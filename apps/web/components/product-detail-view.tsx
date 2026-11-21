@@ -39,12 +39,14 @@ export function ProductDetailView({
   product,
   requestedPlanId,
   payment,
+  supportHref,
   dict,
 }: {
   locale: Locale;
   product: ProductDetail;
   requestedPlanId?: string;
   payment: CheckoutMethods | null;
+  supportHref: string;
   dict: Dictionary;
 }) {
   const { slug } = product;
@@ -485,7 +487,7 @@ export function ProductDetailView({
               ? "نوع دسترسی و شرایط پلن را پیش از خرید بررسی کن."
               : "Review access type and plan terms before buying."}
           </span>
-          <a href="https://t.me/oostaAiSupport" target="_blank" rel="noopener noreferrer">
+          <a href={supportHref} target="_blank" rel="noopener noreferrer">
             {locale === "fa" ? "پرسش پیش از خرید در تلگرام" : "Ask before buying on Telegram"} ↗
           </a>
         </div>

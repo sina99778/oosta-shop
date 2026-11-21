@@ -51,6 +51,7 @@ async function main() {
     ZARINPAL_SANDBOX: "true",
     CARD_TO_CARD_ENABLED: "false",
     TELEGRAM_BOT_TOKEN: "",
+    MAIL_ENABLED: "false",
     GEMINI_API_KEY: "",
     OPENROUTER_API_KEY: "",
     BCRYPT_SALT_ROUNDS: "4",
@@ -92,11 +93,15 @@ async function main() {
         env,
       ),
     );
-    const focusedScript = process.argv.includes("--cart-only")
-      ? "cart-regressions"
-      : process.argv.includes("--supplier-wallet-only")
-        ? "supplier-wallet-regressions"
-        : null;
+    const focusedScript = process.argv.includes("--password-reset-only")
+      ? "password-reset-regressions"
+      : process.argv.includes("--cart-only")
+        ? "cart-regressions"
+        : process.argv.includes("--supplier-wallet-only")
+          ? "supplier-wallet-regressions"
+          : process.argv.includes("--renewal-only")
+            ? "renewal-regressions"
+            : null;
     if (focusedScript) {
       console.log(
         run(
@@ -146,6 +151,16 @@ async function main() {
         [
           path.join(root, "node_modules/tsx/dist/cli.mjs"),
           "apps/api/scripts/auth-session-regressions.ts",
+        ],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/password-reset-regressions.ts",
         ],
         env,
       ),
@@ -287,7 +302,11 @@ async function main() {
         { ...env, DATABASE_URL: env.DATABASE_URL + "&connection_limit=1&pool_timeout=3" },
       ),
     );
-    for (const script of ["supplier-wallet-regressions", "cart-regressions"]) {
+    for (const script of [
+      "supplier-wallet-regressions",
+      "cart-regressions",
+      "renewal-regressions",
+    ]) {
       console.log(
         run(
           process.execPath,

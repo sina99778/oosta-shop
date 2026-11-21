@@ -6,6 +6,7 @@ import { Container } from "@/components/ui/container";
 import { Markdown } from "@/components/markdown";
 import { fetchJson } from "@/lib/seo";
 import { contentAlternates } from "@/lib/page-metadata";
+import { sitePolicy } from "@/lib/site-policies";
 
 export const revalidate = 300;
 
@@ -27,8 +28,9 @@ export async function generateMetadata({
 }: {
   params: Promise<{ locale: string; slug: string }>;
 }): Promise<Metadata> {
-  const { slug } = await params;
-  const page = await load(slug);
+  const { locale, slug } = await params;
+  if (!isLocale(locale)) notFound();
+  const page = (await load(slug)) ?? sitePolicy(slug, locale);
   if (!page) return { title: "Not found" };
   const description = page.content.replace(/[#*!]/g, "").slice(0, 160);
   const alternates = contentAlternates(`/p/${encodeURIComponent(page.slug)}`);
@@ -48,7 +50,7 @@ export default async function CmsPage({
 }) {
   const { locale, slug } = await params;
   if (!isLocale(locale)) notFound();
-  const page = await load(slug);
+  const page = (await load(slug)) ?? sitePolicy(slug, locale);
   if (!page) notFound();
 
   return (

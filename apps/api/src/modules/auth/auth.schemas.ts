@@ -9,11 +9,15 @@ const passwordField = z
     (value) => Buffer.byteLength(value, "utf8") <= 72,
     "Password must not exceed 72 UTF-8 bytes",
   );
+const emailField = z.string().trim().toLowerCase().pipe(z.email("Invalid email address"));
+const currentPasswordField = z.string().min(1, "Current password is required").max(1000);
+const recoveryTokenField = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+const recoveryLocaleField = z.enum(["fa", "en"]).default("fa");
 
 export const signupSchema = z
   .object({
     name: z.string().trim().min(1, "Name is required").max(100),
-    email: z.string().trim().toLowerCase().pipe(z.email("Invalid email address")).optional(),
+    email: emailField.optional(),
     phone: z
       .string()
       .trim()
@@ -62,10 +66,29 @@ export const loginSchema = z.object({
 });
 
 export const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1, "Current password is required").max(1000),
+  currentPassword: currentPasswordField,
   newPassword: passwordField,
 });
+
+export const forgotPasswordSchema = z.object({
+  email: emailField.pipe(z.string().max(320)),
+  locale: recoveryLocaleField,
+});
+
+export const resetPasswordSchema = z.object({
+  token: recoveryTokenField,
+  newPassword: passwordField,
+});
+
+export const verifyRecoveryEmailRequestSchema = z.object({
+  currentPassword: currentPasswordField,
+  locale: recoveryLocaleField,
+});
+
+export const verifyRecoveryEmailSchema = z.object({ token: recoveryTokenField });
 
 export type SignupInput = z.infer<typeof signupSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

@@ -225,6 +225,7 @@ export type OrderItemDetail = {
   unitPrice: number;
   lineTotal: number;
   credentials: Credential[];
+  renewal: { estimatedEndAt: string; daysRemaining: number; planId: string | null } | null;
 };
 
 export type CardInfo = { number: string; holder: string; bank: string };

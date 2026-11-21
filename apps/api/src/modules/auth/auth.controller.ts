@@ -7,6 +7,7 @@
 
 import type { Request, Response } from "express";
 import { AppError } from "../../utils/httpError";
+import type { SendMail } from "../../lib/mailer";
 import { notifyNewSignup } from "../../bot";
 import { getWelcomeGift } from "../orders/welcome-gift";
 import {
@@ -21,6 +22,13 @@ import {
   registerUser,
   revokeAllSessions,
 } from "./auth.service";
+import {
+  issuePasswordReset,
+  issueRecoveryVerification,
+  passwordResetBaseUrl,
+  redeemPasswordReset,
+  verifyRecoveryEmail,
+} from "./password-reset";
 
 function requireUserSession(req: Request): string {
   // `authenticate` guarantees req.user. API keys are automation credentials and
@@ -53,6 +61,52 @@ export async function login(req: Request, res: Response): Promise<void> {
   const result = await loginUser(req.body);
   setSessionCookie(res, result.token);
   res.status(200).json(result);
+}
+
+export function createForgotPassword(send?: SendMail) {
+  const baseUrl = passwordResetBaseUrl();
+  return (req: Request, res: Response): void => {
+    requireTrustedBrowserSource(req);
+    if (!send || !baseUrl) {
+      throw new AppError(
+        503,
+        "PASSWORD_RESET_UNAVAILABLE",
+        "Password reset is temporarily unavailable",
+      );
+    }
+    res.status(202).json({ accepted: true });
+    // The response must never wait on an account lookup or an SMTP attempt.
+    void issuePasswordReset(req.body, baseUrl, send).catch(() => {
+      console.error("[password-reset] Could not issue or deliver a reset email");
+    });
+  };
+}
+
+export async function resetPassword(req: Request, res: Response): Promise<void> {
+  requireTrustedBrowserSource(req);
+  await redeemPasswordReset(req.body);
+  res.status(204).end();
+}
+
+export function createRequestRecoveryEmailVerification(send?: SendMail) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const userId = requireUserSession(req);
+    if (!send || !passwordResetBaseUrl()) {
+      throw new AppError(
+        503,
+        "PASSWORD_RESET_UNAVAILABLE",
+        "Email recovery is temporarily unavailable",
+      );
+    }
+    const { currentPassword, locale } = req.body;
+    await issueRecoveryVerification(userId, currentPassword, locale, send);
+    res.status(202).json({ accepted: true });
+  };
+}
+
+export async function confirmRecoveryEmailVerification(req: Request, res: Response): Promise<void> {
+  await verifyRecoveryEmail(requireUserSession(req), req.body.token);
+  res.status(204).end();
 }
 
 export async function me(req: Request, res: Response): Promise<void> {

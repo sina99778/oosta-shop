@@ -2,11 +2,32 @@
 // password change, and logout (this browser) / logout-all (every device).
 
 import { Router } from "express";
-import { authRateLimiter } from "../../middleware/rateLimit";
+import type { SendMail } from "../../lib/mailer";
+import { authRateLimiter, createAuthRateLimiter } from "../../middleware/rateLimit";
 import { validate } from "../../middleware/validate";
-import { authenticate } from "../../middleware/auth";
-import { changePasswordSchema, loginSchema, signupSchema } from "./auth.schemas";
-import { changePassword, inbox, login, logout, logoutAll, me, signup } from "./auth.controller";
+import { authenticate, requireRole } from "../../middleware/auth";
+import {
+  changePasswordSchema,
+  forgotPasswordSchema,
+  loginSchema,
+  resetPasswordSchema,
+  signupSchema,
+  verifyRecoveryEmailRequestSchema,
+  verifyRecoveryEmailSchema,
+} from "./auth.schemas";
+import {
+  changePassword,
+  confirmRecoveryEmailVerification,
+  createForgotPassword,
+  createRequestRecoveryEmailVerification,
+  inbox,
+  login,
+  logout,
+  logoutAll,
+  me,
+  resetPassword,
+  signup,
+} from "./auth.controller";
 
 export const authRouter = Router();
 
@@ -23,3 +44,36 @@ authRouter.post(
 );
 authRouter.post("/logout", logout);
 authRouter.post("/logout-all", authenticate, logoutAll);
+
+export function createPasswordResetRouter(send?: SendMail) {
+  const router = Router();
+  router.post(
+    "/forgot-password",
+    createAuthRateLimiter(),
+    validate({ body: forgotPasswordSchema }),
+    createForgotPassword(send),
+  );
+  router.post(
+    "/reset-password",
+    createAuthRateLimiter(),
+    validate({ body: resetPasswordSchema }),
+    resetPassword,
+  );
+  router.post(
+    "/recovery-email/request",
+    createAuthRateLimiter(),
+    authenticate,
+    requireRole("USER"),
+    validate({ body: verifyRecoveryEmailRequestSchema }),
+    createRequestRecoveryEmailVerification(send),
+  );
+  router.post(
+    "/recovery-email/verify",
+    createAuthRateLimiter(),
+    authenticate,
+    requireRole("USER"),
+    validate({ body: verifyRecoveryEmailSchema }),
+    confirmRecoveryEmailVerification,
+  );
+  return router;
+}

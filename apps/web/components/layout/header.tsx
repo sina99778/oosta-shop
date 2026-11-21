@@ -52,6 +52,7 @@ export function Header({
   const base = `/${locale}`;
   const menuLabel = fa ? "منوی اصلی" : "Main menu";
   const cartLabel = fa ? "سبد خرید" : "Cart";
+  const cartHref = `${base}/cart`;
   const count = cart?.count ? cart.count.toLocaleString(fa ? "fa-IR" : "en-US") : null;
 
   useEffect(() => {
@@ -74,15 +75,56 @@ export function Header({
     { href: `${base}/products`, label: dict.products },
     { href: `${base}/blog`, label: dict.blog },
     { href: `${base}/support`, label: dict.support },
-    { href: `${base}/cart`, label: cartLabel },
+    { href: cartHref, label: cartLabel },
     ...(user ? [{ href: `${base}/dashboard`, label: dict.dashboard }] : []),
     ...(user?.role === "ADMIN" ? [{ href: `${base}/admin`, label: dict.admin }] : []),
   ];
 
-  function navigation() {
+  function cartLink(mobile = false) {
+    return (
+      <Link
+        key={cartHref}
+        prefetch={false}
+        href={cartHref}
+        className={mobile ? `oosta-button ${styles.mobileCart}` : styles.navLink}
+        data-button-variant={mobile ? "outline" : undefined}
+        onClick={() => setOpenPath(null)}
+        aria-current={
+          pathname === cartHref || pathname.startsWith(`${cartHref}/`) ? "page" : undefined
+        }
+        aria-label={count ? `${cartLabel} (${count})` : cartLabel}
+      >
+        <svg
+          className={styles.cartIcon}
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M3 4h2l2.4 10.5h11.8L21 7H5.7" />
+          <circle cx="8.5" cy="19" r="1.2" />
+          <circle cx="18" cy="19" r="1.2" />
+        </svg>
+        {!mobile && cartLabel}
+        {count && (
+          <span aria-hidden="true" className={styles.cartCount}>
+            {count}
+          </span>
+        )}
+      </Link>
+    );
+  }
+
+  function navigation(mobile = false) {
     return routes.map(({ href, label }) => {
+      if (href === cartHref) return mobile ? null : cartLink();
       const active = pathname === href || (href !== base && pathname.startsWith(`${href}/`));
-      const cartCount = href === `${base}/cart` ? count : null;
       return (
         <Link
           prefetch={false}
@@ -91,14 +133,8 @@ export function Header({
           className={styles.navLink}
           onClick={() => setOpenPath(null)}
           aria-current={active ? "page" : undefined}
-          aria-label={cartCount ? `${label} (${cartCount})` : undefined}
         >
           {label}
-          {cartCount && (
-            <span aria-hidden="true" className={styles.cartCount}>
-              {cartCount}
-            </span>
-          )}
         </Link>
       );
     });
@@ -178,6 +214,7 @@ export function Header({
           {navigation()}
         </nav>
         <div className={styles.toolbar}>
+          {cartLink(true)}
           <ThemeToggle label={themeLabel} />
           <LocaleSwitcher current={locale} />
           <div className={styles.desktopAccount}>{accountActions()}</div>
@@ -213,7 +250,7 @@ export function Header({
         className={styles.mobileNav}
       >
         <Container className={styles.mobileInner}>
-          <div className={styles.mobileLinks}>{navigation()}</div>
+          <div className={styles.mobileLinks}>{navigation(true)}</div>
           {!loading && <div className={styles.mobileAccount}>{accountActions()}</div>}
         </Container>
       </nav>

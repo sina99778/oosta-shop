@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Container } from "@/components/ui/container";
 import { assetUrl } from "@/lib/api";
-import { localizedSetting, type SiteConfig } from "@/lib/settings";
+import { localizedSetting, telegramSupportHref, type SiteConfig } from "@/lib/settings";
+import { sitePolicies } from "@/lib/site-policies";
 import type { Locale } from "@/lib/i18n";
 import { Wordmark } from "@/components/wordmark";
 import styles from "./site-chrome.module.css";
@@ -36,8 +37,7 @@ export function Footer({
   const base = `/${locale}`;
   const { settings, enamadBadge } = config;
   const about = localizedSetting(settings, "footerAbout", locale) ?? dict.aboutDefault;
-  const telegram = settings.contactTelegram || "@oostaAiSupport";
-  const telegramHref = socialHref(telegram, "https://t.me");
+  const telegramHref = telegramSupportHref(settings);
   const contact = [
     ...(settings.contactEmail
       ? [{ label: settings.contactEmail, href: `mailto:${settings.contactEmail}` }]
@@ -95,6 +95,11 @@ export function Footer({
           <Link prefetch={false} href={`${base}/support`}>
             {fa ? "ثبت و پیگیری تیکت" : "Open or track a ticket"}
           </Link>
+          {sitePolicies.map(({ slug, ...translations }) => (
+            <Link prefetch={false} href={`${base}/p/${slug}`} key={slug}>
+              {translations[locale].title}
+            </Link>
+          ))}
         </section>
         <section className={styles.footerColumn} aria-labelledby="footer-contact">
           <h2 id="footer-contact">{dict.contactTitle}</h2>

@@ -25,6 +25,7 @@ export type AuthUser = {
   email: string | null;
   phone: string | null;
   role: "USER" | "ADMIN";
+  recoveryEmailVerified?: boolean;
 };
 
 type AuthResult = { user: AuthUser };

@@ -20,6 +20,19 @@ const messages: Record<string, readonly [fa: string, en: string]> = {
     "تعداد تلاش‌ها زیاد است. کمی بعد دوباره تلاش کن.",
     "Too many attempts. Try again later.",
   ],
+  INVALID_CURRENT_PASSWORD: ["رمز عبور فعلی درست نیست.", "Your current password is incorrect."],
+  INVALID_RECOVERY_CODE: [
+    "کد تأیید معتبر نیست، منقضی شده یا قبلاً استفاده شده است.",
+    "The verification code is invalid, expired, or already used.",
+  ],
+  RECOVERY_EMAIL_NOT_ELIGIBLE: [
+    "این ایمیل قابل تأیید نیست. بخش امنیت حساب را تازه‌سازی کنید.",
+    "This email can’t be verified. Refresh the account security page.",
+  ],
+  PASSWORD_RESET_UNAVAILABLE: [
+    "بازیابی از طریق ایمیل موقتاً در دسترس نیست.",
+    "Email recovery is temporarily unavailable.",
+  ],
   VALIDATION_ERROR: ["اطلاعات واردشده را بررسی کن.", "Check the information you entered."],
   NOT_FOUND: ["مورد درخواستی پیدا نشد.", "The requested item was not found."],
   CART_FULL: [

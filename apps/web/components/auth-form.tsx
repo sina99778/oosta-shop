@@ -213,6 +213,14 @@ export function AuthForm({
                   {a.passwordHint}
                 </p>
               )}
+              {mode === "login" && (
+                <Link
+                  href={`/${locale}/forgot-password`}
+                  className="inline-flex min-h-11 items-center text-sm font-semibold text-primary underline-offset-4 hover:underline"
+                >
+                  {a.recovery.forgot}
+                </Link>
+              )}
             </div>
 
             {error && (

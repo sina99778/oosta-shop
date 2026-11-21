@@ -8,13 +8,25 @@ import { AppError } from "../../utils/httpError";
 import { newWelcomeCode } from "../orders/welcome-gift";
 import type { ChangePasswordInput, LoginInput, SignupInput } from "./auth.schemas";
 
-export type PublicUser = Omit<User, "passwordHash" | "sessionVersion">;
+export type PublicUser = Omit<User, "passwordHash" | "sessionVersion" | "verifiedRecoveryEmail"> & {
+  recoveryEmailVerified: boolean;
+};
 export type AuthResult = { user: PublicUser; token: string };
 const dummyPasswordHash = hashPassword("oosta-account-that-does-not-exist");
 
 function toPublicUser(user: User): PublicUser {
-  const { passwordHash: _passwordHash, sessionVersion: _sessionVersion, ...rest } = user;
-  return rest;
+  const {
+    passwordHash: _passwordHash,
+    sessionVersion: _sessionVersion,
+    verifiedRecoveryEmail,
+    ...rest
+  } = user;
+  return {
+    ...rest,
+    recoveryEmailVerified: Boolean(
+      rest.role === "USER" && rest.email && rest.email === verifiedRecoveryEmail,
+    ),
+  };
 }
 
 function issueToken(user: User): string {

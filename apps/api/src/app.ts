@@ -10,7 +10,8 @@ import { env } from "./config/env";
 import { globalRateLimiter } from "./middleware/rateLimit";
 import { errorHandler, notFoundHandler } from "./middleware/error";
 import { healthRouter } from "./routes/health";
-import { authRouter } from "./modules/auth/auth.routes";
+import { authRouter, createPasswordResetRouter } from "./modules/auth/auth.routes";
+import { createSmtpSender, type SendMail } from "./lib/mailer";
 import { catalogRouter } from "./modules/catalog/catalog.routes";
 import { bluEventRouter } from "./modules/orders/blu-events";
 import { ordersRouter } from "./modules/orders/orders.routes";
@@ -27,7 +28,12 @@ import type { SupplierRegistry } from "./modules/suppliers/fulfillment";
 import { liveSupplierRegistry } from "./modules/suppliers/live-adapters";
 import { cartRouter } from "./modules/orders/cart.routes";
 
-export function createApp(options: { supplierAdapters?: SupplierRegistry } = {}) {
+export function createApp(
+  options: {
+    supplierAdapters?: SupplierRegistry;
+    sendPasswordResetEmail?: SendMail;
+  } = {},
+) {
   const app = express();
   const supplierCheckout = createSupplierCheckout(
     options.supplierAdapters ?? liveSupplierRegistry(),
@@ -79,6 +85,7 @@ export function createApp(options: { supplierAdapters?: SupplierRegistry } = {})
   // Routes
   app.use("/health", healthRouter);
   app.use("/auth", authRouter);
+  app.use("/auth", createPasswordResetRouter(options.sendPasswordResetEmail ?? createSmtpSender()));
   app.use(catalogRouter);
   app.use("/orders", ordersRouter);
   app.use("/cart", cartRouter);

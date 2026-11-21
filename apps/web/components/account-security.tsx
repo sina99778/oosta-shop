@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { AccountFrame } from "@/components/account-frame";
+import { AccountRecoveryEmail } from "@/components/account-recovery-email";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -147,6 +148,8 @@ export function AccountSecurity({ locale }: { locale: Locale }) {
             </Button>
           </form>
         </section>
+
+        <AccountRecoveryEmail locale={locale} />
 
         <section className={styles.panel} aria-labelledby="sessions-title">
           <h2 id="sessions-title" className="text-lg font-bold">

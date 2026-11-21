@@ -96,9 +96,28 @@ const { DashboardOrders } = require("../apps/web/components/dashboard-orders.tsx
 const { Button } = require("../apps/web/components/ui/button.tsx");
 const { Header } = require("../apps/web/components/layout/header.tsx");
 const { AuthForm } = require("../apps/web/components/auth-form.tsx");
+const { PasswordRecoveryForm } = require("../apps/web/components/password-recovery-form.tsx");
 const { Footer } = require("../apps/web/components/layout/footer.tsx");
 const { ProductCard } = require("../apps/web/components/product-card.tsx");
 Module._load = originalLoad;
+for (const locale of ["en", "fa"]) {
+  const dict = require(`../apps/web/app/[locale]/dictionaries/${locale}.json`);
+  const login = renderToStaticMarkup(
+    React.createElement(AuthForm, { mode: "login", locale, dict }),
+  );
+  assert.equal(login.split(`href="/${locale}/forgot-password"`).length, 2);
+  const forgot = renderToStaticMarkup(
+    React.createElement(PasswordRecoveryForm, { mode: "request", locale, dict }),
+  );
+  assert.match(forgot, /type="email"/);
+  assert(forgot.includes(dict.auth.recovery.send));
+  assert(forgot.includes(`href="/${locale}/login"`));
+  const reset = renderToStaticMarkup(
+    React.createElement(PasswordRecoveryForm, { mode: "reset", locale, dict }),
+  );
+  assert(reset.includes(dict.auth.recovery.resetTitle));
+  assert.doesNotMatch(reset, /type="password"/);
+}
 const card = (availability) =>
   renderToStaticMarkup(
     React.createElement(ProductCard, {
@@ -168,6 +187,8 @@ assert(!header().includes('aria-label="سبد خرید (۲)"'));
 headerUser = { role: "USER", name: "Fixture" };
 assert(!header().includes('href="/fa/admin"'));
 assert(header().includes('aria-label="سبد خرید (۲)"'));
+assert.match(header(), /href="\/fa\/cart"[^>]*><svg[^>]*aria-hidden="true"/);
+assert.match(header(), /<a(?=[^>]*mobileCart)(?=[^>]*href="\/fa\/cart")[^>]*><svg/);
 headerUser = { role: "ADMIN", name: "Fixture admin" };
 assert(header().includes('href="/fa/admin"'));
 assert(!header().includes('aria-label="سبد خرید (۲)"'));
@@ -176,20 +197,32 @@ const footer = renderToStaticMarkup(
     locale: "fa",
     dict: dict.footer,
     nav: dict.nav,
-    config: { settings: {}, enamadBadge: false },
+    config: {
+      settings: { contactTelegram: "http://t.me/m/FixtureSupport" },
+      enamadBadge: false,
+    },
   }),
 );
 assert(footer.includes('href="#oosta-page-top"'));
 assert(!footer.includes("/site-assets/enamad"));
 assert(footer.includes('href="/fa/support"'));
+assert(footer.includes('href="https://t.me/m/FixtureSupport"'));
+for (const slug of ["terms", "return-policy", "privacy-policy"]) {
+  assert(footer.includes(`href="/fa/p/${slug}"`));
+}
 const withBadge = renderToStaticMarkup(
   React.createElement(Footer, {
     locale: "fa",
     dict: dict.footer,
     nav: dict.nav,
-    config: { settings: { enamadLink: "javascript:blocked" }, enamadBadge: true },
+    config: {
+      settings: { enamadLink: "javascript:blocked", contactTelegram: "https://t.me@other.invalid" },
+      enamadBadge: true,
+    },
   }),
 );
+assert(withBadge.includes('href="https://t.me/oostaAiSupport"'));
+assert(!withBadge.includes("other.invalid"));
 assert(withBadge.includes("/site-assets/enamad"));
 assert(!withBadge.includes("javascript:"));
 function render() {
@@ -236,6 +269,21 @@ fixture = {
 };
 assert(render().includes("Synthetic review"));
 assert(!render().includes("secret-test-ref"));
+fixture = {
+  ...fixture,
+  paymentStatus: "REJECTED",
+  cartPayment: { remainingMs: 0 },
+};
+const rejectedCart = render();
+assert(rejectedCart.includes("/fa/checkout/card/synthetic12345678"));
+assert(rejectedCart.includes("ارسال مجدد رسید"));
+assert(rejectedCart.includes("Synthetic review"));
+fixture = { ...fixture, cartPayment: null, manualSupplier: { remainingMs: 30000 } };
+assert(!render().includes("/fa/checkout/card/synthetic12345678"));
+fixture = { ...fixture, manualSupplier: { remainingMs: 0 } };
+assert(!render().includes("/fa/checkout/card/synthetic12345678"));
+fixture = { ...fixture, manualSupplier: null, bluInvoice: { expired: true, discount: 0 } };
+assert(!render().includes("/fa/checkout/card/synthetic12345678"));
 fixture = { ...fixture, paymentProvider: "ZARINPAL", paymentStatus: "PAID_PENDING_FULFILLMENT" };
 assert(
   render().includes("پرداخت دوباره"),

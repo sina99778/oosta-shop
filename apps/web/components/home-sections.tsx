@@ -13,11 +13,13 @@ export async function HomeSections({
   locale,
   heroTitle,
   heroSubtitle,
+  supportHref,
 }: {
   locale: Locale;
   dict: Dictionary;
   heroTitle: string;
   heroSubtitle: string;
+  supportHref: string;
 }) {
   const [categoryData, productData, blogData] = await Promise.all([
     fetchJson<{ categories: Category[] }>("/categories"),
@@ -227,7 +229,7 @@ export async function HomeSections({
         <div>
           <h2 id="guide-title">{fa ? "راهنمای انتخاب و خرید" : "Help choosing and buying"}</h2>
           <a
-            href="https://t.me/oostaAiSupport"
+            href={supportHref}
             target="_blank"
             rel="noopener noreferrer"
             className={styles.textLink}
