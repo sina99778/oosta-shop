@@ -27,6 +27,7 @@ async function main() {
   const robots = (response) => response.headers.get("x-robots-tag") ?? "";
   assert.match(robots(home), contentIndexed ? /^index, follow$/ : /noindex/, "/fa robots");
   if (contentIndexed) {
+    const contactIndexed = process.argv.includes("--contact-indexed");
     const blog = await check("/fa/blog", 200);
     const post = (await blog.text()).match(/href="(\/fa\/blog\/[a-z0-9-]+)"/);
     const open = ["/en", "/fa/products", "/en/products", ...(post ? [post[1]] : [])];
@@ -38,9 +39,20 @@ async function main() {
       "/fa/dashboard",
       "/fa/admin",
       "/fa/checkout/cancel",
+      "/fa/p/terms",
+      "/fa/p/return-policy",
+      "/fa/p/privacy-policy",
+      "/en/p/about",
+      "/en/p/contact",
       "/api/products",
     ])
       assert.match(robots(await check(path, 200)), /noindex/, `${path} robots`);
+    for (const path of ["/fa/p/about", "/fa/p/contact"])
+      assert.match(
+        robots(await check(path, 200)),
+        contactIndexed ? /^index, follow$/ : /noindex/,
+        `${path} robots`,
+      );
     // Search Console re-checks this file; removing it drops the verified property
     // (oosta-search-console.conf).
     const ownership = "/googlecc8e43ab596ea33a.html";

@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const assert = require("node:assert/strict");
 const { createServer } = require("node:http");
+const { readFileSync } = require("node:fs");
+const { join } = require("node:path");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const run = promisify(execFile);
@@ -11,10 +13,16 @@ const run = promisify(execFile);
   let walletReady = false;
   // Mirrors deploy/nginx/oosta-content-indexing.conf; `leak` marks a private page as indexable.
   let contentIndexed = false;
+  let contactIndexed = false;
   let leak = null;
   let ownershipFile = true;
   let trackingReady = false;
-  const content = /^\/(?:fa|en)(?:\/products|\/blog(?:\/[a-z0-9][a-z0-9-]{0,119})?)?$/;
+  const config = readFileSync(join(__dirname, "../deploy/nginx/oosta-content-indexing.conf"), "utf8");
+  const matcher = new RegExp(config.match(/^location ~ "([^"]+)" \{/m)[1]);
+  const contact = /^\/fa\/p\/(?:about|contact)$/;
+  for (const path of ["/fa/p/about", "/fa/p/contact"]) assert(matcher.test(path), path);
+  for (const path of ["/en/p/about", "/en/p/contact", "/fa/p/terms", "/fa/p/contact-2", "/fa/p/about/sub"])
+    assert(!matcher.test(path), path);
   const server = createServer((req, res) => {
     const asset = req.url.startsWith("/_next/");
     res.setHeader("cache-control", asset ? staticCache : privateCache);
@@ -23,7 +31,7 @@ const run = promisify(execFile);
     const path = req.url.split("?")[0];
     res.setHeader(
       "x-robots-tag",
-      (contentIndexed && content.test(path)) || path === leak
+      (contentIndexed && matcher.test(path) && (contactIndexed || !contact.test(path))) || path === leak
         ? "index, follow"
         : "noindex, nofollow",
     );
@@ -77,6 +85,12 @@ const run = promisify(execFile);
     await assert.rejects(run(process.execPath, [...args, "--content-indexed"]), /\/fa robots/);
     contentIndexed = true;
     await run(process.execPath, [...args, "--content-indexed"]);
+    const contactArgs = [...args, "--content-indexed", "--contact-indexed"];
+    await assert.rejects(run(process.execPath, contactArgs), /\/fa\/p\/about robots/);
+    contactIndexed = true;
+    await run(process.execPath, contactArgs);
+    await assert.rejects(run(process.execPath, [...args, "--content-indexed"]), /\/fa\/p\/about robots/);
+    contactIndexed = false;
     await assert.rejects(run(process.execPath, args), /\/fa robots/);
     leak = "/fa/dashboard";
     await assert.rejects(
