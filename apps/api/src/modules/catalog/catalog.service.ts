@@ -563,10 +563,18 @@ export async function submitReview(
   comment?: string,
 ) {
   const product = await prisma.product.findUnique({
-    where: { id: productId },
+    where: { id: productId, isActive: true },
     select: { id: true },
   });
   if (!product) throw new AppError(404, "NOT_FOUND", "Product not found");
+
+  const purchase = await prisma.orderItem.findFirst({
+    where: { productId, order: { userId, paymentStatus: "PAID" } },
+    select: { id: true },
+  });
+  if (!purchase) {
+    throw new AppError(403, "REVIEW_REQUIRES_PURCHASE", "Only buyers can review this product");
+  }
 
   await prisma.review.upsert({
     where: { productId_userId: { productId, userId } },

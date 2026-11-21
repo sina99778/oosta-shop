@@ -3,7 +3,7 @@
 
 import { Router } from "express";
 import { validate } from "../../middleware/validate";
-import { authenticate } from "../../middleware/auth";
+import { authenticate, requireRole } from "../../middleware/auth";
 import {
   bestsellingQuery,
   listProductsQuery,
@@ -33,6 +33,7 @@ catalogRouter.get("/product-images/:id", galleryImage);
 catalogRouter.post(
   "/products/:id/reviews",
   authenticate,
+  requireRole("USER"),
   validate({ params: reviewParamsSchema, body: submitReviewSchema }),
   submitReview,
 );

@@ -1081,14 +1081,22 @@ async function testRichness(): Promise<void> {
   );
   record("detail isFeatured true", detail.isFeatured === true, String(detail.isFeatured));
 
-  const order = obj(
-    body(await post("/orders", { items: [{ planId: plan.id, quantity: 1 }] }, buyerToken)).order,
-  );
+  const checkout = body(await post("/orders", { items: [{ planId: plan.id, quantity: 1 }] }, buyerToken));
+  const order = obj(checkout.order);
   record(
     "order total uses sale price (150000)",
     Number(order.totalAmount) === 150000,
     String(order.totalAmount),
   );
+
+  const reviewPath = `/products/${product.id}/reviews`;
+  const unpaidReview = await post(reviewPath, { rating: 5 }, buyerToken);
+  record("unpaid buyer cannot review", unpaidReview.statusCode === 403, "");
+  const settled = await post("/payments/verify", {
+    authority: String(obj(checkout.payment).authority),
+    status: "OK",
+  });
+  record("review fixture payment settled", settled.statusCode === 200 && body(settled).status === "paid", "");
 
   // Reviews: submit -> moderate -> reflected in rating
   const sub = await post(

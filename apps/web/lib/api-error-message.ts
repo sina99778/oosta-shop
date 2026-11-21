@@ -35,6 +35,10 @@ const messages: Record<string, readonly [fa: string, en: string]> = {
   ],
   VALIDATION_ERROR: ["اطلاعات واردشده را بررسی کن.", "Check the information you entered."],
   NOT_FOUND: ["مورد درخواستی پیدا نشد.", "The requested item was not found."],
+  REVIEW_REQUIRES_PURCHASE: [
+    "بعد از تکمیل خرید این محصول می‌توانی نظر ثبت کنی.",
+    "You can leave a review after completing a purchase of this product.",
+  ],
   CART_FULL: [
     "سبد خریدت پر است. برای افزودن گزینهٔ جدید، یکی از موارد سبد را حذف کن.",
     "Your cart is full. Remove an item before adding another.",

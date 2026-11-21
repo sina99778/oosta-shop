@@ -501,13 +501,19 @@ async function main() {
     });
     const reviewItem = getId(await add(onlinePlan.id, onlineBuyer));
     const reviewPath = giftPath(reviewItem.id);
-    const reviewInvoice = (await call("POST", reviewPath + "/review", {}, onlineBuyer)).json().invoice;
-    const reviewStart = await call("POST", reviewPath + "/pay", {
-      method: "online",
-      subtotal: reviewInvoice.subtotal,
-      total: reviewInvoice.total,
-      revision: reviewInvoice.revision,
-    }, onlineBuyer);
+    const reviewInvoice = (await call("POST", reviewPath + "/review", {}, onlineBuyer)).json()
+      .invoice;
+    const reviewStart = await call(
+      "POST",
+      reviewPath + "/pay",
+      {
+        method: "online",
+        subtotal: reviewInvoice.subtotal,
+        total: reviewInvoice.total,
+        revision: reviewInvoice.revision,
+      },
+      onlineBuyer,
+    );
     assert.equal(reviewStart.statusCode, 201, reviewStart.body);
     const reviewOrder = reviewStart.json().order.id;
     gatewayState = "INVALID";
@@ -601,6 +607,34 @@ async function main() {
     admin,
   );
   assert.equal(approved.statusCode, 200, approved.body);
+  const reviewUrl = "/products/" + product.id + "/reviews";
+  assert.equal(
+    (await inject(app, { method: "POST", url: reviewUrl, payload: {} })).statusCode,
+    401,
+  );
+  const refusedReview = await call("POST", reviewUrl, { rating: 5 }, other);
+  assert.equal(refusedReview.statusCode, 403);
+  assert.equal(refusedReview.json().error.code, "REVIEW_REQUIRES_PURCHASE");
+  const buyerReview = await call(
+    "POST",
+    reviewUrl,
+    { rating: 5, comment: "Synthetic review" },
+    user,
+  );
+  assert.equal(buyerReview.statusCode, 201, buyerReview.body);
+  assert.match(String(buyerReview.headers["cache-control"]), /private.*no-store/);
+  assert.deepEqual(buyerReview.json(), { ok: true, status: "PENDING" });
+  const posted = await prisma.review.findUniqueOrThrow({
+    where: { productId_userId: { productId: product.id, userId: user.id } },
+  });
+  assert.equal(
+    (await call("POST", "/admin/reviews/" + posted.id + "/approve", {}, other)).statusCode,
+    403,
+  );
+  assert.equal(
+    (await call("POST", "/admin/reviews/" + posted.id + "/approve", {}, admin)).statusCode,
+    200,
+  );
   assert.equal((await inboxCall()).json().welcomeGift.state, "USED");
   assert.equal(
     (await call("POST", giftPath(losing) + "/review", { code: gift.code }, user)).json().error.code,

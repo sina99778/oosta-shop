@@ -53,6 +53,7 @@ export function createApp(
       "/supplier-quotes",
       "/supplier-checkout",
       "/internal/blu-events",
+      /^\/products\/[^/]+\/reviews$/,
     ],
     (_req, res, next) => {
       res.setHeader("Cache-Control", "private, no-store");
