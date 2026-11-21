@@ -9,7 +9,16 @@ const nap = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function main() {
   const scenario = process.argv[2] || "hydration";
-  assert(["hydration", "logout", "late401", "checkoutRefresh", "cartPaidRetry"].includes(scenario));
+  assert(
+    [
+      "hydration",
+      "logout",
+      "late401",
+      "checkoutRefresh",
+      "cartPaidRetry",
+      "accountPolish",
+    ].includes(scenario),
+  );
   const root = path.resolve(__dirname, "..");
   const app = path.join(root, "apps/web/.next/standalone/apps/web");
   assert(fs.existsSync(path.join(app, "server.js")), "Build the web app first");
@@ -99,6 +108,9 @@ async function main() {
     let checkoutReads = 0;
     let paymentAttempts = 0;
     let logoutFailures = 0;
+    let codeRequests = 0;
+    let resetRequests = 0;
+    let passwordChanges = 0;
     const respond = (requestId, responseCode, body) =>
       call("Fetch.fulfillRequest", {
         requestId,
@@ -132,13 +144,37 @@ async function main() {
         action = respond(
           requestId,
           currentUser ? 200 : 401,
-          currentUser ? { user } : { error: { message: "No synthetic session" } },
+          currentUser ? { user: currentUser } : { error: { message: "No synthetic session" } },
         );
       else if (route === "/auth/login") {
         currentUser = user;
         action = respond(requestId, 200, { user });
-      } else if (route === "/auth/change-password") action = respond(requestId, 200, { user });
-      else if (route === "/auth/logout" && scenario === "logout") {
+      } else if (scenario === "accountPolish" && route === "/auth/signup") {
+        currentUser = user;
+        action = respond(requestId, 201, { user });
+      } else if (scenario === "accountPolish" && route === "/auth/recovery-email/request") {
+        codeRequests++;
+        action = respond(requestId, 202, { deliveryRequested: true });
+      } else if (scenario === "accountPolish" && route === "/auth/recovery-email/verify") {
+        currentUser = { ...user, recoveryEmailVerified: true };
+        action = respond(requestId, 204);
+      } else if (scenario === "accountPolish" && route === "/auth/inbox") {
+        action = respond(requestId, 200, {
+          welcomeGift: { code: "WELCOME-SYNTHETIC", percent: 15, state: "AVAILABLE" },
+        });
+      } else if (scenario === "accountPolish" && route === "/auth/reset-password") {
+        resetRequests++;
+        action = respond(requestId, 204);
+      } else if (scenario === "accountPolish" && route === "/orders") {
+        action = respond(requestId, 200, {
+          orders: [
+            { ...checkoutOrder, firstProductName: "Synthetic display product", itemCount: 1 },
+          ],
+        });
+      } else if (route === "/auth/change-password") {
+        passwordChanges++;
+        action = respond(requestId, 200, { user });
+      } else if (route === "/auth/logout" && scenario === "logout") {
         logoutFailures++;
         action = respond(requestId, 503, { error: { message: "Synthetic logout outage" } });
       } else if (route === "/auth/logout") {
@@ -204,6 +240,125 @@ async function main() {
         { urlPattern: "*://*/cart/items/*" },
       ],
     });
+    if (scenario === "accountPolish") {
+      const setInput = (selector, value) =>
+        evaluate(`(() => {
+        const input = document.querySelector(${JSON.stringify(selector)});
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+        set.call(input, ${JSON.stringify(value)});
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      })()`);
+      await call("Emulation.setDeviceMetricsOverride", {
+        width: 390,
+        height: 844,
+        deviceScaleFactor: 1,
+        mobile: true,
+      });
+      await call("Page.navigate", { url: origin + "/fa/signup" });
+      await until('!!document.querySelector("#auth-password")', "signup password");
+      assert(!(await evaluate('!!document.querySelector("#auth-password-strength")')));
+      await setInput('input[autocomplete="name"]', "Synthetic Shopper");
+      await setInput('input[autocomplete="email"]', user.email);
+      await setInput("#auth-password", "Synthetic-Password-1");
+      await until('!!document.querySelector("#auth-password-strength")', "password meter");
+      const reveal = 'document.querySelector("button[aria-controls=auth-password]")';
+      const revealLabel = await evaluate(`${reveal}.getAttribute("aria-label")`);
+      await evaluate(`${reveal}.click()`);
+      await until('document.querySelector("#auth-password").type === "text"', "password reveal");
+      assert.equal(await evaluate(`${reveal}.getAttribute("aria-label")`), revealLabel);
+      assert.equal(await evaluate(`${reveal}.getAttribute("aria-pressed")`), "true");
+      await evaluate('document.querySelector("main form").requestSubmit()');
+      await until(
+        '!!document.querySelector("#recovery-code") && document.body.innerText.includes("مرحله ۲ از ۲")',
+        "verification step",
+      );
+      await until(
+        'document.querySelector("#recovery-code") === document.activeElement',
+        "verification focus",
+      );
+      assert.equal(
+        await evaluate('document.querySelector("details:has(#recovery-password)").open'),
+        false,
+      );
+      assert(
+        await evaluate(`(() => {
+        const input = document.querySelector("#recovery-password");
+        input.focus();
+        return document.activeElement !== input;
+      })()`),
+        "a closed resend form cannot receive focus",
+      );
+      await evaluate('document.querySelector("details:has(#recovery-password) summary").click()');
+      await setInput("#recovery-password", "Synthetic-Password-1");
+      await evaluate('document.querySelector("#recovery-password").form.requestSubmit()');
+      await until(
+        '!document.querySelector("details:has(#recovery-password)").open',
+        "resend closes and returns to verification",
+      );
+      assert.equal(codeRequests, 2);
+      await setInput("#recovery-code", "A".repeat(43));
+      await evaluate('document.querySelector("#recovery-code").form.requestSubmit()');
+      await until(
+        'document.body.innerText.includes("Synthetic display product")',
+        "account order product title",
+      );
+      await until('document.body.innerText.includes("ایمیل تأیید شده")', "verified status");
+      assert(
+        await evaluate("document.documentElement.scrollWidth <= innerWidth"),
+        "mobile account is not horizontally clipped",
+      );
+      assert.equal(
+        await evaluate('document.querySelector("main nav").querySelectorAll("a").length'),
+        4,
+      );
+      assert(!(await evaluate('document.body.innerText.includes("WELCOME-SYNTHETIC")')));
+      await evaluate(`document.querySelector('main nav a[href$="/inbox"]').click()`);
+      await until('document.body.innerText.includes("WELCOME-SYNTHETIC")', "inbox coupon");
+      await evaluate(`Object.defineProperty(navigator, "clipboard", {
+        configurable: true, value: { writeText: async (text) => { window.copiedCode = text; } }
+      }); [...document.querySelectorAll("main article button")].find(button => button.innerText.includes("کپی کد تخفیف")).click()`);
+      await until(
+        'document.body.innerText.includes("کد کپی شد.") && window.copiedCode === "WELCOME-SYNTHETIC"',
+        "coupon copy success",
+      );
+      await evaluate(`document.querySelector('main nav a[href$="/security"]').click()`);
+      await until(
+        `(() => {
+        const nav = document.querySelector("main nav");
+        const current = nav?.querySelector('a[href$="/security"][aria-current]');
+        if (!current) return false;
+        const item = current.getBoundingClientRect();
+        const viewport = nav.getBoundingClientRect();
+        return item.left >= viewport.left - 1 && item.right <= viewport.right + 1;
+      })()`,
+        "active security link stays visible in the mobile scroller",
+      );
+      await call("Page.navigate", { url: origin + "/fa/reset-password#token=" + "B".repeat(43) });
+      await until(
+        '!!document.querySelector("#reset-new-password")',
+        "reset password from secure fragment",
+      );
+      assert.equal(await evaluate("location.hash"), "");
+      await setInput("#reset-new-password", "Synthetic-Password-2");
+      await setInput("#reset-confirmation", "Different-fixture-3");
+      await until('!!document.querySelector("#reset-password-strength")', "reset meter");
+      await evaluate('document.querySelector("button[aria-controls=reset-confirmation]").click()');
+      await until(
+        'document.querySelector("#reset-confirmation").type === "text"',
+        "confirmation reveal",
+      );
+      await evaluate('document.querySelector("#reset-confirmation").form.requestSubmit()');
+      await until('!!document.querySelector("main [role=alert]")', "mismatched passwords");
+      assert.equal(resetRequests, 0);
+      await setInput("#reset-confirmation", "Synthetic-Password-2");
+      await evaluate('document.querySelector("#reset-confirmation").form.requestSubmit()');
+      await until('!document.querySelector("#reset-new-password")', "successful reset");
+      assert.equal(resetRequests, 1);
+      console.log(
+        "PASS: mobile signup, resend, dashboard, coupon, and reset with synthetic responses",
+      );
+      return;
+    }
     if (scenario === "checkoutRefresh") {
       await call("Page.navigate", { url: origin + "/fa/checkout/card/synthetic-checkout" });
       await call("Page.bringToFront");
@@ -305,11 +460,15 @@ async function main() {
       await evaluate(`document.querySelector("a[href='/fa/dashboard/security']").click()`);
       await until('!!document.querySelector("input[autocomplete=new-password]")', "security form");
       await evaluate(`(() => { const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set;
-        document.querySelectorAll("main input[type=password]").forEach((input,index)=>{
+        document.querySelectorAll("#account-current-password,#account-new-password,#account-confirm-password").forEach((input,index)=>{
           set.call(input,index===0?"Synthetic-Password-1":"Synthetic-Password-2");input.dispatchEvent(new Event("input",{bubbles:true})); }); })()`);
       await nap(100);
-      await evaluate('document.querySelector("main form").requestSubmit()');
-      await nap(500);
+      await evaluate('document.querySelector("#account-new-password").form.requestSubmit()');
+      await until(
+        '!!document.querySelector("section[aria-labelledby=change-password-title] [role=status]")',
+        "change feedback belongs to the password card",
+      );
+      assert.equal(passwordChanges, 1);
       await respond(heldOrders, 401, { error: { message: "Older synthetic session revoked" } });
       await nap(500);
       assert.equal(

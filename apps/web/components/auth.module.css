@@ -14,8 +14,8 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  gap: 1rem;
+  justify-content: space-between;
+  gap: clamp(1rem, 3vw, 2rem);
   padding: clamp(1.5rem, 4vw, 2.5rem);
   background:
     radial-gradient(
@@ -40,10 +40,73 @@
   background-size: 28px 28px;
   mask-image: linear-gradient(to bottom, #000, transparent 75%);
 }
-.eyebrow {
-  font-size: 0.8125rem;
-  font-weight: 650;
+.brand {
+  align-self: flex-start;
+}
+.offer {
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--c-mint) 28%, transparent);
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--c-mint) 8%, var(--c-navy));
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+.offer strong,
+.step {
+  font-weight: 800;
+}
+.offer strong {
   color: var(--c-mint);
+}
+.step {
+  margin-block-end: 0.45rem;
+  color: var(--c-primary);
+  font-size: 0.8125rem;
+}
+.switcher {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.25rem;
+  padding: 0.25rem;
+  margin-block-end: 1.25rem;
+  border: 1px solid var(--c-border);
+  border-radius: 0.8rem;
+  background: var(--c-surface);
+}
+.switcher a,
+.forgot {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+.switcher a {
+  justify-content: center;
+  border-radius: 0.55rem;
+  color: var(--c-muted);
+}
+.switcher a[aria-current] {
+  background: var(--c-navy);
+  color: var(--c-mint);
+}
+.switcher a:focus-visible,
+.forgot:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+.passwordLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.5rem;
+  margin-block-end: 0.25rem;
+}
+.forgot {
+  color: var(--c-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .panel h2 {
   font-size: clamp(1.4rem, 2.6vw, 1.9rem);
@@ -149,6 +212,9 @@
   }
   /* On phones the panel is a short brand band; the form stays first in reach. */
   .points {
+    display: none;
+  }
+  .panel h2 {
     display: none;
   }
 }

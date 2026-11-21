@@ -69,7 +69,11 @@ Module._load = function (request, ...args) {
             : url?.startsWith("/tickets/")
               ? { ticket }
               : url === "/orders"
-                ? { orders: [{ ...fixture, itemCount: 1 }] }
+                ? {
+                    orders: [
+                      { ...fixture, itemCount: 1, firstProductName: "Synthetic list product" },
+                    ],
+                  }
                 : url === "/cart/count"
                   ? { count: 2 }
                   : { order: fixture },
@@ -108,12 +112,18 @@ for (const locale of ["en", "fa"]) {
     React.createElement(AuthForm, { mode: "login", locale, dict }),
   );
   assert.equal(login.split(`href="/${locale}/forgot-password"`).length, 2);
+  assert.match(
+    login,
+    /class="passwordLabel"[^>]*><label[^>]*>[\s\S]*?forgot-password[\s\S]*?<input[^>]*id="auth-password"/,
+  );
+  assert.match(login, /<a(?=[^>]*href="\/[^/]+\/login\?next=)(?=[^>]*aria-current="page")[^>]*>/);
   const forgot = renderToStaticMarkup(
     React.createElement(PasswordRecoveryForm, { mode: "request", locale, dict }),
   );
   assert.match(forgot, /type="email"/);
   assert(forgot.includes(dict.auth.recovery.send));
   assert(forgot.includes(`href="/${locale}/login"`));
+  assert.match(forgot, /class="shell"/);
   const reset = renderToStaticMarkup(
     React.createElement(PasswordRecoveryForm, { mode: "reset", locale, dict }),
   );
@@ -174,13 +184,10 @@ assert.equal(passwordStrength("Baltic7x"), 2);
 assert.equal(passwordStrength("L9!vR3-wheel-juniper"), 3);
 assert(signup.includes("شماره موبایل (اختیاری)"));
 assert.match(signup, /<input[^>]*type="email"[^>]*required/);
-assert(signup.includes('id="auth-password-strength"'));
-assert.match(signup, /aria-describedby="auth-password-hint auth-password-strength"/);
+assert(!signup.includes('id="auth-password-strength"'));
+assert.match(signup, /aria-describedby="auth-password-hint"/);
 assert.match(signup, /id="auth-password-hint"[^>]*>حداقل ۸ کاراکتر/);
-assert.match(
-  signup,
-  /<fieldset[^>]*>\s*<legend[^>]*>[^<]+<\/legend>[\s\S]*?type="email"[\s\S]*?type="tel"[\s\S]*?<\/fieldset>/,
-);
+assert.doesNotMatch(signup, /<fieldset/);
 const header = () =>
   renderToStaticMarkup(
     React.createElement(Header, { locale: "fa", dict: dict.nav, themeLabel: "تم" }),
@@ -323,6 +330,8 @@ headerUser = {
   phone: null,
 };
 const profile = customerPage(DashboardOrders);
+assert(profile.includes("Synthetic list product"));
+assert(!profile.includes('href="/fa/dashboard#account-orders"'));
 assert(profile.includes("حساب من"));
 assert(profile.includes("خریدار نمونه"));
 assert(profile.includes("shop-fixture@example.invalid"));
@@ -333,10 +342,12 @@ const security = customerPage(AccountRecoveryEmail);
 assert.match(security, /name="code"[^>]*|autocomplete="one-time-code"/i);
 assert(security.includes('id="recovery-code"'));
 assert(security.includes('name="password"'));
+assert.match(security, /<details[^>]*>(?:(?!<\/details>)[\s\S])*name="password"/);
 const resumedSignup = renderToStaticMarkup(
   React.createElement(AuthForm, { mode: "signup", locale: "fa", dict }),
 );
 assert(resumedSignup.includes("تکمیل ثبت‌نام"));
+assert(resumedSignup.includes("مرحله ۲ از ۲"));
 assert(resumedSignup.includes('name="code"'));
 assert(!resumedSignup.includes('id="auth-password"'));
 headerUser = { ...headerUser, recoveryEmailVerified: true };

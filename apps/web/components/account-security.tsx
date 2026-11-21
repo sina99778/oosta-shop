@@ -8,18 +8,20 @@ import { ApiError } from "@/lib/api";
 import { AccountFrame } from "@/components/account-frame";
 import { AccountRecoveryEmail } from "@/components/account-recovery-email";
 import { PasswordStrength } from "@/components/password-strength";
+import { PasswordInput } from "@/components/password-input";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import type { Locale } from "@/lib/i18n";
 import styles from "./account.module.css";
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-sm text-muted">{label}</span>
+    <div>
+      <label htmlFor={id} className="mb-1 block text-sm text-muted">
+        {label}
+      </label>
       {children}
-    </label>
+    </div>
   );
 }
 
@@ -32,7 +34,14 @@ export function AccountSecurity({ locale }: { locale: Locale }) {
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState<"password" | "all" | null>(null);
-  const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    area: "password" | "all";
+    tone: "ok" | "error";
+    text: string;
+  } | null>(null);
+  const labels = fa
+    ? { current: "رمز عبور فعلی", next: "رمز عبور جدید", confirm: "تکرار رمز عبور جدید" }
+    : { current: "Current password", next: "New password", confirm: "Confirm new password" };
 
   function errorText(error: unknown): string {
     if (error instanceof ApiError) {
@@ -59,6 +68,7 @@ export function AccountSecurity({ locale }: { locale: Locale }) {
     if (busy) return;
     if (next !== confirm) {
       setMessage({
+        area: "password",
         tone: "error",
         text: fa ? "تکرار رمز جدید یکسان نیست." : "The new passwords do not match.",
       });
@@ -72,13 +82,14 @@ export function AccountSecurity({ locale }: { locale: Locale }) {
       setNext("");
       setConfirm("");
       setMessage({
+        area: "password",
         tone: "ok",
         text: fa
           ? "رمز عبور تغییر کرد و همه دستگاه‌های دیگر از حساب خارج شدند."
           : "Password changed. Every other device has been signed out.",
       });
     } catch (error) {
-      setMessage({ tone: "error", text: errorText(error) });
+      setMessage({ area: "password", tone: "error", text: errorText(error) });
     } finally {
       setBusy(null);
     }
@@ -92,7 +103,7 @@ export function AccountSecurity({ locale }: { locale: Locale }) {
       await logoutAll();
       router.replace(`/${locale}/login`);
     } catch (error) {
-      setMessage({ tone: "error", text: errorText(error) });
+      setMessage({ area: "all", tone: "error", text: errorText(error) });
       setBusy(null);
     }
   }
@@ -112,31 +123,39 @@ export function AccountSecurity({ locale }: { locale: Locale }) {
           <h2 id="change-password-title" className="text-lg font-bold">
             {fa ? "تغییر رمز عبور" : "Change password"}
           </h2>
-          <form onSubmit={onChangePassword} className="mt-4 max-w-sm space-y-3">
-            <Field label={fa ? "رمز عبور فعلی" : "Current password"}>
-              <Input
-                type="password"
+          <form method="post" onSubmit={onChangePassword} className="mt-4 max-w-sm space-y-3">
+            <Field id="account-current-password" label={labels.current}>
+              <PasswordInput
+                id="account-current-password"
+                locale={locale}
+                label={labels.current}
                 value={current}
                 onChange={(e) => setCurrent(e.target.value)}
                 required
                 autoComplete="current-password"
               />
             </Field>
-            <Field label={fa ? "رمز عبور جدید" : "New password"}>
-              <Input
-                type="password"
+            <Field id="account-new-password" label={labels.next}>
+              <PasswordInput
+                id="account-new-password"
+                locale={locale}
+                label={labels.next}
                 value={next}
                 onChange={(e) => setNext(e.target.value)}
                 required
                 minLength={8}
                 autoComplete="new-password"
-                aria-describedby="account-password-strength"
+                aria-describedby={next ? "account-password-strength" : undefined}
               />
             </Field>
-            <PasswordStrength id="account-password-strength" locale={locale} password={next} />
-            <Field label={fa ? "تکرار رمز عبور جدید" : "Confirm new password"}>
-              <Input
-                type="password"
+            {next && (
+              <PasswordStrength id="account-password-strength" locale={locale} password={next} />
+            )}
+            <Field id="account-confirm-password" label={labels.confirm}>
+              <PasswordInput
+                id="account-confirm-password"
+                locale={locale}
+                label={labels.confirm}
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 required
@@ -148,10 +167,23 @@ export function AccountSecurity({ locale }: { locale: Locale }) {
               {busy === "password" ? <Spinner /> : null}
               {fa ? "ذخیره رمز جدید" : "Save new password"}
             </Button>
+            {message?.area === "password" && (
+              <p
+                role={message.tone === "error" ? "alert" : "status"}
+                className={
+                  message.tone === "error" ? "text-sm text-danger" : "text-sm text-success"
+                }
+              >
+                {message.text}
+              </p>
+            )}
           </form>
         </section>
 
-        <section className={styles.panel} aria-labelledby="sessions-title">
+        <section
+          className={`${styles.panel} ${styles.sessionPanel}`}
+          aria-labelledby="sessions-title"
+        >
           <h2 id="sessions-title" className="text-lg font-bold">
             {fa ? "خروج از همه دستگاه‌ها" : "Sign out everywhere"}
           </h2>
@@ -170,16 +202,12 @@ export function AccountSecurity({ locale }: { locale: Locale }) {
             {busy === "all" ? <Spinner /> : null}
             {fa ? "خروج از همه دستگاه‌ها" : "Sign out of all devices"}
           </Button>
+          {message?.area === "all" && (
+            <p role="alert" className="mt-3 text-sm text-danger">
+              {message.text}
+            </p>
+          )}
         </section>
-
-        {message && (
-          <p
-            role={message.tone === "error" ? "alert" : "status"}
-            className={message.tone === "error" ? "text-sm text-danger" : "text-sm text-success"}
-          >
-            {message.text}
-          </p>
-        )}
       </div>
     </AccountFrame>
   );

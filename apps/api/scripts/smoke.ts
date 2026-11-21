@@ -501,8 +501,32 @@ async function testOrders(): Promise<void> {
     list.statusCode === 200 && Array.isArray(myOrders) && myOrders.length >= 4,
     `count=${myOrders?.length}`,
   );
+  const listRow = (myOrders as { id: string; firstProductName?: string }[] | undefined)?.find(
+    (order) => order.id === orderId1,
+  );
+  record(
+    "GET /orders lists the first product without fulfillment data",
+    !!listRow &&
+      listRow.firstProductName === product.name &&
+      !("items" in listRow) &&
+      !("credentials" in listRow) &&
+      /private.*no-store/.test(String(list.headers["cache-control"])),
+    "owner-only, private list summary",
+  );
+  const otherBuyer = await prisma.user.create({
+    data: { name: "Second buyer", email: `order_reader_${suffix}@example.invalid`, passwordHash: "unused" },
+  });
+  const foreignList = await get("/orders", signAccessToken({ sub: otherBuyer.id, role: "USER" }));
+  const anonymousList = await get("/orders");
+  record(
+    "GET /orders hides summaries from other users and anonymous requests",
+    foreignList.statusCode === 200 && Array.isArray(body(foreignList).orders) &&
+      (body(foreignList).orders as unknown[]).length === 0 && anonymousList.statusCode === 401,
+    `other=${foreignList.statusCode} anonymous=${anonymousList.statusCode}`,
+  );
 
   // Cleanup (FK-safe)
+  await prisma.user.delete({ where: { id: otherBuyer.id } });
   await prisma.order.deleteMany({ where: { userId } });
   await prisma.inventoryItem.deleteMany({ where: { productId: product.id } });
   await prisma.productPlan.deleteMany({ where: { productId: product.id } });

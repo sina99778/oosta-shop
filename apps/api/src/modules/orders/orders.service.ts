@@ -611,7 +611,20 @@ export async function listOrders(userId: string) {
   const orders = await prisma.order.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
-    include: { _count: { select: { items: true } } },
+    select: {
+      id: true,
+      totalAmount: true,
+      currency: true,
+      paymentStatus: true,
+      createdAt: true,
+      paidAt: true,
+      _count: { select: { items: true } },
+      items: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: 1,
+        select: { product: { select: { name: true } } },
+      },
+    },
   });
   return orders.map((order) => ({
     id: order.id,
@@ -619,6 +632,7 @@ export async function listOrders(userId: string) {
     currency: order.currency,
     paymentStatus: order.paymentStatus,
     itemCount: order._count.items,
+    firstProductName: order.items[0]?.product.name ?? null,
     createdAt: order.createdAt,
     paidAt: order.paidAt,
   }));

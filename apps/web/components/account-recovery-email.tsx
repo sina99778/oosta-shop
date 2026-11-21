@@ -27,6 +27,7 @@ export function AccountRecoveryEmail({
   const [busy, setBusy] = useState<"verify" | "request" | null>(null);
   const [error, setError] = useState<{ form: "verify" | "request"; message: string } | null>(null);
   const codeInput = useRef<HTMLInputElement>(null);
+  const resend = useRef<HTMLDetailsElement>(null);
   const fa = locale === "fa";
   const showCode = user?.role === "USER" && Boolean(user.email) && !user.recoveryEmailVerified;
   useEffect(() => {
@@ -59,6 +60,7 @@ export function AccountRecoveryEmail({
         );
         setDeliveryRequested(result.deliveryRequested);
         element.reset();
+        if (resend.current) resend.current.open = false;
         codeInput.current?.focus();
       }
     } catch (err) {
@@ -153,35 +155,38 @@ export function AccountRecoveryEmail({
                 {fa ? "تأیید ایمیل" : "Verify email"}
               </Button>
             </form>
-            <form
-              method="post"
-              onSubmit={(event) => void submit(event, "request")}
-              className="space-y-3"
-            >
-              <label htmlFor="recovery-password" className="block text-sm font-semibold">
-                {fa ? "رمز فعلی برای دریافت کد" : "Current password to request a code"}
-              </label>
-              <Input
-                id="recovery-password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-              />
-              {error?.form === "request" && (
-                <p role="alert" className="text-sm text-danger">
-                  {error.message}
-                </p>
-              )}
-              <Button
-                type="submit"
-                variant="outline"
-                disabled={busy !== null || requesting}
-                aria-busy={busy === "request"}
+            <details ref={resend} className={styles.resend}>
+              <summary>{fa ? "کد نرسید؟ دریافت دوباره" : "No code? Request another"}</summary>
+              <form
+                method="post"
+                onSubmit={(event) => void submit(event, "request")}
+                className="space-y-3"
               >
-                {fa ? "ارسال کد به ایمیل" : "Send verification code"}
-              </Button>
-            </form>
+                <label htmlFor="recovery-password" className="block text-sm font-semibold">
+                  {fa ? "رمز فعلی برای دریافت کد" : "Current password to request a code"}
+                </label>
+                <Input
+                  id="recovery-password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                />
+                {error?.form === "request" && (
+                  <p role="alert" className="text-sm text-danger">
+                    {error.message}
+                  </p>
+                )}
+                <Button
+                  type="submit"
+                  variant="outline"
+                  disabled={busy !== null || requesting}
+                  aria-busy={busy === "request"}
+                >
+                  {fa ? "ارسال کد به ایمیل" : "Send verification code"}
+                </Button>
+              </form>
+            </details>
           </div>
         </>
       )}

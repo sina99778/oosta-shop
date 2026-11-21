@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
-import type { OrderSummary } from "@/lib/types";
+import type { OrderSummary, WelcomeGift } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 
 const followUpStates = ["PENDING", "PENDING_REVIEW", "PAID_PENDING_FULFILLMENT", "REJECTED"];
@@ -35,13 +35,73 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
   const orders = data?.orders ?? [];
   const followUp = orders.filter((order) => followUpStates.includes(order.paymentStatus));
   const visible = filter === "active" ? followUp : orders;
+  const {
+    data: inbox,
+    loading: inboxLoading,
+    error: inboxError,
+  } = useApi<{ welcomeGift: WelcomeGift | null }>(
+    token && user?.role === "USER" ? "/auth/inbox" : null,
+    token ?? undefined,
+  );
+  const delivered = orders.filter((order) => order.paymentStatus === "PAID").length;
+  const formatNumber = new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en");
+  const canVerify = user?.role === "USER" && Boolean(user.email) && !user.recoveryEmailVerified;
+  const verifyHref = `/${locale}/dashboard/security#recovery-code`;
+  const inboxHref = `/${locale}/dashboard/inbox`;
+  const initials = user?.name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => Array.from(part)[0])
+    .join("");
+  const gift = inboxError ? null : inbox?.welcomeGift;
+  const giftLabels = fa
+    ? { RESERVED: "رزرو شده", USED: "مهلت پایان یافته" }
+    : { RESERVED: "Reserved", USED: "No longer available" };
+  const openInbox = fa ? "باز کردن صندوق پیام" : "Open inbox";
+  let giftLabel = openInbox;
+  if (inboxLoading || inboxError) giftLabel = "—";
+  else if (gift?.state === "AVAILABLE")
+    giftLabel = fa
+      ? `${formatNumber.format(gift.percent)}٪ آمادهٔ استفاده`
+      : `${gift.percent}% available`;
+  else if (gift) giftLabel = giftLabels[gift.state];
 
   return (
     <AccountFrame
       locale={locale}
       section="overview"
       title={fa ? "حساب من" : "My account"}
-      detail={user?.name}
+      detail={
+        user && (
+          <div className={styles.identity}>
+            <span className={styles.avatar} aria-hidden="true">
+              {initials || "•"}
+            </span>
+            <div className={styles.identityText}>
+              <strong>
+                <bdi>{user.name}</bdi>
+              </strong>
+              <span>
+                {fa ? "ایمیل" : "Email"} <bdi>{user.email || (fa ? "ثبت نشده" : "Not set")}</bdi>
+              </span>
+              <span>
+                {fa ? "موبایل" : "Mobile"} <bdi>{user.phone || (fa ? "ثبت نشده" : "Not set")}</bdi>
+              </span>
+            </div>
+            {user.role === "USER" && user.recoveryEmailVerified && (
+              <Badge tone="success" className={styles.verifiedBadge}>
+                {fa ? "ایمیل تأیید شده" : "Email verified"}
+              </Badge>
+            )}
+            {canVerify && (
+              <Link href={verifyHref} className={styles.verifyLink}>
+                {fa ? "تأیید ایمیل برای بازیابی رمز" : "Verify email for password recovery"}
+              </Link>
+            )}
+          </div>
+        )
+      }
       action={
         <Link href={`/${locale}/products`} className={styles.action}>
           {fa ? "رفتن به فروشگاه" : "Browse the store"}
@@ -49,47 +109,27 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
       }
     >
       {user && (
-        <section className={`${styles.panel} ${styles.profile}`} aria-labelledby="profile-title">
-          <div className={styles.factRow}>
-            <h2 id="profile-title">{fa ? "مشخصات حساب" : "Account details"}</h2>
-            <Link href={`/${locale}/dashboard/security`} className={styles.action}>
-              {fa ? "مدیریت امنیت حساب" : "Manage security"}
-            </Link>
+        <dl className={styles.metrics}>
+          <div>
+            <dt>{fa ? "تحویل‌شده" : "Delivered"}</dt>
+            <dd>{data && !error ? formatNumber.format(delivered) : "—"}</dd>
           </div>
-          <dl className={styles.profileFields}>
-            <div>
-              <dt>{fa ? "نام نمایشی" : "Display name"}</dt>
-              <dd>
-                <bdi>{user.name}</bdi>
-              </dd>
-            </div>
-            <div>
-              <dt>{fa ? "ایمیل" : "Email"}</dt>
-              <dd>
-                <bdi>{user.email || (fa ? "ثبت نشده" : "Not set")}</bdi>
-              </dd>
-            </div>
-            <div>
-              <dt>{fa ? "شماره موبایل" : "Mobile number"}</dt>
-              <dd>
-                <bdi>{user.phone || (fa ? "ثبت نشده" : "Not set")}</bdi>
-              </dd>
-            </div>
-            <div>
-              <dt>{fa ? "شناسه ورود" : "Sign-in identifier"}</dt>
-              <dd>
-                <bdi>{user.email || user.phone || "—"}</bdi>
-              </dd>
-            </div>
-          </dl>
-          {user.role === "USER" && user.email && !user.recoveryEmailVerified && (
-            <Link href={`/${locale}/dashboard/security#recovery-code`} className={styles.action}>
-              {fa
-                ? "تأیید ایمیل و فعال‌سازی بازیابی رمز"
-                : "Verify email to enable password recovery"}
-            </Link>
-          )}
-        </section>
+          <div>
+            <dt>{fa ? "در حال پیگیری" : "In progress"}</dt>
+            <dd>{data && !error ? formatNumber.format(followUp.length) : "—"}</dd>
+          </div>
+          <div>
+            <dt>{fa ? "هدیهٔ خرید اول" : "Welcome gift"}</dt>
+            <dd>
+              <Link
+                href={inboxHref}
+                aria-label={giftLabel === openInbox ? undefined : `${giftLabel} · ${openInbox}`}
+              >
+                {giftLabel}
+              </Link>
+            </dd>
+          </div>
+        </dl>
       )}
       <section
         id="account-orders"
@@ -106,7 +146,27 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
           <QueryError message={dict.common.somethingWrong} onRetry={refetch} />
         ) : !orders.length ? (
           <div className={`${styles.panel} ${styles.empty}`}>
+            <svg
+              aria-hidden="true"
+              width="34"
+              height="34"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 8h18v12H3z M3 8l3-4h12l3 4 M9 12h6" />
+            </svg>
             <p>{d.noOrders}</p>
+            {gift?.state === "AVAILABLE" && (
+              <Link href={inboxHref} className={styles.emptyGift}>
+                {fa
+                  ? `کد ${formatNumber.format(gift.percent)}٪ خرید اول در صندوق پیام`
+                  : `Get your ${gift.percent}% first-order code from the inbox`}
+              </Link>
+            )}
             <Link href={`/${locale}/products`} className={styles.action}>
               {fa ? "دیدن محصولات" : "See products"}
             </Link>
@@ -151,9 +211,20 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
               >
                 <div>
                   <p className={styles.rowTitle}>
-                    {d.orderNo} <bdi>#{order.id.slice(-8)}</bdi>
+                    {order.firstProductName ? (
+                      <bdi>{order.firstProductName}</bdi>
+                    ) : (
+                      <>
+                        {d.orderNo} <bdi>#{order.id.slice(-8)}</bdi>
+                      </>
+                    )}
                   </p>
                   <p className={styles.rowMeta}>
+                    {order.firstProductName && (
+                      <>
+                        <bdi>#{order.id.slice(-8)}</bdi> ·{" "}
+                      </>
+                    )}
                     <time dateTime={order.createdAt}>{formatDate(order.createdAt, locale)}</time> ·{" "}
                     {order.itemCount.toLocaleString(locale)} {d.items}
                   </p>

@@ -5,7 +5,9 @@
 /* Account sections as one segmented control: the current one is the navy/mint brand pair. */
 .nav {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
   gap: 0.25rem;
   max-width: 100%;
   padding: 0.25rem;
@@ -28,10 +30,16 @@
   text-align: center;
 }
 .nav a {
+  flex: none;
+  white-space: nowrap;
   color: var(--c-muted);
   transition:
     background-color 0.15s,
     color 0.15s;
+}
+.nav a:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: -2px;
 }
 .nav a:hover {
   background: var(--c-card);
@@ -54,7 +62,6 @@
   border-color: var(--c-primary);
   color: var(--c-primary);
 }
-.nav a:focus-visible,
 .action:focus-visible,
 .row:focus-visible,
 .filters button:focus-visible {
@@ -155,40 +162,126 @@
   font-weight: 800;
   font-size: 1.15rem;
 }
-.profile {
+.identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-block-start: 0.65rem;
+}
+.avatar {
   display: grid;
-  justify-items: start;
-  gap: 1rem;
+  place-items: center;
+  inline-size: 3rem;
+  block-size: 3rem;
+  flex: none;
+  border-radius: 0.85rem;
+  background: var(--c-mint);
+  color: var(--c-navy);
+  font-size: 1.1rem;
+  font-weight: 850;
 }
-.profile > .factRow,
-.profileFields {
-  width: 100%;
-}
-.profileFields,
-.recoveryGrid {
+.identityText {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
-  gap: 0.85rem;
+  gap: 0.15rem;
+  overflow-wrap: anywhere;
 }
-.profileFields > div,
-.recoveryGrid > form {
+.identityText strong {
+  color: #f6fafb;
+}
+.verifiedBadge {
+  background: color-mix(in srgb, var(--c-mint) 18%, var(--c-navy));
+  color: var(--c-mint);
+}
+.verifyLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: 0.7rem;
+  border-radius: 0.55rem;
+  background: #3a3121;
+  color: #ffe1a0;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(0.4rem, 2vw, 0.85rem);
+}
+.metrics > div,
+.resend {
   min-width: 0;
   border: 1px solid var(--c-border);
   border-radius: 0.7rem;
-  padding: 0.9rem;
   background: var(--c-surface);
 }
-.profileFields dt {
-  color: var(--c-muted);
-  font-size: 0.875rem;
-}
-.profileFields dd {
-  margin: 0.3rem 0 0;
-  font-weight: 650;
+.metrics > div {
+  padding: clamp(0.45rem, 2vw, 0.95rem);
   overflow-wrap: anywhere;
 }
+.metrics dt {
+  color: var(--c-muted);
+  font-size: clamp(0.73rem, 2.5vw, 0.875rem);
+}
+.metrics dd {
+  font-weight: 800;
+}
+.metrics a,
+.emptyGift {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--c-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .recoveryGrid {
+  display: grid;
+  gap: 0.8rem;
+  max-width: 36rem;
   margin-block-start: 1rem;
+}
+.resend summary {
+  min-height: 44px;
+  padding: 0.7rem 0.85rem;
+  color: var(--c-primary);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+.resend form {
+  padding: 0.4rem 0.85rem 0.85rem;
+}
+.sessionPanel {
+  border-color: color-mix(in srgb, var(--c-danger-text) 32%, var(--c-border));
+}
+.coupon {
+  padding: clamp(1.15rem, 4vw, 2rem);
+  border: 1px solid color-mix(in srgb, var(--c-mint) 32%, var(--c-navy));
+  border-radius: 1rem;
+  background: var(--c-navy);
+  color: #e9f2f6;
+}
+.coupon h2 {
+  margin-block-start: 0.65rem;
+}
+.couponBadge {
+  display: inline-block;
+  padding: 0.35rem 0.7rem;
+  border-radius: 100px;
+  background: var(--c-mint);
+  color: var(--c-navy);
+  font-size: 0.875rem;
+  font-weight: 850;
+}
+.couponCode {
+  max-width: 100%;
+  padding: 0.65rem 0.85rem;
+  border: 1px dashed var(--c-mint);
+  border-radius: 0.65rem;
+  color: var(--c-mint);
+  overflow-wrap: anywhere;
 }
 .purchaseSection {
   display: grid;

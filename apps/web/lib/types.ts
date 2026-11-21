@@ -198,8 +198,15 @@ export type OrderSummary = {
   currency: string;
   paymentStatus: string;
   itemCount: number;
+  firstProductName?: string | null;
   createdAt: string;
   paidAt: string | null;
+};
+
+export type WelcomeGift = {
+  code: string;
+  percent: number;
+  state: "AVAILABLE" | "RESERVED" | "USED";
 };
 
 export type Credential = {
