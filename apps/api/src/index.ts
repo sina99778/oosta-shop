@@ -12,6 +12,7 @@ import { startBot } from "./bot";
 import { startOrderMail } from "./lib/mailer";
 import { releaseExpiredCart } from "./modules/orders/cart-state";
 import { reconcileOnlineCartPayments } from "./modules/orders/cart-payment-recovery";
+import { startStockAlerts } from "./modules/auth/stock-alerts";
 
 // Explicit server-owned path only; never supplied through an HTTP request.
 if (process.env.SUPPLIER_CREDENTIALS_FILE) {
@@ -24,6 +25,7 @@ const stopFxRefresh = startFxRefresh();
 const app = createApp();
 const stopSupplierCheckout = app.locals.supplierCheckout.start();
 const stopOrderMail = startOrderMail();
+const stopStockAlerts = startStockAlerts();
 const cartExpiry = setInterval(() => {
   void releaseExpiredCart().catch(() => console.error("[cart] expiry sweep failed"));
   void reconcileOnlineCartPayments(new Date(), app.locals.supplierCheckout.verify).catch(() =>
@@ -45,6 +47,7 @@ async function shutdown(signal: string): Promise<void> {
   stopFxRefresh();
   stopSupplierCheckout();
   stopOrderMail();
+  stopStockAlerts();
   clearInterval(cartExpiry);
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await prisma.$disconnect();

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { AccountFrame } from "@/components/account-frame";
+import { AccountNotifications } from "@/components/account-notifications";
 import { QueryError } from "@/components/query-error";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
@@ -13,7 +14,7 @@ import styles from "./account.module.css";
 
 export function AccountInbox({ locale }: { locale: Locale }) {
   const fa = locale === "fa";
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { data, loading, error, refetch } = useApi<{ welcomeGift: WelcomeGift | null }>(
     token ? "/auth/inbox" : null,
     token ?? undefined,
@@ -93,8 +94,9 @@ export function AccountInbox({ locale }: { locale: Locale }) {
             </p>
           )}
         </article>
-      ) : (
-        <p className={styles.panel}>{fa ? "صندوق پیامت خالی است." : "Your inbox is empty."}</p>
+      ) : null}
+      {token && user?.role === "USER" && (
+        <AccountNotifications key={token} token={token} locale={locale} />
       )}
     </AccountFrame>
   );

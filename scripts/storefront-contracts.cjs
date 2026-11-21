@@ -48,6 +48,14 @@ let fixture = {
 const originalLoad = Module._load;
 let pathname = "/fa/products-extra";
 let headerUser = null;
+const noticeFixture = {
+  id: "notice-1",
+  title: "موجودی آزمایشی",
+  body: "<script>synthetic</script>",
+  href: "/fa/products/fixture?plan=unavailable",
+  readAt: null,
+  createdAt: fixture.createdAt,
+};
 const ticket = {
   id: "fixture-ticket",
   subject: "پرسش آزمایشی",
@@ -76,7 +84,19 @@ Module._load = function (request, ...args) {
                   }
                 : url === "/cart/count"
                   ? { count: 2 }
-                  : { order: fixture },
+                  : url === "/auth/notifications/count"
+                    ? { count: 2 }
+                    : url === "/auth/notifications"
+                      ? {
+                          unreadCount: 2,
+                          notifications: [
+                            noticeFixture,
+                            { ...noticeFixture, id: "unsafe", href: "https://unsafe.example" },
+                          ],
+                        }
+                      : url === "/auth/inbox"
+                        ? { welcomeGift: null }
+                        : { order: fixture },
         loading: false,
         error: null,
         refetch: () => {},
@@ -105,6 +125,8 @@ const { AuthForm } = require("../apps/web/components/auth-form.tsx");
 const { PasswordRecoveryForm } = require("../apps/web/components/password-recovery-form.tsx");
 const { Footer } = require("../apps/web/components/layout/footer.tsx");
 const { ProductCard } = require("../apps/web/components/product-card.tsx");
+const { ProductDetailView } = require("../apps/web/components/product-detail-view.tsx");
+const { AccountInbox } = require("../apps/web/components/account-inbox.tsx");
 Module._load = originalLoad;
 for (const locale of ["en", "fa"]) {
   const dict = require(`../apps/web/app/[locale]/dictionaries/${locale}.json`);
@@ -175,6 +197,51 @@ assert.match(disabledButton, /type="submit"/);
 assert.match(disabledButton, /disabled=""/);
 assert.match(disabledButton, /aria-busy="true"/);
 const dict = require("../apps/web/app/[locale]/dictionaries/fa.json");
+const unavailablePlan = {
+  id: "unavailable",
+  label: "Synthetic unavailable plan",
+  durationDays: 30,
+  currency: "IRT",
+  effectivePrice: 2000,
+  availability: "OUT_OF_STOCK",
+  availableStock: 0,
+  inStock: false,
+};
+const unavailableProduct = renderToStaticMarkup(
+  React.createElement(ProductDetailView, {
+    locale: "fa",
+    dict,
+    product: {
+      id: "product-fixture",
+      slug: "fixture",
+      name: "Synthetic product",
+      image: null,
+      galleryImageIds: [],
+      category: { name: "Synthetic", slug: "category" },
+      plans: [unavailablePlan],
+      rating: { count: 0 },
+      reviews: [],
+      specs: [],
+      related: [],
+      description: "Synthetic product description",
+    },
+    requestedPlanId: unavailablePlan.id,
+    payment: { online: true },
+    supportHref: "/fa/support",
+  }),
+);
+assert.match(
+  unavailableProduct,
+  /href="\/fa\/login\?next=%2Ffa%2Fproducts%2Ffixture%3Fplan%3Dunavailable"/,
+);
+assert.doesNotMatch(unavailableProduct, /افزودن به سبد خرید/);
+headerUser = { id: "user-1", role: "USER" };
+const notifications = renderToStaticMarkup(React.createElement(AccountInbox, { locale: "fa" }));
+headerUser = null;
+assert.match(notifications, /موجودی آزمایشی/);
+assert.match(notifications, /href="\/fa\/products\/fixture\?plan=unavailable"/);
+assert.match(notifications, /&lt;script&gt;synthetic&lt;\/script&gt;/);
+assert.doesNotMatch(notifications, /unsafe\.example/);
 const signup = renderToStaticMarkup(
   React.createElement(AuthForm, { mode: "signup", locale: "fa", dict }),
 );
@@ -202,6 +269,8 @@ assert(!header().includes('aria-label="سبد خرید (۲)"'));
 headerUser = { role: "USER", name: "Fixture" };
 assert(!header().includes('href="/fa/admin"'));
 assert(header().includes('aria-label="سبد خرید (۲)"'));
+assert(header().includes('aria-label="صندوق پیام، ۲ اعلان خوانده‌نشده"'));
+assert(header().includes('href="/fa/dashboard/inbox"'));
 const headerMarkup = header();
 assert.equal((headerMarkup.match(/href="\/fa\/cart"/g) ?? []).length, 1);
 assert.match(
@@ -212,6 +281,7 @@ assert.doesNotMatch(headerMarkup, />سبد خرید</);
 headerUser = { role: "ADMIN", name: "Fixture admin" };
 assert(header().includes('href="/fa/admin"'));
 assert(!header().includes('aria-label="سبد خرید (۲)"'));
+assert(!header().includes('href="/fa/dashboard/inbox"'));
 const footer = renderToStaticMarkup(
   React.createElement(Footer, {
     locale: "fa",

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
 import { cartChangedEvent } from "@/lib/cart-events";
+import { notificationsChangedEvent } from "@/lib/notification-events";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { LocaleSwitcher } from "./locale-switcher";
@@ -42,6 +43,10 @@ export function Header({
     cartSession ? "/cart/count" : null,
     cartSession ?? undefined,
   );
+  const { data: notifications, refetch: refetchNotifications } = useApi<{ count: number }>(
+    cartSession ? "/auth/notifications/count" : null,
+    cartSession ?? undefined,
+  );
   const pathname = usePathname();
   const [openPath, setOpenPath] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -53,22 +58,34 @@ export function Header({
   const menuLabel = fa ? "منوی اصلی" : "Main menu";
   const cartLabel = fa ? "سبد خرید" : "Cart";
   const cartHref = `${base}/cart`;
+  const inboxHref = `${base}/dashboard/inbox`;
   const count = cart?.count ? cart.count.toLocaleString(fa ? "fa-IR" : "en-US") : null;
+  const unread = notifications?.count ?? 0;
+  const unreadCount =
+    unread > 0 ? Math.min(unread, 99).toLocaleString(fa ? "fa-IR" : "en-US") : null;
+  const unreadLabel = fa
+    ? `${unread.toLocaleString("fa-IR")} اعلان خوانده‌نشده`
+    : `${unread} unread notifications`;
 
   useEffect(() => {
     if (!cartSession) return;
     const refreshVisible = () => {
-      if (document.visibilityState === "visible") refetch();
+      if (document.visibilityState === "visible") {
+        refetch();
+        refetchNotifications();
+      }
     };
     const timer = setInterval(refreshVisible, 60000);
     document.addEventListener("visibilitychange", refreshVisible);
     window.addEventListener(cartChangedEvent, refetch);
+    window.addEventListener(notificationsChangedEvent, refetchNotifications);
     return () => {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", refreshVisible);
       window.removeEventListener(cartChangedEvent, refetch);
+      window.removeEventListener(notificationsChangedEvent, refetchNotifications);
     };
-  }, [cartSession, refetch]);
+  }, [cartSession, refetch, refetchNotifications]);
 
   const routes = [
     { href: base, label: dict.home },
@@ -76,6 +93,7 @@ export function Header({
     { href: `${base}/blog`, label: dict.blog },
     { href: `${base}/support`, label: dict.support },
     ...(user ? [{ href: `${base}/dashboard`, label: dict.dashboard }] : []),
+    ...(user?.role === "USER" ? [{ href: inboxHref, label: fa ? "صندوق پیام" : "Inbox" }] : []),
     ...(user?.role === "ADMIN" ? [{ href: `${base}/admin`, label: dict.admin }] : []),
   ];
 
@@ -119,7 +137,12 @@ export function Header({
 
   function navigation() {
     return routes.map(({ href, label }) => {
-      const active = pathname === href || (href !== base && pathname.startsWith(`${href}/`));
+      const active =
+        pathname === href ||
+        (href !== base &&
+          pathname.startsWith(`${href}/`) &&
+          !(href === `${base}/dashboard` && pathname === inboxHref));
+      const showUnread = href === inboxHref && unreadCount;
       return (
         <Link
           prefetch={false}
@@ -128,8 +151,15 @@ export function Header({
           className={styles.navLink}
           onClick={() => setOpenPath(null)}
           aria-current={active ? "page" : undefined}
+          aria-label={showUnread ? `${label}، ${unreadLabel}` : undefined}
         >
           {label}
+          {showUnread && (
+            <span aria-hidden="true" className={styles.unreadPill}>
+              {unreadCount}
+              {unread > 99 ? "+" : ""}
+            </span>
+          )}
         </Link>
       );
     });
@@ -218,7 +248,15 @@ export function Header({
             ref={menuButton}
             className={`oosta-button ${styles.menuButton}`}
             data-button-variant="outline"
-            aria-label={menuOpen ? (fa ? "بستن منو" : "Close menu") : menuLabel}
+            aria-label={
+              menuOpen
+                ? fa
+                  ? "بستن منو"
+                  : "Close menu"
+                : unreadCount
+                  ? `${menuLabel}، ${unreadLabel}`
+                  : menuLabel
+            }
             aria-expanded={menuOpen}
             aria-controls="mobile-navigation"
             onClick={() => setOpenPath(menuOpen ? null : pathname)}
@@ -235,6 +273,7 @@ export function Header({
             >
               <path d={menuOpen ? "M6 6l12 12M18 6 6 18" : "M4 6h16M4 12h16M4 18h16"} />
             </svg>
+            {!menuOpen && unreadCount && <span className={styles.unreadDot} aria-hidden="true" />}
           </button>
         </div>
       </Container>

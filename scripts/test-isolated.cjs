@@ -99,9 +99,15 @@ async function main() {
         ? "cart-regressions"
         : process.argv.includes("--supplier-wallet-only")
           ? "supplier-wallet-regressions"
-          : process.argv.includes("--renewal-only")
-            ? "renewal-regressions"
-            : null;
+          : process.argv.includes("--supplier-fulfillment-only")
+            ? "supplier-fulfillment-regressions"
+            : process.argv.includes("--stock-alerts-only")
+              ? "stock-alert-regressions"
+            : process.argv.includes("--stock-mail-only")
+              ? "stock-mail-regressions"
+              : process.argv.includes("--renewal-only")
+                ? "renewal-regressions"
+                : null;
     if (focusedScript) {
       console.log(
         run(
@@ -185,6 +191,14 @@ async function main() {
         env,
       ),
     );
+    for (const name of ["stock-alert-regressions", "stock-mail-regressions"])
+      console.log(
+        run(
+          process.execPath,
+          [path.join(root, "node_modules/tsx/dist/cli.mjs"), `apps/api/scripts/${name}.ts`],
+          env,
+        ),
+      );
     console.log(
       run(
         process.execPath,

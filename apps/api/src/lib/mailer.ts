@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { env } from "../config/env";
 import { prisma } from "./prisma";
 import { renderEmail } from "./email-design";
+import { addOrderNotification } from "../modules/orders/order-notifications";
 import {
   isRenewalReminderDue,
   queueRenewalReminders,
@@ -33,12 +34,15 @@ export async function queueOrderEmail(
   tx: Prisma.TransactionClient,
   orderId: string,
   kind: keyof typeof labels,
+  eventId = orderId,
 ) {
   const order = await tx.order.findUnique({
     where: { id: orderId },
-    select: { user: { select: { email: true } } },
+    select: { userId: true, user: { select: { email: true } } },
   });
-  if (!order?.user.email) return;
+  if (!order) return;
+  await addOrderNotification(tx, order.userId, orderId, kind, eventId);
+  if (!order.user.email) return;
   await tx.emailOutbox.createMany({
     data: [{ orderId, kind, to: order.user.email }],
     skipDuplicates: true,
@@ -67,7 +71,51 @@ export async function sendNextOrderEmail(send: SendMail) {
   });
   if (!claimed.count) return;
   try {
-    if (job.kind.startsWith(renewalEmailPrefix)) {
+    if (job.kind === "STOCK_AVAILABLE") {
+      const alert = await prisma.userNotification.findUnique({
+        where: { id: job.orderId },
+        select: {
+          kind: true,
+          locale: true,
+          title: true,
+          body: true,
+          href: true,
+          user: { select: { email: true, verifiedRecoveryEmail: true } },
+        },
+      });
+      const path = alert?.href.match(
+        /^\/(fa|en)\/products\/[a-z0-9]+(?:-[a-z0-9]+)*\?plan=[a-zA-Z0-9_-]{1,100}$/,
+      );
+      if (
+        !alert ||
+        alert.kind !== job.kind ||
+        alert.user.email !== job.to ||
+        alert.user.verifiedRecoveryEmail !== job.to ||
+        !path ||
+        path[0] !== alert.href ||
+        path[1] !== alert.locale ||
+        (alert.locale !== "fa" && alert.locale !== "en")
+      ) {
+        await prisma.emailOutbox.update({
+          where: { id: job.id },
+          data: { status: "SKIPPED", lastError: "STOCK_ALERT_NO_LONGER_ELIGIBLE" },
+        });
+        return;
+      }
+      await send({
+        to: job.to,
+        ...renderEmail({
+          locale: alert.locale,
+          kind: "stock",
+          subject: alert.title,
+          body: alert.body,
+          action: {
+            label: alert.locale === "fa" ? "مشاهدهٔ پلن" : "View plan",
+            url: new URL(alert.href, env.WEB_BASE_URL).href,
+          },
+        }),
+      });
+    } else if (job.kind.startsWith(renewalEmailPrefix)) {
       if (!(await isRenewalReminderDue(job.orderId, job.kind, job.to, now))) {
         await prisma.emailOutbox.update({
           where: { id: job.id },

@@ -12,8 +12,9 @@ import { deliverOrderInTransaction, lowStockWarning } from "../orders/orders.ser
 import { confirmSupplierCardPayment } from "../suppliers/card-checkout";
 import { confirmManualSupplierPayment, readManualSupplier } from "../suppliers/manual-payment";
 import { queueOrderEmail } from "../../lib/mailer";
+import { addOrderNotification } from "../orders/order-notifications";
 import { requireManualAdmin } from "../suppliers/manual-admin";
-import { notifyAdmin } from "../../bot";
+import { notifyAdmin, notifyPaidSupplierOrder } from "../../bot";
 import { ticketWriteError } from "../tickets/tickets.service";
 import { lockOrder } from "../../lib/orderLock";
 import { readBluInvoice } from "../orders/blu-invoice";
@@ -798,20 +799,7 @@ export async function approveReceipt(
     });
   });
   if (readManualSupplier(initial.order.paymentMetadata)) {
-    void prisma.supplierFulfillment
-      .findUnique({ where: { orderId: initial.orderId }, select: { id: true, supplier: true } })
-      .then((job) => {
-        if (job)
-          return notifyAdmin(
-            "رسید سفارش " +
-              initial.orderId.slice(-8) +
-              " تأیید شد. اعتبار " +
-              job.supplier +
-              " را بررسی کن.",
-            { label: "خرید و تحویل", data: "supplier_buy_" + job.id },
-          );
-      })
-      .catch(() => {});
+    void notifyPaidSupplierOrder(initial.orderId);
   } else if (!readBluInvoice(initial.order.paymentMetadata)?.supplierCheckout)
     void lowStockWarning(initial.orderId)
       .then((warning) => (warning ? notifyAdmin(warning) : undefined))
@@ -847,7 +835,7 @@ export async function rejectReceipt(id: string, input: ReviewReceiptInput, admin
         where: { id: receipt.orderId },
         data: { paymentStatus: "REJECTED" },
       });
-      await queueOrderEmail(tx, receipt.orderId, "ORDER_REJECTED");
+      await queueOrderEmail(tx, receipt.orderId, "ORDER_REJECTED", id);
       return;
     }
     const undo = receipt.status === "APPROVED" && receipt.order.paymentStatus === "PAID";
@@ -864,6 +852,7 @@ export async function rejectReceipt(id: string, input: ReviewReceiptInput, admin
         where: { id: receipt.orderId },
         data: { paymentStatus: "REFUNDED" },
       });
+      await addOrderNotification(tx, receipt.order.userId, receipt.orderId, "ORDER_REFUNDED", id);
     } else if (["PENDING", "PENDING_REVIEW", "REJECTED"].includes(receipt.order.paymentStatus)) {
       const pending = await tx.receipt.count({
         where: { orderId: receipt.orderId, status: "PENDING" },
@@ -874,6 +863,8 @@ export async function rejectReceipt(id: string, input: ReviewReceiptInput, admin
           paymentStatus: pending ? "PENDING_REVIEW" : "REJECTED",
         },
       });
+      if (!pending)
+        await addOrderNotification(tx, receipt.order.userId, receipt.orderId, "ORDER_REJECTED", id);
     }
   });
   return serializeReceipt(await loadReceiptForReview(id));

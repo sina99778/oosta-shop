@@ -102,6 +102,8 @@ const interactionReact = {
 };
 const navigations = [];
 let cartChanges = 0;
+let noticeChanges = 0;
+let noticeRefreshes = 0;
 let publishedPosts = [];
 let signedIn = true;
 let viewedProduct = p;
@@ -110,6 +112,8 @@ let requestedCatalog = "";
 Module._load = function (request, ...args) {
   if (request === "react") return interactionReact;
   if (request === "@/lib/cart-events") return { notifyCartChanged: () => cartChanges++ };
+  if (request === "@/lib/notification-events")
+    return { notifyNotificationsChanged: () => noticeChanges++ };
   if (request === "@/lib/seo")
     return {
       fetchJson: async (url) => {
@@ -141,15 +145,34 @@ Module._load = function (request, ...args) {
             ? paymentOptions
             : url === null
               ? null
-              : { product: viewedProduct },
+              : url.startsWith("/auth/stock-alerts/")
+                ? { active: false }
+                : url === "/auth/notifications"
+                  ? {
+                      notifications: [
+                        {
+                          id: "notice-fixture",
+                          title: "Restocked product",
+                          body: "A synthetic body.",
+                          href: "/en/products/fixture?plan=one",
+                          readAt: null,
+                          createdAt: "2026-11-21T12:00:00.000Z",
+                        },
+                      ],
+                      unreadCount: 1,
+                    }
+                  : { product: viewedProduct },
         error: null,
         loading: false,
+        refetch: () => noticeRefreshes++,
       }),
     };
   return load.call(this, request, ...args);
 };
 const { ProductDetailView } = require("../apps/web/components/product-detail-view.tsx");
 const { SupplierQuotePanel } = require("../apps/web/components/supplier-quote-panel.tsx");
+const { StockAlertButton } = require("../apps/web/components/stock-alert-button.tsx");
+const { AccountNotifications } = require("../apps/web/components/account-notifications.tsx");
 const { HomeCatalog } = require("../apps/web/components/home-catalog.tsx");
 const { HomeSections } = require("../apps/web/components/home-sections.tsx");
 const {
@@ -211,9 +234,9 @@ assert.equal(
   planDisplayLabel("Canva Pro Business Slot Invite for 99 Slots for 1 Month - full warranty", true),
   "Canva Pro Business ۹۹ جای دعوت ۱ ماهه",
 );
-assert(html.includes("استعلام قیمت"));
 assert(html.includes("موجود نزد تأمین‌کننده"));
-assert(html.includes("خرید مستقیم این پلن فعلاً فعال نیست"));
+assert(html.includes("افزودن به سبد خرید"));
+assert(!html.includes("استعلام قیمت"));
 assert(html.includes("۲ عدد نزد تأمین‌کننده"), "Render the count for a fresh matching supplier");
 assert(!html.includes("۷۷۷٬۷۷۷"), "Stored placeholder price must never appear for supplier offers");
 function renderReturn(requestedPlanId, product = p) {
@@ -232,26 +255,40 @@ assert.match(
   /checked="" value="fixture-manual"|value="fixture-manual" checked=""/,
   "Restore the exact non-default plan after sign-in",
 );
-for (const id of ["missing-id", "", "sold-out"]) {
-  const stale = renderReturn(id, {
-    ...p,
-    plans: [
-      ...p.plans,
-      {
-        ...p.plans[0],
-        id: "sold-out",
-        inStock: false,
-        availability: "OUT_OF_STOCK",
-      },
-    ],
-  });
+const productWithSoldOutPlan = {
+  ...p,
+  plans: [
+    ...p.plans,
+    {
+      ...p.plans[0],
+      id: "sold-out",
+      inStock: false,
+      availability: "OUT_OF_STOCK",
+    },
+  ],
+};
+for (const id of ["missing-id", ""]) {
+  const stale = renderReturn(id, productWithSoldOutPlan);
   assert.match(stale, /role="alert"/);
   assert.doesNotMatch(stale, /checked=""|>Check price<|>Recheck stock and price</);
 }
 signedIn = false;
+const soldOut = renderReturn("sold-out", productWithSoldOutPlan);
+assert.match(soldOut, /checked="" value="sold-out"|value="sold-out" checked=""/);
+assert.match(soldOut, /Notify me when available/);
+assert.doesNotMatch(soldOut, /Add to cart/);
 const guest = renderReturn(p.plans[1].id, { ...p, hasImage: false });
-assert.match(guest, /Sign in to request a quote/);
-assert.match(guest, /href="\/en\/login\?next=%2Fen%2Fproducts%2Ffixture%3Fplan%3Dfixture-manual"/);
+assert.match(guest, /Add to cart/);
+const requestOnly = renderReturn(p.plans[1].id, {
+  ...p,
+  plans: [{ ...p.plans[1], availableStock: 0, availability: "ON_REQUEST" }],
+});
+assert.match(requestOnly, /Sign in to request a quote/);
+assert.doesNotMatch(requestOnly, /Add to cart/);
+assert.match(
+  requestOnly,
+  /href="\/en\/login\?next=%2Fen%2Fproducts%2Ffixture%3Fplan%3Dfixture-manual"/,
+);
 assert.match(guest, /<h1[^>]*><span[^>]*data-kind="ACCOUNT"/);
 signedIn = true;
 const home = renderToStaticMarkup(
@@ -323,7 +360,8 @@ viewedProduct = {
   plans: [{ ...p.plans[0], variant: null, inStock: false, availability: "OUT_OF_STOCK" }],
 };
 const gone = renderProduct();
-assert(gone.includes("بررسی دوبارهٔ موجودی و قیمت"));
+assert(gone.includes("موجود شد خبرم کن"));
+assert(!gone.includes("بررسی دوبارهٔ موجودی و قیمت"));
 assert(!gone.includes("۷۷۷٬۷۷۷"));
 assert(!gone.includes(cartButton));
 
@@ -352,13 +390,16 @@ async function checkCartActions() {
     [403, "FORBIDDEN", /access to this action/i],
   ];
   try {
-    for (const supplier of [false, true]) {
-      const plan = supplier ? p.plans[0] : localPlan;
+    for (const entry of ["local", "supplier-stock", "supplier-on-request"]) {
+      const quoted = entry === "supplier-on-request";
+      const plan = entry === "local" ? localPlan : p.plans[0];
+      const priorNavigationCount = navigations.length;
+      const priorCartChanges = cartChanges;
       const states = [];
       const view = () => {
         interactive = { values: states, index: 0 };
         try {
-          return supplier
+          return quoted
             ? SupplierQuotePanel({ plan, token: "synthetic", locale: "en", loginPath: "/en/login" })
             : ProductDetailView({
                 locale: "en",
@@ -370,7 +411,7 @@ async function checkCartActions() {
           interactive = undefined;
         }
       };
-      if (supplier) {
+      if (quoted) {
         api.post = async (url) => {
           assert.equal(url, "/supplier-quotes");
           return {
@@ -399,20 +440,16 @@ async function checkCartActions() {
         await actionIn(view(), "addToCart")();
         const html = renderToStaticMarkup(view());
         const alert = html.match(/<p role="alert"[^>]*>([^<]*)<\/p>/)?.[1];
-        assert.match(
-          alert ?? "",
-          message,
-          `${supplier ? "Supplier" : "Local"} add to cart reports ${code}`,
-        );
+        assert.match(alert ?? "", message, `${entry} add to cart reports ${code}`);
         assert.doesNotMatch(html, /SYNTHETIC_PRIVATE_ERROR/);
       }
-      assert.equal(navigations.length, Number(supplier));
-      assert.equal(cartChanges, Number(supplier));
+      assert.equal(navigations.length, priorNavigationCount);
+      assert.equal(cartChanges, priorCartChanges);
       api.post = async () => ({ id: "synthetic-cart-item" });
       await actionIn(view(), "addToCart")();
       assert.equal(navigations.at(-1), "/en/cart");
     }
-    assert.equal(cartChanges, 2);
+    assert.equal(cartChanges, 3);
     const storefront = require("node:fs").readFileSync(
       path.resolve(__dirname, "../apps/web/components/storefront.module.css"),
       "utf8",
@@ -505,8 +542,97 @@ async function checkHomepage() {
   );
   console.log("PASS: localized variants, supplier pricing and published homepage journal");
 }
+async function checkStockAndInbox() {
+  const original = { post: api.post, del: api.del, patch: api.patch };
+  const calls = [];
+  const stock = [];
+  const inbox = [];
+  const view = (component, props, values) => {
+    interactive = { values, index: 0 };
+    try {
+      return component(props);
+    } finally {
+      interactive = undefined;
+    }
+  };
+  const tap = async (node, label) => {
+    function find(element) {
+      if (!React.isValidElement(element)) return;
+      if (element.props.children === label && element.props.onClick) return element.props.onClick;
+      for (const child of React.Children.toArray(element.props.children)) {
+        const click = find(child);
+        if (click) return click;
+      }
+    }
+    const click = find(node);
+    assert(click, label);
+    click();
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+  const stockView = () =>
+    view(
+      StockAlertButton,
+      {
+        locale: "en",
+        planId: "one",
+        token: "session-synthetic",
+        loginPath: "/en/login",
+      },
+      stock,
+    );
+  const inboxView = () =>
+    view(AccountNotifications, { locale: "en", token: "session-synthetic" }, inbox);
+  try {
+    api.post = async () => {
+      throw new ApiError("private detail", 409, "STOCK_ALERT_NOT_NEEDED");
+    };
+    await tap(stockView(), "Notify me when available");
+    const failure = renderToStaticMarkup(stockView());
+    assert.match(failure, /This plan is available again/);
+    assert.doesNotMatch(failure, /private detail/);
+
+    api.post = async (...args) => {
+      calls.push(args);
+      return { active: true };
+    };
+    api.del = async (...args) => {
+      calls.push(args);
+    };
+    await tap(stockView(), "Notify me when available");
+    assert.match(renderToStaticMarkup(stockView()), /Cancel stock alert/);
+    await tap(stockView(), "Cancel stock alert");
+    assert.match(renderToStaticMarkup(stockView()), /Stock alert canceled/);
+    assert.deepEqual(calls, [
+      ["/auth/stock-alerts/one", { locale: "en" }, "session-synthetic"],
+      ["/auth/stock-alerts/one", "session-synthetic"],
+    ]);
+
+    api.patch = async () => {
+      throw new ApiError("private detail", 403);
+    };
+    await tap(inboxView(), "Mark as read");
+    assert.match(renderToStaticMarkup(inboxView()), /Could not update the alert/);
+    assert.equal(noticeChanges, 0);
+    assert.equal(noticeRefreshes, 0);
+    api.patch = async (...args) => {
+      calls.push(args);
+    };
+    await tap(inboxView(), "Mark as read");
+    await tap(inboxView(), "Mark all as read");
+    assert.deepEqual(calls.slice(2), [
+      ["/auth/notifications/read", { id: "notice-fixture" }, "session-synthetic"],
+      ["/auth/notifications/read", {}, "session-synthetic"],
+    ]);
+    assert.equal(noticeChanges, 2);
+    assert.equal(noticeRefreshes, 2);
+    console.log("PASS: stock alerts and inbox mutations, denied requests and unread refresh");
+  } finally {
+    Object.assign(api, original);
+  }
+}
 checkCartActions()
   .then(checkHomepage)
+  .then(checkStockAndInbox)
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;

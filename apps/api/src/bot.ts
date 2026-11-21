@@ -36,11 +36,12 @@ import {
 } from "./modules/admin/admin.service";
 import { getGatewayConfig, maskCard, patchGatewayConfig } from "./lib/gatewayConfig";
 import { readBluPollStatus } from "./modules/orders/blu-poll-status";
-import { dispatchManualSupplier } from "./modules/suppliers/fulfillment";
+import type { SupplierRegistry } from "./modules/suppliers/fulfillment";
 import { liveSupplierRegistry } from "./modules/suppliers/live-adapters";
-import { AppError } from "./utils/httpError";
+import { registerSupplierTelegram } from "./modules/suppliers/telegram-actions";
 
 let bot: Telegraf | undefined;
+let sendPaidSupplierCard: ((orderId: string) => Promise<void>) | undefined;
 let backupTimer: ReturnType<typeof setInterval> | undefined;
 let backupInProgress = false;
 
@@ -478,7 +479,15 @@ export async function notifySupplierReceipt(receiptId: string, orderId: string) 
   }
 }
 
-export function startBot(): void {
+export async function notifyPaidSupplierOrder(orderId: string) {
+  try {
+    await sendPaidSupplierCard?.(orderId);
+  } catch {
+    console.error("[telegram] paid supplier notification failed");
+  }
+}
+
+export function startBot(registry: () => SupplierRegistry = liveSupplierRegistry): void {
   const token = env.TELEGRAM_BOT_TOKEN;
   const adminId = env.TELEGRAM_ADMIN_ID;
 
@@ -684,20 +693,7 @@ export function startBot(): void {
     await sendReceipts(ctx.chat?.id ?? adminId, undefined);
   });
 
-  bot.action(/^supplier_buy_([a-z0-9]{1,44})$/, async (ctx) => {
-    await ctx.answerCbQuery();
-    try {
-      const actor = process.env.SUPPLIER_TELEGRAM_ADMIN_USER_ID ?? "";
-      const result = await dispatchManualSupplier(ctx.match[1], actor, liveSupplierRegistry());
-      await ctx.reply("وضعیت تأمین: " + result.state);
-    } catch (error) {
-      await ctx.reply(
-        error instanceof AppError && error.code === "SUPPLIER_COST_INCREASED"
-          ? "قیمت تأمین تغییر کرده است. مبلغ جدید را در پنل بررسی و تأیید کن."
-          : "خرید انجام نشد. وضعیت سفارش و بودجه را در پنل بررسی کن.",
-      );
-    }
-  });
+  sendPaidSupplierCard = registerSupplierTelegram(bot, adminId, registry);
   bot.action(/^rcp_ok_([a-z0-9]{1,100})$/, async (ctx) => {
     const id = ctx.match[1];
     try {

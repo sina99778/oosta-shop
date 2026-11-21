@@ -168,14 +168,13 @@ export function VariantSelector({
           {shown.map((p) => (
             <label
               key={p.id}
-              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 ${p.id === value ? "border-primary bg-primary/5" : "border-border"} ${!p.inStock ? "opacity-60" : ""}`}
+              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 ${p.id === value ? "border-primary bg-primary/5" : "border-border"}`}
             >
               <input
                 type="radio"
                 name="product-variant"
                 value={p.id}
                 checked={p.id === value}
-                disabled={!p.inStock && !p.quoteRequired}
                 onChange={() => onChange(p.id)}
                 className="mt-1 accent-primary"
               />

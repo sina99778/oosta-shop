@@ -1040,6 +1040,9 @@ async function main() {
     lookup: true,
   };
   let supplierCost = "8";
+  let supplierWallet = "3.75";
+  let walletCurrency = "USD";
+  mode.walletBalance = async () => ({ amount: supplierWallet, currency: walletCurrency });
   mode.quote = async (input) => {
     assert.equal(input.estimateWithoutWallet, true);
     return {
@@ -1111,9 +1114,22 @@ async function main() {
   assert(!env.TELEGRAM_BOT_TOKEN);
   const chatId = 917000002;
   const documents: { chat_id: number; caption: string; reply_markup: unknown }[] = [];
-  mock.method(Telegraf.prototype, "launch", async () => {});
+  type TelegramMessage = {
+    chat_id: number;
+    text: string;
+    reply_markup?: {
+      inline_keyboard: { callback_data: string; text: string }[][];
+    };
+  };
+  const messages: TelegramMessage[] = [];
+  const bots: Telegraf[] = [];
+  mock.method(Telegraf.prototype, "launch", async function (this: Telegraf) {
+    bots.push(this);
+  });
   mock.method(Telegram.prototype, "callApi", async (method: string, payload: unknown) => {
     if (method === "sendDocument") documents.push(payload as (typeof documents)[number]);
+    if (method === "sendMessage" || method === "editMessageText")
+      messages.push(payload as TelegramMessage);
     return {};
   });
   Object.assign(env, {
@@ -1121,7 +1137,45 @@ async function main() {
     TELEGRAM_ADMIN_ID: chatId,
     BACKUP_INTERVAL_HOURS: 0,
   });
-  startBot();
+  process.env.SUPPLIER_TELEGRAM_ADMIN_USER_ID = manualAdmin.id;
+  startBot(() => m.registry);
+  const [adminBot] = bots;
+  assert(adminBot);
+  const botUser = {
+    id: 1002,
+    is_bot: true,
+    first_name: "Fixture",
+    username: "fixture_bot",
+  } as const;
+  adminBot.botInfo = {
+    ...botUser,
+    can_join_groups: false,
+    can_read_all_group_messages: false,
+    supports_inline_queries: false,
+  };
+  let telegramUpdateId = 0;
+  const tap = (data: string, sender = chatId) =>
+    adminBot.handleUpdate({
+      update_id: ++telegramUpdateId,
+      callback_query: {
+        id: String(telegramUpdateId),
+        from: { id: sender, is_bot: false, first_name: "Fixture" },
+        chat_instance: "fixture",
+        data,
+        message: {
+          message_id: 123,
+          date: 1,
+          from: botUser,
+          chat: { id: sender, type: "private", first_name: "Fixture" },
+          text: "Synthetic",
+        },
+      },
+    });
+  const button = (prefix: string) =>
+    messages
+      .at(-1)
+      ?.reply_markup?.inline_keyboard.flat()
+      .find(({ callback_data }) => callback_data.startsWith(prefix))?.callback_data;
   const orderURL = "/orders/" + orderId;
   const buyerOrder = () => inject(manualApp, { method: "GET", url: orderURL, headers: mHeaders });
   const upload = (reference: string) =>
@@ -1177,6 +1231,20 @@ async function main() {
     });
   const approvals = await Promise.all([approve(), approve()]);
   assert.deepEqual(approvals.map(({ statusCode }) => statusCode).sort(), [200, 409]);
+  for (let attempt = 0; attempt < 30 && !messages.length; attempt++) await delay(50);
+  assert.match(messages.at(-1)?.text ?? "", /3\.75 USD/);
+  assert.match(messages.at(-1)?.text ?? "", /4\.25 USD/);
+  assert(messages.at(-1)?.text.includes(orderId.slice(-8)));
+  const refresh = button("supplier_refresh_");
+  assert(refresh);
+  await tap(refresh, chatId + 1);
+  assert.match(messages.at(-1)?.text ?? "", /Unauthorized/);
+  await tap(refresh);
+  const buy = button("supplier_buy_");
+  assert(buy);
+  await tap(buy);
+  assert.equal(buys, 0);
+  assert.match(messages.at(-1)?.text ?? "", /4\.25 USD/);
   assert.equal((await buyerOrder()).json().order.paymentStatus, "PAID_PENDING_FULFILLMENT");
   await manualApp.locals.supplierCheckout.sweep();
   assert.equal(buys, 0);
@@ -1209,11 +1277,44 @@ async function main() {
     code: "SUPPLIER_COST_INCREASED",
   });
   assert.equal(buys, 0);
-  const dispatch = await Promise.allSettled([
-    dispatchManualSupplier(manualJob.id, manualAdmin.id, m.registry, "9"),
-    dispatchManualSupplier(manualJob.id, manualAdmin.id, m.registry, "9"),
-  ]);
-  assert(dispatch.some((result) => result.status === "fulfilled"));
+  supplierWallet = "9.01";
+  await tap(buy);
+  assert.equal(buys, 0);
+  assert.match(messages.at(-1)?.text ?? "", /9\.01 USD/);
+  assert(!button("supplier_price_"));
+  supplierWallet = "9";
+  walletCurrency = "USDT";
+  await tap(buy);
+  assert.equal(buys, 0);
+  assert(!button("supplier_price_"));
+  walletCurrency = "USD";
+  await tap(buy);
+  assert.equal(buys, 0);
+  const expired = button("supplier_price_");
+  assert(expired);
+  const approvalOpenedAt = Date.now();
+  const clock = mock.method(Date, "now", () => approvalOpenedAt + 121_000);
+  try {
+    await tap(expired);
+    assert.match(messages.at(-1)?.text ?? "", /این تأیید معتبر نیست/);
+    assert.equal(buys, 0);
+  } finally {
+    clock.mock.restore();
+  }
+  await tap(buy);
+  const noLongerAdmin = button("supplier_price_");
+  assert(noLongerAdmin);
+  await prisma.user.update({ where: { id: manualAdmin.id }, data: { role: "USER" } });
+  try {
+    await tap(noLongerAdmin);
+    assert.equal(buys, 0);
+  } finally {
+    await prisma.user.update({ where: { id: manualAdmin.id }, data: { role: "ADMIN" } });
+  }
+  await tap(buy);
+  const confirm = button("supplier_price_");
+  assert(confirm && Buffer.byteLength(confirm) <= 64);
+  await Promise.all([tap(confirm), tap(confirm)]);
   assert.equal(buys, 1);
   const delivered = await buyerOrder();
   assert.equal(delivered.statusCode, 200);
@@ -1229,7 +1330,7 @@ async function main() {
   assert.equal(bystander.statusCode, 404);
   assert(!bystander.body.includes("Synthetic-only-1"));
   console.log(
-    "PASS: cart to supplier card receipt, stubbed Telegram notification, buyer-visible status and exactly-once owner delivery",
+    "PASS: supplier Telegram wallet/shortfall, cap and currency gates, expiring approval, current admin role, duplicate tap and owner-only delivery",
   );
   assert.equal(
     (await prisma.order.findUniqueOrThrow({ where: { id: orderId } })).paymentStatus,

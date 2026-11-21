@@ -23,6 +23,7 @@ import { readBluInvoice, reserveBluInvoice } from "./blu-invoice";
 import { claimAvailableStock, releaseExpiredBluStock } from "./blu-stock";
 import { canDeliverPrivateBluStock } from "./blu-private-stock";
 import { renewalEstimate } from "./renewals";
+import { addOrderNotification } from "./order-notifications";
 
 export function bluStockVerifierReady() {
   try {
@@ -433,6 +434,7 @@ export async function deliverOrderInTransaction(
     where: { id: orderId },
     data: { paymentStatus: "PAID", paidAt: new Date(), paymentRefId: refId },
   });
+  if (!privateStockQa) await addOrderNotification(tx, order.userId, orderId, "ORDER_DELIVERED");
   if (privateStockQa)
     await tx.supplierQaAttempt.updateMany({
       where: { orderId, state: "AWAITING_PAYMENT" },

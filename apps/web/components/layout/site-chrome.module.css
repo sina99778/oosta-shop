@@ -59,6 +59,29 @@
   color: var(--c-primary);
   border-color: var(--c-primary);
 }
+.menuButton {
+  position: relative;
+}
+.unreadDot {
+  position: absolute;
+  inset-block-start: 0.35rem;
+  inset-inline-end: 0.35rem;
+  inline-size: 0.45rem;
+  block-size: 0.45rem;
+  border-radius: 50%;
+  background: var(--c-mint);
+}
+.unreadPill {
+  margin-inline-start: 0.3rem;
+  min-width: 1.2rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--c-mint);
+  color: var(--c-navy);
+  font-size: 0.72rem;
+  font-weight: 750;
+  line-height: 1.2rem;
+}
 .navLink,
 .accountAction {
   display: inline-flex;

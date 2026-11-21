@@ -27,6 +27,7 @@ import { createSupplierCheckout, supplierCheckoutRouter } from "./modules/suppli
 import type { SupplierRegistry } from "./modules/suppliers/fulfillment";
 import { liveSupplierRegistry } from "./modules/suppliers/live-adapters";
 import { cartRouter } from "./modules/orders/cart.routes";
+import { stockAlertsRouter } from "./modules/auth/stock-alerts";
 
 export function createApp(
   options: {
@@ -86,6 +87,7 @@ export function createApp(
   // Routes
   app.use("/health", healthRouter);
   app.use("/auth", authRouter);
+  app.use("/auth", stockAlertsRouter);
   app.use("/auth", createPasswordResetRouter(options.sendPasswordResetEmail ?? createSmtpSender()));
   app.use(catalogRouter);
   app.use("/orders", ordersRouter);

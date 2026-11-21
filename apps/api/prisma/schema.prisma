@@ -98,6 +98,8 @@ model User {
   cartLines CartLine[]
   welcomeGift WelcomeGift?
   passwordReset PasswordReset?
+  stockAlerts StockAlert[]
+  notifications UserNotification[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
@@ -358,6 +360,7 @@ model ProductPlan {
   inventory    InventoryItem[]
   orderItems   OrderItem[]
   cartLines    CartLine[]
+  stockAlerts  StockAlert[]
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
@@ -533,6 +536,39 @@ model EmailOutbox {
   @@unique([orderId, kind])
   @@index([status, nextAt])
   @@map("email_outbox")
+}
+
+model StockAlert {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId    String
+  plan      ProductPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  locale    String
+  createdAt DateTime    @default(now())
+
+  @@unique([userId, planId])
+  @@index([planId])
+  @@map("stock_alerts")
+}
+
+model UserNotification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  key       String
+  locale    String
+  title     String
+  body      String
+  href      String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, key])
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("user_notifications")
 }
 
 model SupplierFulfillment {

@@ -17,6 +17,7 @@ import { ProductCard } from "@/components/product-card";
 import { ProductMark } from "@/components/product-mark";
 import { VariantSelector } from "./variant-selector";
 import { SupplierQuotePanel } from "./supplier-quote-panel";
+import { StockAlertButton } from "./stock-alert-button";
 import layout from "./product-detail.module.css";
 import { consumePlanReturn, trackStorefrontStep } from "@/lib/storefront-metrics";
 import styles from "./shop.module.css";
@@ -74,12 +75,7 @@ export function ProductDetailView({
     ...(productImageUrl(product) ? [productImageUrl(product)!] : []),
     ...product.galleryImageIds.map((id) => assetUrl(`/product-images/${id}`)),
   ];
-  const requestedPlan = product.plans.find(
-    (p) =>
-      p.id === requestedPlanId &&
-      availabilityOf(p) !== "OUT_OF_STOCK" &&
-      (p.inStock || p.quoteRequired),
-  );
+  const requestedPlan = product.plans.find((p) => p.id === requestedPlanId);
   const defaultPlan =
     requestedPlanId === undefined
       ? (product.plans.find((p) => availabilityOf(p) === "LOCAL_STOCK") ??
@@ -89,6 +85,7 @@ export function ProductDetailView({
   const activePlanId = selectedPlan === undefined ? (defaultPlan?.id ?? null) : selectedPlan;
   const plan = product.plans.find((p) => p.id === activePlanId) ?? null;
   const canBuy = !!plan && canBuyPlan(plan, payment);
+  const supplierCart = plan?.source === "SUPPLIER" && availabilityOf(plan) === "SUPPLIER_STOCK";
   const localeFa = locale === "fa";
   const unavailable = plan
     ? availabilityOf(plan) === "OUT_OF_STOCK"
@@ -130,7 +127,7 @@ export function ProductDetailView({
   };
 
   async function addToCart() {
-    if (!plan || !canBuy || buying) return;
+    if (!plan || (!canBuy && !supplierCart) || buying) return;
     if (!user || !token) {
       loginForPlan();
       return;
@@ -207,7 +204,6 @@ export function ProductDetailView({
             className={cn(
               "flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-lg border p-3 transition-colors",
               activePlanId === pl.id ? "border-primary bg-surface" : "border-border",
-              !pl.inStock && !pl.quoteRequired && "cursor-not-allowed opacity-60",
             )}
           >
             <span className="flex min-w-0 items-center gap-3">
@@ -216,7 +212,6 @@ export function ProductDetailView({
                 name="plan"
                 className="accent-primary"
                 checked={activePlanId === pl.id}
-                disabled={!pl.inStock && !pl.quoteRequired}
                 onChange={() => selectPlan(pl.id)}
               />
               <span className="break-words font-medium">
@@ -401,7 +396,16 @@ export function ProductDetailView({
               )}
             </div>
           )}
-          {plan?.quoteRequired && (
+          {plan && availabilityOf(plan) === "OUT_OF_STOCK" && user?.role !== "ADMIN" && (
+            <StockAlertButton
+              key={JSON.stringify([plan.id, token])}
+              planId={plan.id}
+              locale={locale}
+              loginPath={loginPath}
+              token={user?.role === "USER" ? token : null}
+            />
+          )}
+          {plan?.quoteRequired && availabilityOf(plan) === "ON_REQUEST" && (
             <SupplierQuotePanel
               key={plan.id + JSON.stringify(plan.variant) + (token ?? "anonymous")}
               plan={plan}
@@ -409,6 +413,25 @@ export function ProductDetailView({
               locale={locale}
               loginPath={loginPath}
             />
+          )}
+          {supplierCart && (
+            <>
+              <Button
+                type="button"
+                className="mt-4 w-full"
+                size="lg"
+                disabled={buying}
+                onClick={addToCart}
+              >
+                {buying ? <Spinner /> : null}
+                {localeFa ? "افزودن به سبد خرید" : "Add to cart"}
+              </Button>
+              <p className="mt-2 text-sm text-muted">
+                {localeFa
+                  ? "قیمت و موجودی تأمین‌کننده پیش از پرداخت در فاکتور دوباره بررسی می‌شود."
+                  : "We’ll recheck supplier price and stock on the invoice before payment."}
+              </p>
+            </>
           )}
           {plan && availabilityOf(plan) === "LOCAL_STOCK" && plan.availableStock <= 5 && (
             <p className="mt-3 text-sm text-danger">

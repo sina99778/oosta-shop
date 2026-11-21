@@ -22,7 +22,9 @@ import { indicativePrice } from "./pricing";
 import { readVariant, variantKey } from "./variant";
 import { reserveWallet, settleWallet } from "./wallet-budget";
 import { readManualSupplier } from "./manual-payment";
+import { requireManualAdmin } from "./manual-admin";
 import { queueOrderEmail } from "../../lib/mailer";
+import { addOrderNotification } from "../orders/order-notifications";
 import { notifyAdmin } from "../../bot";
 
 type PurchaseInput = {
@@ -444,6 +446,7 @@ async function applyResult(id: string, reference: string, raw: unknown) {
     await tx.order.update({ where: { id: job.orderId }, data: { paymentStatus: "PAID" } });
     if (readManualSupplier(current.order.paymentMetadata))
       await queueOrderEmail(tx, job.orderId, "ORDER_DELIVERED");
+    else await addOrderNotification(tx, current.order.userId, job.orderId, "ORDER_DELIVERED");
     return summary(
       await tx.supplierFulfillment.update({ where: { id }, data: { ...data, state: "DELIVERED" } }),
     );
@@ -461,22 +464,7 @@ async function applyResult(id: string, reference: string, raw: unknown) {
   return updated;
 }
 
-export async function dispatchManualSupplier(
-  id: string,
-  adminId: string,
-  registry: Registry,
-  acceptedCost?: string,
-) {
-  const checkAdmin = async (tx: Pick<Prisma.TransactionClient, "user">) => {
-    if (
-      !env.SUPPLIER_MANUAL_APPROVAL ||
-      (await tx.user.findUnique({ where: { id: adminId }, select: { role: true } }))?.role !==
-        "ADMIN"
-    )
-      throw new AppError(403, "FORBIDDEN", "Administrator required");
-  };
-  await checkAdmin(prisma);
-  const job = await prisma.supplierFulfillment.findUniqueOrThrow({ where: { id } });
+async function quoteManualSupplier(job: SupplierFulfillment, registry: Registry) {
   if (job.state !== "AWAITING_FUNDS") throw denied();
   const current = await eligible(prisma, job.orderId);
   if (!readManualSupplier(current.order.paymentMetadata)) throw denied();
@@ -498,8 +486,91 @@ export async function dispatchManualSupplier(
     undefined,
     true,
   );
+  if (selected.quote.currency !== job.currency) throw denied();
+  return selected;
+}
+
+type ManualSupplierPointer = { id: string } | { orderId: string };
+export async function manualSupplierWalletSnapshot(
+  pointer: ManualSupplierPointer,
+  adminId: string,
+  registry: Registry,
+) {
+  await requireManualAdmin(prisma, adminId);
+  const job = await prisma.supplierFulfillment.findUniqueOrThrow({
+    where: pointer,
+    include: {
+      order: {
+        select: {
+          paymentMetadata: true,
+          items: {
+            take: 1,
+            select: { product: { select: { name: true } }, plan: { select: { label: true } } },
+          },
+        },
+      },
+    },
+  });
+  if (!readManualSupplier(job.order.paymentMetadata)) throw denied();
+  const [item] = job.order.items;
+  const approved = job.approvedCost ?? job.maximumCost;
+  const fields = {
+    id: job.id,
+    orderId: job.orderId,
+    state: job.state,
+    supplier: job.supplier,
+    reference: job.reference,
+    currency: job.currency,
+    product: item?.product.name ?? "",
+    plan: item?.plan.label ?? "",
+    approved,
+  };
+  const adapter = registry.get(job.supplier as SupplierId);
+  if (job.state !== "AWAITING_FUNDS")
+    return { ...fields, cost: null, wallet: null, budget: null, shortfall: null, blocked: null };
+  const [quote, rawWallet, budget] = await Promise.all([
+    quoteManualSupplier(job, registry).catch(() => null),
+    adapter?.walletBalance?.().catch(() => null),
+    prisma.supplierWalletBudget.findUnique({ where: { supplier: job.supplier } }),
+  ]);
+  const cost = quote ? new Prisma.Decimal(quote.quote.cost) : null;
+  const wallet =
+    rawWallet?.currency === job.currency && /^\d{1,12}(\.\d{1,6})?$/.test(rawWallet.amount)
+      ? new Prisma.Decimal(rawWallet.amount)
+      : null;
+  const budgetAmount =
+    budget?.enabled && budget.currency === job.currency ? budget.remainingAmount : null;
+  const shortfall = cost && wallet ? Prisma.Decimal.max(0, cost.sub(wallet)) : null;
+  const blocked: "PRICE" | "WALLET" | "BUDGET" | null = !cost
+    ? "PRICE"
+    : !wallet
+      ? "WALLET"
+      : !budgetAmount || budget?.activeReference || cost.gt(budgetAmount) || wallet.gt(budgetAmount)
+        ? "BUDGET"
+        : null;
+  return { ...fields, cost, wallet, budget: budgetAmount, shortfall, blocked };
+}
+
+export async function dispatchManualSupplier(
+  id: string,
+  adminId: string,
+  registry: Registry,
+  acceptedCost?: string,
+  confirmation?: { reference: string; currency: string },
+) {
+  await requireManualAdmin(prisma, adminId);
+  const job = await prisma.supplierFulfillment.findUniqueOrThrow({ where: { id } });
+  if (
+    confirmation &&
+    (job.reference !== confirmation.reference || job.currency !== confirmation.currency)
+  )
+    throw denied();
+  const selected = await quoteManualSupplier(job, registry);
+  const adapter = registry.get(job.supplier as SupplierId)!;
   const cost = new Prisma.Decimal(selected.quote.cost);
   const approved = job.approvedCost ?? job.maximumCost;
+  if (confirmation && (!acceptedCost || !cost.eq(acceptedCost)))
+    throw new AppError(409, "SUPPLIER_PRICE_CHANGED", "Supplier confirmation is stale");
   if (cost.gt(approved) && (!acceptedCost || !cost.eq(acceptedCost)))
     throw new AppError(409, "SUPPLIER_COST_INCREASED", "New supplier cost must be accepted", {
       cost: cost.toString(),
@@ -507,7 +578,7 @@ export async function dispatchManualSupplier(
     });
   await prisma.$transaction(async (tx) => {
     await lockOrder(tx, job.orderId);
-    await checkAdmin(tx);
+    await requireManualAdmin(tx, adminId);
     const latest = await tx.supplierFulfillment.findUniqueOrThrow({ where: { id } });
     const fresh = await eligible(tx, job.orderId);
     if (

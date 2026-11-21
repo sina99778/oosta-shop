@@ -3,6 +3,7 @@ import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/httpError";
 import { readVariant, variantKey } from "../suppliers/variant";
 import { cartChanged } from "./cart-state";
+import { addOrderNotification } from "./order-notifications";
 
 const day = 86_400_000;
 const reminderLeadDays = 3;
@@ -19,6 +20,7 @@ const orderSelect = {
 } satisfies Prisma.OrderSelect;
 const reminderOrderSelect = {
   ...orderSelect,
+  userId: true,
   user: { select: { role: true, email: true, verifiedRecoveryEmail: true } },
 } satisfies Prisma.OrderSelect;
 const itemSelect = {
@@ -175,20 +177,31 @@ export async function queueRenewalReminders(now = new Date()) {
       select: { ...itemSelect, order: { select: reminderOrderSelect } },
       orderBy: { id: "asc" },
     });
-    const jobs = items.flatMap((item) => {
-      const { order } = item;
-      return order.user.email && reminderDue(order, item, now)
-        ? [
-            {
-              orderId: order.id,
-              kind: renewalEmailPrefix + item.id,
-              to: order.user.email,
-              nextAt: now,
-            },
-          ]
-        : [];
-    });
-    if (jobs.length) await prisma.emailOutbox.createMany({ data: jobs, skipDuplicates: true });
+    const jobs = items.flatMap((item) =>
+      reminderDue(item.order, item, now) && item.order.user.email
+        ? [{ item, to: item.order.user.email }]
+        : [],
+    );
+    if (jobs.length)
+      await prisma.$transaction(async (tx) => {
+        await tx.emailOutbox.createMany({
+          data: jobs.map(({ item, to }) => ({
+            orderId: item.order.id,
+            kind: renewalEmailPrefix + item.id,
+            to,
+            nextAt: now,
+          })),
+          skipDuplicates: true,
+        });
+        for (const { item } of jobs)
+          await addOrderNotification(
+            tx,
+            item.order.userId,
+            item.order.id,
+            "SUBSCRIPTION_RENEWAL",
+            item.id,
+          );
+      });
     if (candidates.length < 100) return;
     cursor = candidates[candidates.length - 1].id;
   }
