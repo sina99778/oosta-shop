@@ -91,9 +91,10 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
 }
 
 export function createRequestRecoveryEmailVerification(send?: SendMail) {
+  const base = passwordResetBaseUrl();
   return async (req: Request, res: Response): Promise<void> => {
     const userId = requireUserSession(req);
-    if (!send || !passwordResetBaseUrl()) {
+    if (!send || !base) {
       throw new AppError(
         503,
         "PASSWORD_RESET_UNAVAILABLE",
@@ -105,6 +106,7 @@ export function createRequestRecoveryEmailVerification(send?: SendMail) {
       userId,
       currentPassword,
       locale,
+      base,
       send,
     );
     res.status(202).json({ accepted: true, deliveryRequested });

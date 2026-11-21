@@ -93,6 +93,7 @@ const { OrderDetail } = require("../apps/web/components/order-detail.tsx");
 const { TicketList } = require("../apps/web/components/tickets/ticket-list.tsx");
 const { TicketThread } = require("../apps/web/components/tickets/ticket-thread.tsx");
 const { DashboardOrders } = require("../apps/web/components/dashboard-orders.tsx");
+const { AccountRecoveryEmail } = require("../apps/web/components/account-recovery-email.tsx");
 const { Button } = require("../apps/web/components/ui/button.tsx");
 const { Header } = require("../apps/web/components/layout/header.tsx");
 const { AuthForm } = require("../apps/web/components/auth-form.tsx");
@@ -308,6 +309,24 @@ assert(thread.includes("پاسخ نمونه"));
 assert(thread.includes("ارسال پاسخ، تیکت را دوباره باز می‌کند"));
 assert(!customerPage(TicketThread, { ticketId: "other-ticket" }).includes("پاسخ نمونه"));
 assert(customerPage(DashboardOrders).includes("در حال پیگیری"));
+headerUser = {
+  role: "USER",
+  name: "خریدار نمونه",
+  email: "shop-fixture@example.invalid",
+  phone: null,
+};
+const profile = customerPage(DashboardOrders);
+assert(profile.includes("حساب من"));
+assert(profile.includes("خریدار نمونه"));
+assert(profile.includes("shop-fixture@example.invalid"));
+assert(profile.includes('id="account-orders"'));
+assert(profile.includes("/fa/dashboard/security#recovery-code"));
+const security = customerPage(AccountRecoveryEmail);
+assert.match(security, /name="code"[^>]*|autocomplete="one-time-code"/i);
+assert(security.includes('id="recovery-code"'));
+assert(security.includes('name="password"'));
+headerUser = { ...headerUser, recoveryEmailVerified: true };
+assert(!customerPage(AccountRecoveryEmail).includes('name="code"'));
 
 const config = require("../apps/web/next.config.ts").default;
 Promise.resolve(config.headers?.())

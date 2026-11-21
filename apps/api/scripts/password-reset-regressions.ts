@@ -124,7 +124,11 @@ async function main() {
   assert.equal(repeatedEnrollment.statusCode, 202);
   assert.deepEqual(repeatedEnrollment.json(), { accepted: true, deliveryRequested: false });
   assert.equal(verificationEmails.length, 1);
-  const verificationToken = verificationEmails[0].text.split("\n").at(-1)!;
+  const verificationToken = verificationEmails[0].text
+    .split("\n")
+    .find((line) => /^[A-Za-z0-9_-]{43}$/.test(line));
+  assert(verificationToken);
+  assert.match(verificationEmails[0].text, /\/en\/dashboard\/security#recovery-code$/);
   assert(verificationEmails[0].html?.includes(verificationToken));
   assert.equal(
     (await confirm(verificationToken)).statusCode,

@@ -13,7 +13,7 @@ export function AccountFrame({
   children,
 }: {
   locale: Locale;
-  section: "orders" | "inbox" | "support" | "security";
+  section: "overview" | "orders" | "inbox" | "support" | "security";
   title: ReactNode;
   detail?: ReactNode;
   action?: ReactNode;
@@ -25,6 +25,12 @@ export function AccountFrame({
       <nav aria-label={fa ? "حساب کاربری" : "Customer account"} className={styles.nav}>
         <Link
           href={`/${locale}/dashboard`}
+          aria-current={section === "overview" ? "page" : undefined}
+        >
+          {fa ? "حساب من" : "My account"}
+        </Link>
+        <Link
+          href={`/${locale}/dashboard#account-orders`}
           aria-current={section === "orders" ? "location" : undefined}
         >
           {fa ? "سفارش‌ها" : "Orders"}

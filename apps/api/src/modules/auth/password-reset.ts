@@ -112,6 +112,7 @@ export async function issueRecoveryVerification(
   userId: string,
   currentPassword: string,
   locale: ForgotPasswordInput["locale"],
+  base: URL,
   send: SendMail,
 ) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -155,6 +156,10 @@ export async function issueRecoveryVerification(
       subject,
       body: instructions,
       code: challenge.token,
+      action: {
+        label: locale === "fa" ? "رفتن به فرم ورود کد" : "Open the verification form",
+        url: new URL(`/${locale}/dashboard/security#recovery-code`, base).href,
+      },
     }),
   ).catch(() => {
     console.error("[password-reset] Could not record the recovery email delivery result");

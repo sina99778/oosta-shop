@@ -142,6 +142,14 @@ export function PasswordRecoveryForm({
             ) : (
               <>
                 <p className="text-sm text-muted">{recovery.requestHint}</p>
+                <p className="text-sm text-muted">
+                  {locale === "fa"
+                    ? "برای تغییر رمز، پیوند داخل ایمیل را باز کن. اگر ایمیلت هنوز تأیید نشده، کد تأیید را در بخش امنیت حساب وارد کن."
+                    : "Open the link in the email to reset your password. If your address is unverified, enter your verification code in Account security."}{" "}
+                  <Link href={`/${locale}/dashboard/security#recovery-code`} className={textLink}>
+                    {locale === "fa" ? "فرم تأیید ایمیل" : "Email verification form"}
+                  </Link>
+                </p>
                 <label className="block text-sm">
                   <span className="mb-1 block">{recovery.email}</span>
                   <Input

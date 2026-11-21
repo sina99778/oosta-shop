@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, ApiError } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { useAuth } from "@/lib/auth";
@@ -11,21 +11,26 @@ import styles from "./account.module.css";
 
 export function AccountRecoveryEmail({ locale }: { locale: Locale }) {
   const { retrySession, token, user } = useAuth();
-  const [codeSent, setCodeSent] = useState(false);
   const [deliveryRequested, setDeliveryRequested] = useState<boolean>();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"verify" | "request" | null>(null);
+  const [error, setError] = useState<{ form: "verify" | "request"; message: string } | null>(null);
+  const codeInput = useRef<HTMLInputElement>(null);
   const fa = locale === "fa";
+  const showCode = user?.role === "USER" && Boolean(user.email) && !user.recoveryEmailVerified;
+  useEffect(() => {
+    if (showCode && window.location.hash === "#recovery-code") codeInput.current?.focus();
+  }, [showCode]);
   if (user?.role !== "USER" || !user.email) return null;
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>, form: "verify" | "request") {
     event.preventDefault();
     if (busy) return;
-    const data = new FormData(event.currentTarget);
+    const element = event.currentTarget;
+    const data = new FormData(element);
     setError(null);
-    setBusy(true);
+    setBusy(form);
     try {
-      if (codeSent) {
+      if (form === "verify") {
         await api.post(
           "/auth/recovery-email/verify",
           { token: String(data.get("code") ?? "").replace(/\s/g, ""), locale },
@@ -39,19 +44,22 @@ export function AccountRecoveryEmail({ locale }: { locale: Locale }) {
           token ?? undefined,
         );
         setDeliveryRequested(result.deliveryRequested);
-        setCodeSent(true);
+        element.reset();
+        codeInput.current?.focus();
       }
     } catch (err) {
-      const invalidCode = codeSent && err instanceof ApiError && err.code === "VALIDATION_ERROR";
-      setError(
-        invalidCode
+      const invalidCode =
+        form === "verify" && err instanceof ApiError && err.code === "VALIDATION_ERROR";
+      setError({
+        form,
+        message: invalidCode
           ? fa
             ? "کد تأیید ناقص یا نامعتبر است. کد را کامل از ایمیل کپی کنید."
             : "The verification code is incomplete or invalid. Copy the full code from your email."
           : apiErrorMessage(err, locale, fa ? "انجام نشد. دوباره تلاش کنید." : "Please try again."),
-      );
+      });
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -74,59 +82,75 @@ export function AccountRecoveryEmail({ locale }: { locale: Locale }) {
           {fa ? "ایمیل بازیابی تأیید شد." : "Recovery email verified."} <bdi>{user.email}</bdi>
         </p>
       ) : (
-        <form
-          key={String(codeSent)}
-          method="post"
-          onSubmit={submit}
-          className="mt-2 max-w-sm space-y-3"
-        >
-          <p role={codeSent ? "status" : undefined} className="text-sm leading-relaxed text-muted">
-            {codeSent
-              ? codeGuidance
-              : fa
-                ? "برای فعال کردن بازیابی رمز، ایمیل حسابتان را تأیید کنید."
-                : "Verify your account email to enable password recovery."}{" "}
+        <>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            {fa
+              ? "کد تأیید این نشانی را همین‌جا وارد کن."
+              : "Enter the verification code for this address here."}{" "}
             <bdi>{user.email}</bdi>
           </p>
-          {codeSent ? (
-            <label className="block">
-              <span className="mb-1 block text-sm text-muted">
-                {fa ? "کد تأیید" : "Verification code"}
-              </span>
-              <Input name="code" autoComplete="one-time-code" dir="ltr" required />
-            </label>
-          ) : (
-            <label className="block">
-              <span className="mb-1 block text-sm text-muted">
-                {fa ? "رمز عبور فعلی" : "Current password"}
-              </span>
-              <Input name="password" type="password" autoComplete="current-password" required />
-            </label>
-          )}
-          {error && (
-            <p role="alert" className="text-sm text-danger">
-              {error}
+          {deliveryRequested !== undefined && (
+            <p role="status" className="mt-3 text-sm text-muted">
+              {codeGuidance}
             </p>
           )}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="submit" disabled={busy} aria-busy={busy}>
-              {codeSent ? (fa ? "تأیید ایمیل" : "Verify email") : fa ? "ارسال کد" : "Send code"}
-            </Button>
-            {codeSent && (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={() => {
-                  setCodeSent(false);
-                  setError(null);
-                }}
-              >
-                {fa ? "بازگشت" : "Back"}
+          <div className={styles.recoveryGrid}>
+            <form
+              method="post"
+              onSubmit={(event) => void submit(event, "verify")}
+              className="space-y-3"
+            >
+              <label htmlFor="recovery-code" className="block text-sm font-semibold">
+                {fa ? "کد تأیید ایمیل" : "Email verification code"}
+              </label>
+              <Input
+                id="recovery-code"
+                ref={codeInput}
+                name="code"
+                autoComplete="one-time-code"
+                dir="ltr"
+                required
+              />
+              {error?.form === "verify" && (
+                <p role="alert" className="text-sm text-danger">
+                  {error.message}
+                </p>
+              )}
+              <Button type="submit" disabled={busy !== null} aria-busy={busy === "verify"}>
+                {fa ? "تأیید ایمیل" : "Verify email"}
               </Button>
-            )}
+            </form>
+            <form
+              method="post"
+              onSubmit={(event) => void submit(event, "request")}
+              className="space-y-3"
+            >
+              <label htmlFor="recovery-password" className="block text-sm font-semibold">
+                {fa ? "رمز فعلی برای دریافت کد" : "Current password to request a code"}
+              </label>
+              <Input
+                id="recovery-password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+              />
+              {error?.form === "request" && (
+                <p role="alert" className="text-sm text-danger">
+                  {error.message}
+                </p>
+              )}
+              <Button
+                type="submit"
+                variant="outline"
+                disabled={busy !== null}
+                aria-busy={busy === "request"}
+              >
+                {fa ? "ارسال کد به ایمیل" : "Send verification code"}
+              </Button>
+            </form>
           </div>
-        </form>
+        </>
       )}
     </section>
   );

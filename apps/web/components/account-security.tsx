@@ -102,12 +102,11 @@ export function AccountSecurity({ locale }: { locale: Locale }) {
       section="security"
       title={fa ? "امنیت حساب" : "Account security"}
       detail={
-        fa
-          ? "رمز عبور را تغییر دهید یا از همه دستگاه‌ها خارج شوید"
-          : "Change your password or sign out everywhere"
+        fa ? "ایمیل بازیابی، تغییر رمز و مدیریت نشست‌ها" : "Recovery email, password and sessions"
       }
     >
       <div className={styles.stack}>
+        <AccountRecoveryEmail locale={locale} />
         <section className={styles.panel} aria-labelledby="change-password-title">
           <h2 id="change-password-title" className="text-lg font-bold">
             {fa ? "تغییر رمز عبور" : "Change password"}
@@ -148,8 +147,6 @@ export function AccountSecurity({ locale }: { locale: Locale }) {
             </Button>
           </form>
         </section>
-
-        <AccountRecoveryEmail locale={locale} />
 
         <section className={styles.panel} aria-labelledby="sessions-title">
           <h2 id="sessions-title" className="text-lg font-bold">
