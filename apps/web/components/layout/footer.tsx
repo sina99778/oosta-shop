@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { Container } from "@/components/ui/container";
 import { assetUrl } from "@/lib/api";
-import { localizedSetting, telegramSupportHref, type SiteConfig } from "@/lib/settings";
-import { sitePolicies } from "@/lib/site-policies";
+import {
+  localizedSetting,
+  publicContactLinks,
+  telegramSupportHref,
+  type SiteConfig,
+} from "@/lib/settings";
+import { sitePolicies, sitePolicy } from "@/lib/site-policies";
 import type { Locale } from "@/lib/i18n";
 import { Wordmark } from "@/components/wordmark";
 import styles from "./site-chrome.module.css";
@@ -17,10 +22,6 @@ type FooterDict = {
 };
 
 type NavDict = { home: string; products: string; blog: string; support: string; dashboard: string };
-
-function socialHref(value: string, base: string) {
-  return /^https?:\/\//i.test(value) ? value : `${base}/${value.replace(/^@/, "")}`;
-}
 
 export function Footer({
   locale,
@@ -38,22 +39,7 @@ export function Footer({
   const { settings, enamadBadge } = config;
   const about = localizedSetting(settings, "footerAbout", locale) ?? dict.aboutDefault;
   const telegramHref = telegramSupportHref(settings);
-  const contact = [
-    ...(settings.contactEmail
-      ? [{ label: settings.contactEmail, href: `mailto:${settings.contactEmail}` }]
-      : []),
-    ...(settings.contactPhone
-      ? [{ label: settings.contactPhone, href: `tel:${settings.contactPhone}` }]
-      : []),
-    ...(settings.contactInstagram
-      ? [
-          {
-            label: "Instagram",
-            href: socialHref(settings.contactInstagram, "https://instagram.com"),
-          },
-        ]
-      : []),
-  ];
+  const contact = publicContactLinks(settings);
   const badge = enamadBadge ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -83,6 +69,9 @@ export function Footer({
           <Link prefetch={false} href={`${base}/blog`}>
             {nav.blog}
           </Link>
+          <Link prefetch={false} href={`${base}/p/about`}>
+            {sitePolicy("about", locale)?.title}
+          </Link>
           <a href="https://t.me/oostaAi" target="_blank" rel="noopener noreferrer">
             {fa ? "کانال اوستا" : "Oosta Telegram channel"}
           </a>
@@ -95,14 +84,19 @@ export function Footer({
           <Link prefetch={false} href={`${base}/support`}>
             {fa ? "ثبت و پیگیری تیکت" : "Open or track a ticket"}
           </Link>
-          {sitePolicies.map(({ slug, ...translations }) => (
-            <Link prefetch={false} href={`${base}/p/${slug}`} key={slug}>
-              {translations[locale].title}
-            </Link>
-          ))}
+          {sitePolicies
+            .filter(({ slug }) => slug !== "about" && slug !== "contact")
+            .map(({ slug, ...translations }) => (
+              <Link prefetch={false} href={`${base}/p/${slug}`} key={slug}>
+                {translations[locale].title}
+              </Link>
+            ))}
         </section>
         <section className={styles.footerColumn} aria-labelledby="footer-contact">
           <h2 id="footer-contact">{dict.contactTitle}</h2>
+          <Link prefetch={false} href={`${base}/p/contact`}>
+            {sitePolicy("contact", locale)?.title}
+          </Link>
           <a
             href={telegramHref}
             target="_blank"

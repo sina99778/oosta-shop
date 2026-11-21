@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
-import { cartChangedEvent } from "@/lib/cart-events";
+import { cartChangedEvent, isGuestCartChange } from "@/lib/cart-events";
+import { useGuestCart } from "@/lib/guest-cart";
 import { notificationsChangedEvent } from "@/lib/notification-events";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
@@ -39,6 +40,7 @@ export function Header({
 }) {
   const { user, token, logout, loading } = useAuth();
   const cartSession = user?.role === "USER" ? token : null;
+  const guestCart = useGuestCart();
   const { data: cart, refetch } = useApi<{ count: number }>(
     cartSession ? "/cart/count" : null,
     cartSession ?? undefined,
@@ -59,7 +61,8 @@ export function Header({
   const cartLabel = fa ? "سبد خرید" : "Cart";
   const cartHref = `${base}/cart`;
   const inboxHref = `${base}/dashboard/inbox`;
-  const count = cart?.count ? cart.count.toLocaleString(fa ? "fa-IR" : "en-US") : null;
+  const itemCount = cartSession ? (cart?.count ?? 0) : !loading && !user ? guestCart.length : 0;
+  const count = itemCount > 0 ? itemCount.toLocaleString(fa ? "fa-IR" : "en-US") : null;
   const unread = notifications?.count ?? 0;
   const unreadCount =
     unread > 0 ? Math.min(unread, 99).toLocaleString(fa ? "fa-IR" : "en-US") : null;
@@ -76,13 +79,16 @@ export function Header({
       }
     };
     const timer = setInterval(refreshVisible, 60000);
+    const refreshCart = (event: Event) => {
+      if (!isGuestCartChange(event)) refetch();
+    };
     document.addEventListener("visibilitychange", refreshVisible);
-    window.addEventListener(cartChangedEvent, refetch);
+    window.addEventListener(cartChangedEvent, refreshCart);
     window.addEventListener(notificationsChangedEvent, refetchNotifications);
     return () => {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", refreshVisible);
-      window.removeEventListener(cartChangedEvent, refetch);
+      window.removeEventListener(cartChangedEvent, refreshCart);
       window.removeEventListener(notificationsChangedEvent, refetchNotifications);
     };
   }, [cartSession, refetch, refetchNotifications]);

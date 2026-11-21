@@ -75,3 +75,91 @@
   border-top: 1px solid var(--c-border);
   padding-top: 1rem;
 }
+
+.mobileBuyBar {
+  display: none;
+}
+
+@media (max-width: 55.999rem) {
+  .mobileBuyBar {
+    --c-fg: #f3f6f8;
+    --c-muted: #bacbd8;
+    --c-card: #182a3f;
+    --c-surface: #223a50;
+    --c-border: #3d5266;
+    --c-primary: var(--c-mint);
+    --c-primary-hover: #d5f7e9;
+    --c-on-primary: #102b28;
+    display: block;
+    position: fixed;
+    z-index: 35;
+    inset-inline: 0;
+    inset-block-end: 0;
+    padding-block: 0.625rem calc(0.625rem + env(safe-area-inset-bottom, 0px));
+    padding-inline: max(1rem, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+    border-block-start: 1px solid var(--c-border);
+    background: var(--c-navy);
+    color: var(--c-fg);
+    box-shadow: 0 -4px 16px #09142035;
+  }
+
+  .mobileBuyRow,
+  .mobileBuyFeedback {
+    max-inline-size: 40rem;
+    margin-inline: auto;
+  }
+
+  .mobileBuyRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, max-content);
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .mobileBuyRow :is(button, a) {
+    min-block-size: 44px;
+    block-size: auto;
+    max-inline-size: min(43vw, 14rem);
+    padding: 0.5rem 0.75rem;
+    text-align: center;
+    font-size: 0.875rem;
+    line-height: 1.45;
+  }
+
+  .mobileBuySummary,
+  .mobileBuySummary strong {
+    font-size: 0.9375rem;
+    line-height: 1.4;
+  }
+
+  .mobileBuySummary small {
+    font-size: 0.8125rem;
+  }
+
+  .mobileBuyTitle {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
+  }
+
+  .mobileBuyFeedback {
+    display: grid;
+    gap: 0.25rem;
+    margin-block-start: 0.25rem;
+    overflow-wrap: anywhere;
+  }
+
+  .mobileBuyFeedback [role="alert"] {
+    color: #fca5a5;
+  }
+
+  :global(html):has(.mobileBuyBar) {
+    scroll-padding-block-end: calc(8rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  :global(.oosta-footer):where(:global(body):has(.mobileBuyBar) *) {
+    padding-block-end: calc(8rem + env(safe-area-inset-bottom, 0px));
+  }
+}

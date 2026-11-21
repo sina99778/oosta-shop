@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { NextConfig } from "next";
 import { PRODUCT_REDIRECTS } from "./lib/catalog-editorial";
+import { siteInfoSlugs } from "./lib/site-policies";
 
 const nextConfig: NextConfig = {
   // Produce a self-contained server bundle for Docker.
@@ -8,11 +9,18 @@ const nextConfig: NextConfig = {
   // Trace workspace dependencies from the monorepo root so the bundle is complete.
   outputFileTracingRoot: path.join(__dirname, "../../"),
   async redirects() {
-    return Object.entries(PRODUCT_REDIRECTS).map(([from, to]) => ({
-      source: `/:locale(en|fa)/products/${from}`,
-      destination: `/:locale/products/${to}`,
-      permanent: true,
-    }));
+    return [
+      ...Object.entries(PRODUCT_REDIRECTS).map(([from, to]) => ({
+        source: `/:locale(en|fa)/products/${from}`,
+        destination: `/:locale/products/${to}`,
+        permanent: true,
+      })),
+      ...siteInfoSlugs.map((slug) => ({
+        source: `/:locale(en|fa)/${slug}`,
+        destination: `/:locale/p/${slug}`,
+        permanent: true,
+      })),
+    ];
   },
   async headers() {
     return [

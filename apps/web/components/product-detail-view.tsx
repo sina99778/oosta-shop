@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { api, assetUrl, productImageUrl } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { notifyCartChanged } from "@/lib/cart-events";
+import { addGuestCartItem } from "@/lib/guest-cart";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Markdown } from "@/components/markdown";
 import { ProductCard } from "@/components/product-card";
 import { IndicativePriceLabel } from "./indicative-price";
+import { ProductPurchaseAction } from "./product-purchase-action";
 import { ProductMark } from "@/components/product-mark";
 import { VariantSelector } from "./variant-selector";
 import { SupplierQuotePanel } from "./supplier-quote-panel";
@@ -52,7 +54,7 @@ export function ProductDetailView({
   dict: Dictionary;
 }) {
   const { slug } = product;
-  const { user, token } = useAuth();
+  const { user, token, loading: authLoading, sessionError } = useAuth();
   const router = useRouter();
   const t = dict.product;
 
@@ -95,6 +97,18 @@ export function ProductDetailView({
   const canBuy = !!plan && canBuyPlan(plan, payment);
   const supplierCart = plan?.source === "SUPPLIER" && availabilityOf(plan) === "SUPPLIER_STOCK";
   const localeFa = locale === "fa";
+  const purchaseSummary = plan
+    ? {
+        label: planDisplayLabel(plan.label, localeFa),
+        price: plan.quoteRequired ? (
+          <IndicativePriceLabel price={supplierCart ? plan.indicativePrice : null} locale={locale} />
+        ) : (
+          <strong>
+            <bdi>{formatPrice(plan.effectivePrice, plan.currency, locale)}</bdi>
+          </strong>
+        ),
+      }
+    : undefined;
   const unavailable = plan
     ? availabilityOf(plan) === "OUT_OF_STOCK"
     : product.availability === "OUT_OF_STOCK" || product.plans.length === 0;
@@ -120,11 +134,6 @@ export function ProductDetailView({
     if (id) trackStorefrontStep("plan_selected");
   }
 
-  function loginForPlan() {
-    trackStorefrontStep("plan_login_started");
-    router.push(loginPath);
-  }
-
   const cardLabels = {
     from: dict.common.from,
     inStock: dict.common.inStock,
@@ -135,16 +144,24 @@ export function ProductDetailView({
   };
 
   async function addToCart() {
-    if (!plan || (!canBuy && !supplierCart) || buying) return;
-    if (!user || !token) {
-      loginForPlan();
-      return;
-    }
+    if (!plan || (!canBuy && !supplierCart) || buying || authLoading) return;
     setBuying(true);
     setBuyError(null);
     try {
-      await api.post("/cart/items", { planId: plan.id }, token);
-      notifyCartChanged();
+      if (sessionError) {
+        setBuyError(localeFa ? "وضعیت ورود مشخص نیست. صفحه را تازه کن." : "Reload to check your sign-in status.");
+        return;
+      }
+      if (!user) {
+        if (addGuestCartItem(plan.id) === "full") {
+          setBuyError(localeFa ? "سبد مهمان پر است و تا ۱۰ قلم جا دارد." : "Your guest cart already has ten items.");
+          return;
+        }
+      } else {
+        if (!token) return;
+        await api.post("/cart/items", { planId: plan.id }, token);
+        notifyCartChanged();
+      }
       router.push(`/${locale}/cart`);
     } catch (error) {
       setBuyError(apiErrorMessage(error, locale, dict.common.somethingWrong));
@@ -419,6 +436,7 @@ export function ProductDetailView({
               locale={locale}
               loginPath={loginPath}
               token={user?.role === "USER" ? token : null}
+              purchaseSummary={purchaseSummary}
             />
           )}
           {plan?.quoteRequired && availabilityOf(plan) === "ON_REQUEST" && (
@@ -430,45 +448,40 @@ export function ProductDetailView({
               loginPath={loginPath}
             />
           )}
-          {supplierCart && (
-            <>
-              <Button
-                type="button"
-                className="mt-4 w-full"
-                size="lg"
-                disabled={buying}
-                onClick={addToCart}
-              >
-                {buying ? <Spinner /> : null}
-                {localeFa ? "افزودن به سبد خرید" : "Add to cart"}
-              </Button>
-              <p className="mt-2 text-sm text-muted">
-                {localeFa
-                  ? "قیمت و موجودی تأمین‌کننده پیش از پرداخت در فاکتور دوباره بررسی می‌شود."
-                  : "We’ll recheck supplier price and stock on the invoice before payment."}
-              </p>
-            </>
-          )}
           {plan && availabilityOf(plan) === "LOCAL_STOCK" && plan.availableStock <= 5 && (
             <p className="mt-3 text-sm text-danger">
               {plan.availableStock.toLocaleString(locale)} {t.left}
             </p>
           )}
-          {buyError && (
-            <p role="alert" className="mt-3 text-sm text-danger">
-              {buyError}
+          {(canBuy || supplierCart) && (
+            <ProductPurchaseAction
+              key={plan?.id}
+              locale={locale}
+              summary={purchaseSummary}
+              feedback={
+                buyError && (
+                  <p role="alert" className="text-sm text-danger">
+                    {buyError}
+                  </p>
+                )
+              }
+            >
+              <Button type="button" size="lg" disabled={buying || authLoading} onClick={addToCart}>
+                {buying ? <Spinner /> : null}
+                {localeFa ? "افزودن به سبد خرید" : "Add to cart"}
+              </Button>
+            </ProductPurchaseAction>
+          )}
+          {supplierCart && (
+            <p className="mt-2 text-sm text-muted">
+              {localeFa
+                ? "قیمت و موجودی تأمین‌کننده پیش از پرداخت در فاکتور دوباره بررسی می‌شود."
+                : "We’ll recheck supplier price and stock on the invoice before payment."}
             </p>
           )}
 
           {plan && !plan.quoteRequired && availabilityOf(plan) === "LOCAL_STOCK" && (
             <>
-              {canBuy && (
-                <Button className="mt-4 w-full" size="lg" disabled={buying} onClick={addToCart}>
-                  {buying ? <Spinner /> : null}
-                  {localeFa ? "افزودن به سبد خرید" : "Add to cart"}
-                </Button>
-              )}
-
               {!canBuy && (
                 <p role="status" className="mt-3 text-sm text-muted">
                   {localeFa

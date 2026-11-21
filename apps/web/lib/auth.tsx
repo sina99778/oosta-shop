@@ -18,6 +18,8 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import { api, ApiError } from "./api";
+import { notifyCartChanged } from "./cart-events";
+import { readGuestCart, transferGuestCart, type GuestCartTransfer } from "./guest-cart";
 
 export type AuthUser = {
   id: string;
@@ -30,6 +32,7 @@ export type AuthUser = {
 
 type AuthResult = { user: AuthUser };
 type SignupInput = { name: string; email?: string; phone?: string; password: string };
+type TransferState = GuestCartTransfer | { status: "moving"; unavailable: 0 };
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -37,6 +40,8 @@ type AuthContextValue = {
   loading: boolean;
   sessionError: boolean;
   retrySession: () => void;
+  guestCartTransfer: TransferState | null;
+  retryGuestCartTransfer: () => void;
   login: (identifier: string, password: string) => Promise<void>;
   signup: (input: SignupInput) => Promise<void>;
   logout: () => Promise<void>;
@@ -56,6 +61,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [sessionError, setSessionError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [transferAttempt, setTransferAttempt] = useState(0);
+  const [transfer, setTransfer] = useState<{
+    marker: string;
+    result: TransferState;
+  } | null>(null);
+  const retryGuestCartTransfer = useCallback(() => {
+    setTransfer(null);
+    setTransferAttempt((previous) => previous + 1);
+  }, []);
   const acceptUser = useCallback((next: AuthUser | null) => {
     generation.current++;
     const marker = next ? `session:${next.id}:${generation.current}` : null;
@@ -106,6 +120,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener("oosta:unauthorized", invalidate);
     return () => window.removeEventListener("oosta:unauthorized", invalidate);
   }, [acceptUser]);
+
+  useEffect(() => {
+    if (user?.role !== "USER" || !token || readGuestCart().length === 0) return;
+    let active = true;
+    const isCurrent = () => active && activeMarker.current === token;
+    queueMicrotask(() => {
+      if (!isCurrent()) return;
+      setTransfer({ marker: token, result: { status: "moving", unavailable: 0 } });
+      void transferGuestCart(
+        (planId) => api.post("/cart/items", { planId, expectedCustomerId: user.id }, token),
+        isCurrent,
+      ).then((result) => {
+        if (!isCurrent()) return;
+        setTransfer({ marker: token, result });
+        notifyCartChanged();
+      });
+    });
+    return () => { active = false; };
+  }, [user, token, transferAttempt]);
 
   const accept = useCallback(
     (result: AuthResult) => {
@@ -158,6 +191,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       sessionError,
       retrySession,
+      guestCartTransfer: transfer?.marker === token ? transfer?.result ?? null : null,
+      retryGuestCartTransfer,
       login,
       signup,
       logout,
@@ -170,6 +205,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       sessionError,
       retrySession,
+      transfer,
+      retryGuestCartTransfer,
       login,
       signup,
       logout,

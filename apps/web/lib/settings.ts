@@ -47,6 +47,29 @@ export function telegramSupportHref(settings: SiteSettings): string {
   return `https://t.me/${chat ?? deepLink ?? "oostaAiSupport"}`;
 }
 
+export function publicContactLinks(settings: SiteSettings) {
+  const links: { label: string; href: string }[] = [];
+  const email = settings.contactEmail?.trim();
+  if (email && /^[^\s@?#%,]+@[a-z\d.-]+\.[a-z]{2,}$/i.test(email)) {
+    const [name, domain] = email.split("@");
+    links.push({ label: email, href: `mailto:${encodeURIComponent(name)}@${domain}` });
+  }
+  const phone = settings.contactPhone?.trim();
+  if (phone && /^\+?[\d\s()-]+$/.test(phone)) {
+    const number = phone.replace(/[\s()-]/g, "");
+    if (/^\+?\d{5,}$/.test(number)) links.push({ label: phone, href: `tel:${number}` });
+  }
+  const instagram = settings.contactInstagram?.trim();
+  const instagramHandle =
+    /^(?:@|https?:\/\/(?:www\.)?instagram\.com\/)?([a-z\d_.]{1,30})\/?(?:[?#]\S*)?$/i.exec(
+      instagram ?? "",
+    )?.[1];
+  if (instagramHandle && /[a-z\d]/i.test(instagramHandle)) {
+    links.push({ label: "Instagram", href: `https://instagram.com/${instagramHandle}` });
+  }
+  return links;
+}
+
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const hex = (value: string | undefined): string | null => (value && HEX.test(value) ? value : null);
 

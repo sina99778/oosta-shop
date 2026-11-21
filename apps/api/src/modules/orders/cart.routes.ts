@@ -5,6 +5,7 @@ import { prisma } from "../../lib/prisma";
 import { authenticate } from "../../middleware/auth";
 import { validate } from "../../middleware/validate";
 import { AppError } from "../../utils/httpError";
+import { getPublicCartPlans } from "../catalog/catalog.service";
 import { quote } from "../suppliers/suppliers.service";
 import type { SupplierCheckout } from "../suppliers/checkout";
 import { getPaymentConfig } from "./orders.service";
@@ -25,6 +26,12 @@ import {
 } from "./cart-state";
 
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
+const CART_LIMIT = 10;
+const guestPreviewQuery = z.object({
+  planIds: z.string().max(CART_LIMIT * 101).transform((value) => value.split(",")).pipe(
+    z.array(id).min(1).max(CART_LIMIT).refine((ids) => new Set(ids).size === ids.length),
+  ),
+}).strict();
 const params = z.object({ id });
 const code = z
   .string()
@@ -95,6 +102,11 @@ async function preview(line: Line, available: Set<string>) {
   }
 }
 export const cartRouter = Router();
+cartRouter.get("/guest-preview", validate({ query: guestPreviewQuery }), async (_req, res) => {
+  res.setHeader("Cache-Control", "private, no-store");
+  const { planIds } = res.locals.query as z.output<typeof guestPreviewQuery>;
+  res.json({ items: await getPublicCartPlans(planIds) });
+});
 cartRouter.use(authenticate, (req, _res, next) => {
   if (req.user?.role !== "USER" || req.authMethod === "api-key")
     throw new AppError(403, "FORBIDDEN", "Customer account required");
@@ -133,10 +145,17 @@ cartRouter.get("/", async (req, res) => {
 });
 cartRouter.post(
   "/items",
-  validate({ body: z.object({ planId: id, renewalOrderItemId: id.optional() }).strict() }),
+  validate({ body: z.object({
+    planId: id,
+    renewalOrderItemId: id.optional(),
+    expectedCustomerId: id.optional(),
+  }).strict() }),
   async (req, res) => {
-    await releaseExpiredCart();
     const userId = req.user!.id;
+    const expectedCustomerId: string | undefined = req.body.expectedCustomerId;
+    if (expectedCustomerId && expectedCustomerId !== userId)
+      throw new AppError(403, "CART_SESSION_CHANGED", "Customer session changed");
+    await releaseExpiredCart();
     const idOfPlan: string = req.body.planId;
     const renewalOrderItemId: string | undefined = req.body.renewalOrderItemId;
     if (renewalOrderItemId)
@@ -145,7 +164,8 @@ cartRouter.post(
       where: { id: idOfPlan },
       include: planInclude,
     });
-    if (!current || !(await isCartPlanAvailable(prisma, userId, current))) throw unavailable();
+    if (!current || (expectedCustomerId && !current.isActive) ||
+      !(await isCartPlanAvailable(prisma, userId, current))) throw unavailable();
     const signature = cartSignature(current);
     const estimate = current.source === "SUPPLIER" ? await quote(current.id) : null;
     const line = await prisma.$transaction(async (tx) => {
@@ -161,6 +181,7 @@ cartRouter.post(
       });
       if (
         !plan ||
+        (expectedCustomerId && !plan.isActive) ||
         !(await isCartPlanAvailable(tx, userId, plan)) ||
         signature !== cartSignature(plan)
       )
@@ -182,7 +203,7 @@ cartRouter.post(
         if (!locked.orderId && locked.expiresAt > new Date()) return locked;
         await releaseCartLine(tx, locked.id);
       }
-      if ((await tx.cartLine.count({ where: { userId, orderId: null } })) >= 10)
+      if ((await tx.cartLine.count({ where: { userId, orderId: null } })) >= CART_LIMIT)
         throw new AppError(409, "CART_FULL", "The cart supports up to ten items");
       if (
         plan.source !== "SUPPLIER" &&

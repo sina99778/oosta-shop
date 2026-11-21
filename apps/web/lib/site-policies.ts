@@ -1,5 +1,7 @@
 import type { Locale } from "./i18n";
 
+export const siteInfoSlugs = ["about", "contact"] as const;
+
 export const sitePolicies = [
   {
     slug: "terms",
@@ -38,6 +40,32 @@ export const sitePolicies = [
       title: "Privacy",
       content:
         "The store uses account details for sign-in and order tracking, payment details to verify payments, and support ticket information to handle your request.\n\nKeep passwords, one-time codes and confidential card details out of support tickets and Telegram messages. Contact support if you have questions about your account data.",
+    },
+  },
+  {
+    slug: "about",
+    fa: {
+      title: "درباره ما",
+      content:
+        "اوستا فروشگاه اشتراک ابزارهای هوش مصنوعی، طراحی و بهره‌وری است. در صفحهٔ هر محصول می‌توانید مدت اشتراک، نوع دسترسی، روش تحویل و شرایط ضمانت هر پلن را پیش از خرید بررسی کنید.\n\nپس از خرید، جزئیات پرداخت و تحویل سفارش در پنل کاربری در دسترس است. برای پرسش‌های پیش از خرید یا پیگیری سفارش، از راه‌های ارتباطی صفحهٔ تماس استفاده کنید.",
+    },
+    en: {
+      title: "About us",
+      content:
+        "Oosta is a store for AI, design and productivity subscriptions. Before buying, you can check each plan’s duration, access type, delivery method and warranty on the product page.\n\nAfter checkout, you can find payment and delivery details in your account. For questions about a plan or an order, use the options on our contact page.",
+    },
+  },
+  {
+    slug: "contact",
+    fa: {
+      title: "تماس با ما",
+      content:
+        "برای پرسش دربارهٔ پلن‌ها می‌توانید به پشتیبانی پیام بدهید. برای پیگیری پرداخت، تحویل یا ضمانت سفارش، در پنل کاربری تیکت ثبت کنید و شمارهٔ سفارش را بنویسید.",
+    },
+    en: {
+      title: "Contact us",
+      content:
+        "Contact support if you have questions about a plan. For payment, delivery or warranty issues, open a ticket in your account and include your order number.",
     },
   },
 ] as const;

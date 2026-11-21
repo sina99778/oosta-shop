@@ -6,13 +6,15 @@ import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
-import { notifyCartChanged } from "@/lib/cart-events";
+import { cartChangedEvent, isGuestCartChange, notifyCartChanged } from "@/lib/cart-events";
+import { useGuestCart } from "@/lib/guest-cart";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import type { CreateOrderResponse, PaymentMethod } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Input } from "@/components/ui/input";
+import { GuestCartItems } from "./guest-cart-items";
 
 type Notice = "UNAVAILABLE" | "PRICE_UNAVAILABLE" | "PRICE_INCREASE" | null;
 type Line = {
@@ -89,7 +91,13 @@ function failure(error: unknown, fa: boolean) {
 }
 export function ShoppingCart({ locale }: { locale: Locale }) {
   const fa = locale === "fa";
-  const { token } = useAuth();
+  const {
+    token: authToken, user, loading: authLoading, sessionError, retrySession,
+    guestCartTransfer, retryGuestCartTransfer,
+  } = useAuth();
+  const customer = user?.role === "USER";
+  const token = customer ? authToken : null;
+  const guestCart = useGuestCart();
   const { data, error, loading, refetch } = useApi<{ lines: Line[] }>(
     token ? "/cart" : null,
     token ?? undefined,
@@ -107,10 +115,15 @@ export function ShoppingCart({ locale }: { locale: Locale }) {
       if (document.visibilityState === "visible") refetch();
     };
     const timer = setInterval(refresh, 60000);
+    const refreshCart = (event: Event) => {
+      if (!isGuestCartChange(event)) refetch();
+    };
     document.addEventListener("visibilitychange", refresh);
+    window.addEventListener(cartChangedEvent, refreshCart);
     return () => {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener(cartChangedEvent, refreshCart);
     };
   }, [token, refetch]);
   async function remove(id: string) {
@@ -119,7 +132,6 @@ export function ShoppingCart({ locale }: { locale: Locale }) {
     try {
       await api.del("/cart/items/" + id, token ?? undefined);
       notifyCartChanged();
-      refetch();
     } catch (error) {
       setMessage(failure(error, fa));
     } finally {
@@ -136,6 +148,41 @@ export function ShoppingCart({ locale }: { locale: Locale }) {
             : "Items stay in your cart for 24 hours. Stock is checked when payment starts. Store items can be paid for together. Supplier items have separate invoices."}
         </p>
       </header>
+      {authLoading && <p role="status">{fa ? "در حال بررسی ورود…" : "Checking your session…"}</p>}
+      {!authLoading && sessionError && (
+        <p role="alert" className="flex flex-wrap items-center gap-3">
+          {fa ? "وضعیت ورود مشخص نشد." : "Your sign-in status could not be checked."}
+          <Button type="button" variant="outline" onClick={retrySession}>{fa ? "تلاش دوباره" : "Retry"}</Button>
+        </p>
+      )}
+      {!authLoading && !sessionError && !user && <GuestCartItems locale={locale} signedIn={false} />}
+      {user?.role === "ADMIN" && <p className={panel}>
+        {fa ? "برای خرید وارد حساب مشتری شو." : "Sign in with a customer account to shop."}
+      </p>}
+      {token && guestCart.length > 0 && guestCartTransfer?.status === "moving" && (
+        <p role="status">{fa ? "در حال انتقال سبد مهمان…" : "Moving your guest cart…"}</p>
+      )}
+      {token && guestCartTransfer && guestCartTransfer.unavailable > 0 && (
+        <p role="status" className="rounded-xl border border-border p-3 text-sm">
+          {fa ? "پلن‌هایی که دیگر موجود نبودند از سبد مهمان حذف شدند." :
+            "Items that were no longer available were removed from the guest cart."}
+        </p>
+      )}
+      {token && guestCart.length > 0 && guestCartTransfer?.status !== "moving" && (
+        <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 p-3 text-sm">
+          <p>{guestCartTransfer?.status === "full"
+            ? fa ? "سبد حساب پر است. اقلام باقی‌مانده در این مرورگر ذخیره‌اند. یک قلم از سبد حساب حذف کن و دوباره انتقال بده."
+                 : "Your cart is full. The remaining items are saved in this browser. Remove an account cart item and retry."
+            : guestCartTransfer?.status === "error"
+              ? fa ? "انتقال بعضی اقلام کامل نشد. می‌توانی دوباره تلاش کنی."
+                   : "Some items could not be moved. Try the transfer again."
+              : fa ? "می‌توانی اقلام ذخیره‌شده در این مرورگر را به سبد حساب منتقل کنی."
+                   : "You can move the items saved in this browser to your account cart."}</p>
+          <Button type="button" variant="outline" onClick={retryGuestCartTransfer}>
+            {fa ? "تلاش دوباره برای انتقال" : "Retry transfer"}
+          </Button>
+        </div>
+      )}
       {error && (
         <p role="alert">
           {failure(error, fa)}{" "}
@@ -150,7 +197,7 @@ export function ShoppingCart({ locale }: { locale: Locale }) {
         </p>
       )}
       {loading && !data && <p role="status">{fa ? "در حال خواندن سبد…" : "Loading your cart…"}</p>}
-      {data?.lines.length === 0 && (
+      {data?.lines.length === 0 && guestCart.length === 0 && (
         <p className={panel}>{fa ? "سبد خریدت خالی است." : "Your cart is empty."}</p>
       )}
       {[...groups]
@@ -225,6 +272,7 @@ export function ShoppingCart({ locale }: { locale: Locale }) {
           </div>
         </article>
       ))}
+      {token && guestCartTransfer?.status !== "moving" && <GuestCartItems locale={locale} signedIn />}
       <Link href={`/${locale}/products`} className={secondary}>
         {fa ? "ادامهٔ انتخاب محصولات" : "Continue shopping"}
       </Link>

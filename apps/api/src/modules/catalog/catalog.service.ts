@@ -447,6 +447,31 @@ export async function getBestselling(limit: number) {
     .map((ranked) => ({ ...ranked.summary, soldCount: ranked.sold }));
 }
 
+export async function getPublicCartPlans(planIds: string[]) {
+  const plans = await prisma.productPlan.findMany({
+    where: { id: { in: planIds }, isActive: true, product: { isActive: true } },
+    include: { product: { select: { name: true, slug: true } } },
+  });
+  const [stock, suppliers] = await Promise.all([
+    availableCountByProduct([...new Set(plans.map((plan) => plan.productId))]),
+    sourceStates(plans, true),
+  ]);
+  return plans.map((plan) => {
+    const supplier = suppliers.get(plan.id);
+    const localStock = plan.source === "SUPPLIER" ? 0 : (stock.get(plan.productId)?.get(plan.id) ?? 0);
+    return {
+      planId: plan.id,
+      product: plan.product.name,
+      slug: plan.product.slug,
+      label: plan.label,
+      availability: planAvailability(localStock, supplier),
+      currency: plan.currency,
+      amount: localStock > 0 ? priceView(plan).effectivePrice : null,
+      indicativePrice: supplier?.indicativePrice ?? null,
+    };
+  });
+}
+
 export async function getProductBySlug(slug: string) {
   const product = await prisma.product.findFirst({
     where: { slug, isActive: true },

@@ -1,23 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { useApi } from "@/lib/use-api";
 import type { Locale } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
+import { ProductPurchaseAction, type ProductPurchaseSummary } from "./product-purchase-action";
 
 export function StockAlertButton({
   planId,
   locale,
   loginPath,
   token,
+  purchaseSummary,
 }: {
   planId: string;
   locale: Locale;
   loginPath: string;
   token: string | null;
+  purchaseSummary?: ProductPurchaseSummary;
 }) {
   const path = `/auth/stock-alerts/${encodeURIComponent(planId)}`;
   const fa = locale === "fa";
@@ -68,34 +71,39 @@ export function StockAlertButton({
     }
   }
 
-  if (!token)
-    return (
+  let action: ReactNode;
+  if (!token) {
+    action = (
       <Link
         href={loginPath}
-        className="oosta-button mt-4 flex min-h-11 w-full items-center justify-center px-4 text-sm"
+        className="oosta-button flex min-h-11 items-center justify-center px-4 text-sm"
         data-button-variant="outline"
       >
         {label}
       </Link>
     );
+  } else if (error && active === undefined) {
+    action = (
+      <Button type="button" variant="outline" onClick={refetch}>
+        {fa ? "بررسی دوبارهٔ اعلان موجودی" : "Retry checking stock alert"}
+      </Button>
+    );
+  } else {
+    action = (
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => void toggle()}
+        disabled={busy || loading || active === undefined}
+        aria-busy={busy || loading}
+      >
+        {active ? (fa ? "لغو اعلان موجودی" : "Cancel stock alert") : label}
+      </Button>
+    );
+  }
 
-  return (
-    <div className="mt-4 grid gap-2">
-      {error && active === undefined ? (
-        <Button type="button" variant="outline" onClick={refetch}>
-          {fa ? "بررسی دوبارهٔ اعلان موجودی" : "Retry checking stock alert"}
-        </Button>
-      ) : (
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => void toggle()}
-          disabled={busy || loading || active === undefined}
-          aria-busy={busy || loading}
-        >
-          {active ? (fa ? "لغو اعلان موجودی" : "Cancel stock alert") : label}
-        </Button>
-      )}
+  const feedback = token ? (
+    <>
       <p role="status" className="empty:hidden text-sm text-muted">
         {active
           ? fa
@@ -112,6 +120,12 @@ export function StockAlertButton({
           {message}
         </p>
       )}
-    </div>
+    </>
+  ) : undefined;
+
+  return (
+    <ProductPurchaseAction feedback={feedback} locale={locale} summary={purchaseSummary}>
+      {action}
+    </ProductPurchaseAction>
   );
 }

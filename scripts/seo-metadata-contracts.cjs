@@ -35,6 +35,14 @@ const cmsPage = {
     "Complete sentences for customers. ".repeat(12),
   updatedAt: "2026-11-17T10:00:00.000Z",
 };
+let cmsAvailable = true;
+let cmsContactAvailable = false;
+let contactSettings = {
+  contactEmail: "support@example.test",
+  contactPhone: "+98 (21) 1234 5678",
+  contactTelegram: "@FixtureSupport",
+  contactInstagram: "https://www.instagram.com/fixture.official/?igsh=fixture",
+};
 const dictionaries = {
   fa: {
     meta: {
@@ -73,7 +81,9 @@ Module._load = function (request, ...args) {
         fetches++;
         if (route.startsWith("/blog/")) return { post };
         if (route === "/blog") return { posts: [post] };
-        if (route === "/pages/about") return { page: cmsPage };
+        if (route === "/pages/about" && cmsAvailable) return { page: cmsPage };
+        if (route === "/pages/contact" && cmsContactAvailable)
+          return { page: { ...cmsPage, slug: "contact", title: "Published contact details" } };
         if (route === "/pages") return { pages: [cmsPage] };
         if (route === "/products/chatgpt") return { product: { slug: "chatgpt", name: "ChatGPT" } };
         if (route.startsWith("/products?")) return { items: [], pagination: { totalPages: 1 } };
@@ -83,9 +93,8 @@ Module._load = function (request, ...args) {
   if (/dictionaries$/.test(request)) return { getDictionary };
   if (request === "@/lib/settings")
     return {
-      getSiteSettings: async () => ({}),
-      localizedSetting: () => undefined,
-      telegramSupportHref: () => "https://t.me/FixtureSupport",
+      ...originalLoad.call(this, path.resolve(__dirname, "../apps/web/lib/settings.ts"), ...args),
+      getSiteSettings: async () => contactSettings,
     };
   if (request === "next/server") return { connection: async () => undefined };
   if (request === "next/navigation")
@@ -148,6 +157,17 @@ async function main() {
         rule.permanent,
     ),
   );
+  for (const slug of ["about", "contact"]) {
+    assert(
+      (await nextConfig.redirects()).some(
+        (rule) =>
+          rule.source === `/:locale(en|fa)/${slug}` &&
+          rule.destination === `/:locale/p/${slug}` &&
+          rule.permanent,
+      ),
+      `missing localized redirect for ${slug}`,
+    );
+  }
 
   for (const [route, mod, title] of [
     ["/products", catalog, "catalogTitle"],
@@ -258,6 +278,45 @@ async function main() {
   const postEntry = (await sitemap()).find((entry) => entry.url === canonicalPost);
   assert.equal(postEntry.lastModified.toISOString(), post.updatedAt);
   assert(urls.includes(`${SITE}/fa/p/about`));
+  const cmsAbout = await cms.generateMetadata(params("fa", { slug: "about" }));
+  assert.equal(cmsAbout.title, cmsPage.title);
+  cmsAvailable = false;
+  for (const [locale, titles] of [
+    ["fa", ["درباره ما", "تماس با ما"]],
+    ["en", ["About us", "Contact us"]],
+  ]) {
+    for (const [i, slug] of ["about", "contact"].entries()) {
+      const pageParams = params(locale, { slug });
+      assert.equal((await cms.generateMetadata(pageParams)).title, titles[i]);
+      const rendered = renderToStaticMarkup(await cms.default(pageParams));
+      assert(rendered.includes(titles[i]));
+      if (slug === "contact") {
+        for (const href of [
+          `/${locale}/support`,
+          "https://t.me/FixtureSupport",
+          "mailto:support@example.test",
+          "tel:+982112345678",
+          "https://instagram.com/fixture.official",
+        ]) assert(rendered.includes(`href="${href}"`), href);
+      }
+    }
+  }
+  cmsContactAvailable = true;
+  const cmsContact = params("fa", { slug: "contact" });
+  assert.equal((await cms.generateMetadata(cmsContact)).title, "Published contact details");
+  assert(
+    renderToStaticMarkup(await cms.default(cmsContact)).includes(
+      'href="https://t.me/FixtureSupport"',
+    ),
+  );
+  contactSettings = {
+    contactEmail: "someone?subject=unexpected@example.test",
+    contactPhone: "123;ext=4",
+    contactInstagram: "https://unrelated.example.test/",
+  };
+  const safeContact = renderToStaticMarkup(await cms.default(params("en", { slug: "contact" })));
+  assert(safeContact.includes('href="/en/support"'));
+  assert(!/subject=|ext=|unrelated\.example/.test(safeContact));
   for (const slug of ["terms", "return-policy", "privacy-policy"]) {
     const canonical = `${SITE}/fa/p/${slug}`;
     const metadata = await cms.generateMetadata(params("fa", { slug }));
@@ -270,7 +329,7 @@ async function main() {
   assert(!urls.some((url) => /\/en\/(blog|p|products)\/./.test(url)));
 
   console.log(
-    "PASS: list-page canonicals, noindex auth/private pages, Persian content canonicals, Organization/WebSite/BlogPosting JSON-LD and Persian-only sitemap",
+    "PASS: storefront SEO, localized About/Contact redirects, CMS priority and validated contact channels",
   );
 }
 main().catch((error) => {

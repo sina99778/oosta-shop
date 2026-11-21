@@ -74,8 +74,35 @@ async function main() {
 
   assert.equal((await inject(app, { method: "GET", url: "/cart" })).statusCode, 401);
   assert.equal((await inject(app, { method: "GET", url: "/cart/count" })).statusCode, 401);
+  const hiddenPreviewPlan = await prisma.productPlan.create({
+    data: { label: "Private cart fixture", price: 10, productId: product.id, isActive: false },
+  });
+  const preview = await inject(app, {
+    method: "GET",
+    url: `/cart/guest-preview?planIds=${plans[0].id},${hiddenPreviewPlan.id},missing`,
+  });
+  assert.equal(preview.statusCode, 200, preview.body);
+  assert.match(String(preview.headers["cache-control"]), /private.*no-store/);
+  assert.deepEqual(preview.json().items, [{
+    planId: plans[0].id, product: product.name, slug: product.slug, label: plans[0].label,
+    availability: "LOCAL_STOCK", currency: plans[0].currency, amount: 2000000, indicativePrice: null,
+  }]);
+  assert.equal((await inject(app, {
+    method: "GET", url: "/cart/guest-preview?planIds=" +
+      Array.from({ length: 11 }, (_, i) => `plan${i}`).join(","),
+  })).statusCode, 400);
+  assert.equal((await inject(app, {
+    method: "GET", url: "/cart/guest-preview?planIds=abc,abc",
+  })).statusCode, 400);
+  const wrongSession = await call(
+    "POST", "/cart/items", { planId: plans[0].id, expectedCustomerId: buyer.id }, other,
+  );
+  assert.equal(wrongSession.statusCode, 403);
+  assert.equal(wrongSession.json().error.code, "CART_SESSION_CHANGED");
   assert.equal((await add(plans[0].id, admin)).statusCode, 403);
-  const first = getId(await add(plans[0].id));
+  const first = getId(await call(
+    "POST", "/cart/items", { planId: plans[0].id, expectedCustomerId: buyer.id },
+  ));
   const second = getId(await add(plans[1].id));
   const expires = getId(await add(plans[2].id));
   assert(Date.parse(first.expiresAt) - Date.now() > CART_LIFETIME - 30000);
