@@ -283,6 +283,25 @@ async function main() {
   const gift = inbox.json().welcomeGift;
   assert.match(gift.code, /^WELCOME-[A-F0-9]{24}$/);
   assert.equal(gift.percent, 15);
+  const anotherRegistration = await inject(app, {
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      name: "Second welcome test",
+      email: "welcome-second@example.invalid",
+      password: "Synthetic-1234",
+    },
+  });
+  assert.equal(anotherRegistration.statusCode, 201, anotherRegistration.body);
+  const anotherInbox = await inject(app, {
+    method: "GET",
+    url: "/auth/inbox",
+    headers: { authorization: "Bearer " + anotherRegistration.json().token },
+  });
+  assert.equal(anotherInbox.statusCode, 200);
+  const anotherCode = anotherInbox.json().welcomeGift.code;
+  assert.match(anotherCode, /^WELCOME-[A-F0-9]{24}$/);
+  assert.notEqual(anotherCode, gift.code);
   assert.equal((await call("GET", "/auth/inbox", undefined, other)).json().welcomeGift, null);
   const firstGiftItem = getId(await add(plans[0].id, user));
   const secondGiftItem = getId(await add(plans[1].id, user));
@@ -588,7 +607,7 @@ async function main() {
     "WELCOME_GIFT_USED",
   );
   console.log(
-    "PASS: private signup welcome gift, 15 percent, owner-only use, concurrent checkout and single redemption",
+    "PASS: unique signup welcome gifts, 15 percent, owner-only use, concurrent checkout and single redemption",
   );
 }
 

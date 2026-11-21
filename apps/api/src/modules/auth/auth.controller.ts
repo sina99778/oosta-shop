@@ -8,6 +8,8 @@
 import type { Request, Response } from "express";
 import { AppError } from "../../utils/httpError";
 import type { SendMail } from "../../lib/mailer";
+import { renderWelcomeEmail } from "../../lib/email-design";
+import { trackMaintenanceWork } from "../../lib/maintenance";
 import { notifyNewSignup } from "../../bot";
 import { getWelcomeGift } from "../orders/welcome-gift";
 import {
@@ -99,14 +101,39 @@ export function createRequestRecoveryEmailVerification(send?: SendMail) {
       );
     }
     const { currentPassword, locale } = req.body;
-    await issueRecoveryVerification(userId, currentPassword, locale, send);
-    res.status(202).json({ accepted: true });
+    const deliveryRequested = await issueRecoveryVerification(
+      userId,
+      currentPassword,
+      locale,
+      send,
+    );
+    res.status(202).json({ accepted: true, deliveryRequested });
   };
 }
 
-export async function confirmRecoveryEmailVerification(req: Request, res: Response): Promise<void> {
-  await verifyRecoveryEmail(requireUserSession(req), req.body.token);
-  res.status(204).end();
+export function confirmRecoveryEmailVerification(send?: SendMail) {
+  const base = passwordResetBaseUrl();
+  return async (req: Request, res: Response): Promise<void> => {
+    const userId = requireUserSession(req);
+    const { token, locale } = req.body;
+    const recipient = await verifyRecoveryEmail(userId, token);
+    const gift =
+      recipient && send && base ? trackMaintenanceWork(() => getWelcomeGift(userId)) : null;
+    res.status(204).end();
+    if (!gift || !recipient || !send || !base) return;
+    void gift
+      .then(async (offer) => {
+        if (offer?.state === "AVAILABLE") {
+          await send({
+            to: recipient,
+            ...renderWelcomeEmail(locale, offer.code, offer.percent, base),
+          });
+        }
+      })
+      .catch(() => {
+        console.error("[welcome-mail] Welcome email could not be sent");
+      });
+  };
 }
 
 export async function me(req: Request, res: Response): Promise<void> {

@@ -6,22 +6,24 @@ import { createApp } from "../src/app";
 import { env } from "../src/config/env";
 import { prisma } from "../src/lib/prisma";
 import { hashPassword } from "../src/lib/password";
+import { newWelcomeCode } from "../src/modules/orders/welcome-gift";
 
 async function main() {
   assert.equal(process.env.ISOLATED_REGRESSION_DB, "1", "Use the isolated test runner");
   const email = "password-reset@example.invalid";
   const password = "Original-password-1";
   const newPassword = "Replacement-password-2";
-  const resetEmails: { to: string; text: string }[] = [];
-  const verificationEmails: { to: string; text: string }[] = [];
+  const giftCode = newWelcomeCode();
+  const resetEmails: { to: string; text: string; html?: string }[] = [];
+  const verificationEmails: { to: string; text: string; html?: string }[] = [];
+  const welcomeEmails: { to: string; text: string; html?: string }[] = [];
   let failSend = false;
   let ip = 1;
   const app = createApp({
-    sendPasswordResetEmail: async (message: { to: string; subject: string; text: string }) => {
-      (message.subject === "Verify your Oosta recovery email"
-        ? verificationEmails
-        : resetEmails
-      ).push(message);
+    sendPasswordResetEmail: async (message) => {
+      if (message.subject === "Verify your Oosta recovery email") verificationEmails.push(message);
+      else if (message.subject === "Welcome to Oosta AI") welcomeEmails.push(message);
+      else resetEmails.push(message);
       if (failSend) throw new Error("Synthetic SMTP failure");
     },
   });
@@ -40,6 +42,8 @@ async function main() {
     assert(message, "Expected the synthetic reset email");
     assert.equal(message.to, email);
     const url = new URL(message.text.split("\n").at(-1)!);
+    assert(message.html?.includes(`href="${url.href}"`));
+    assert.match(message.html, /lang="en" dir="ltr"/);
     assert.equal(url.origin, new URL(env.WEB_BASE_URL).origin);
     assert.equal(url.pathname, "/en/reset-password");
     assert.equal(url.search, "");
@@ -49,7 +53,12 @@ async function main() {
   }
 
   const user = await prisma.user.create({
-    data: { name: "Reset fixture", email, passwordHash: await hashPassword(password) },
+    data: {
+      name: "Reset fixture",
+      email,
+      passwordHash: await hashPassword(password),
+      welcomeGift: { create: { code: giftCode } },
+    },
   });
   const adminEmail = "reset-ineligible-admin@example.invalid";
   await prisma.user.create({
@@ -106,10 +115,17 @@ async function main() {
     ).statusCode,
     400,
   );
-  assert.equal((await authPost(verificationRoute, verificationPayload)).statusCode, 202);
+  const enrollment = await authPost(verificationRoute, verificationPayload);
+  assert.equal(enrollment.statusCode, 202);
+  assert.deepEqual(enrollment.json(), { accepted: true, deliveryRequested: true });
   for (let check = 0; check < 100 && !verificationEmails[0]; check++) await delay(20);
   assert.equal(verificationEmails[0]?.to, email);
+  const repeatedEnrollment = await authPost(verificationRoute, verificationPayload);
+  assert.equal(repeatedEnrollment.statusCode, 202);
+  assert.deepEqual(repeatedEnrollment.json(), { accepted: true, deliveryRequested: false });
+  assert.equal(verificationEmails.length, 1);
   const verificationToken = verificationEmails[0].text.split("\n").at(-1)!;
+  assert(verificationEmails[0].html?.includes(verificationToken));
   assert.equal(
     (await confirm(verificationToken)).statusCode,
     400,
@@ -139,14 +155,18 @@ async function main() {
     (await authPost(verificationConfirmRoute, { token: "x".repeat(43) })).statusCode,
     400,
   );
-  assert.equal(
-    (await authPost(verificationConfirmRoute, { token: verificationToken })).statusCode,
-    204,
-  );
-  assert.equal(
-    (await authPost(verificationConfirmRoute, { token: verificationToken })).statusCode,
-    400,
-  );
+  assert.equal(welcomeEmails.length, 0, "No offer before verifying ownership");
+  const confirmations = await Promise.all([
+    authPost(verificationConfirmRoute, { token: verificationToken, locale: "en" }),
+    authPost(verificationConfirmRoute, { token: verificationToken, locale: "en" }),
+  ]);
+  assert.deepEqual(confirmations.map((reply) => reply.statusCode).sort(), [204, 400]);
+  for (let check = 0; check < 100 && !welcomeEmails[0]; check++) await delay(20);
+  assert.equal(welcomeEmails.length, 1);
+  assert.equal(welcomeEmails[0].to, email);
+  assert(welcomeEmails[0].text.includes(giftCode));
+  assert(welcomeEmails[0].html?.includes(giftCode));
+  assert.match(welcomeEmails[0].text, /15%/);
   const verified = await inject(app, {
     method: "GET",
     url: "/auth/me",

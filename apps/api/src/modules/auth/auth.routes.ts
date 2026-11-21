@@ -73,7 +73,7 @@ export function createPasswordResetRouter(send?: SendMail) {
     authenticate,
     requireRole("USER"),
     validate({ body: verifyRecoveryEmailSchema }),
-    confirmRecoveryEmailVerification,
+    confirmRecoveryEmailVerification(send),
   );
   return router;
 }

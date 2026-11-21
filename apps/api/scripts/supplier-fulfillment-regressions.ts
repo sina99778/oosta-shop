@@ -1248,9 +1248,16 @@ async function main() {
     "PAID",
   );
   await prisma.emailOutbox.update({ where: { id: email.id }, data: { nextAt: new Date(0) } });
+  const recipient = await prisma.user.findUniqueOrThrow({ where: { id: m.user.id } });
+  await prisma.user.update({
+    where: { id: m.user.id },
+    data: { verifiedRecoveryEmail: recipient.email },
+  });
   await sendNextOrderEmail(async (message) => {
     assert(message.text.includes("/fa/dashboard/orders/" + orderId));
     assert(!message.text.includes("Synthetic-only-1"));
+    assert(message.html?.includes("/fa/dashboard/orders/" + orderId));
+    assert(!message.html.includes("Synthetic-only-1"));
   });
   email = await prisma.emailOutbox.findFirstOrThrow({ where: { orderId } });
   assert.equal(email.status, "SENT");

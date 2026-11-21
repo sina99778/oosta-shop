@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { Prisma, type PasswordReset, type RecoveryChallengeKind } from "@prisma/client";
 import { env } from "../../config/env";
 import type { SendMail } from "../../lib/mailer";
+import { renderEmail } from "../../lib/email-design";
 import { isMaintenance, trackMaintenanceWork } from "../../lib/maintenance";
 import { hashPassword, verifyPassword } from "../../lib/password";
 import { prisma } from "../../lib/prisma";
@@ -56,11 +57,10 @@ async function storeChallenge(kind: RecoveryChallengeKind, eligibleAccount: Pris
 async function deliverChallenge(
   send: SendMail,
   challenge: { token: string; email: string },
-  subject: string,
-  text: string,
+  message: Omit<Parameters<SendMail>[0], "to">,
 ) {
   try {
-    await send({ to: challenge.email, subject, text });
+    await send({ to: challenge.email, ...message });
   } catch (error) {
     const code = error instanceof Error && "code" in error ? error.code : undefined;
     // Definite SMTP rejection can be retried after the account cooldown. An uncertain
@@ -95,7 +95,17 @@ export async function issuePasswordReset(
     locale === "fa"
       ? "برای تعیین رمز جدید از این پیوند استفاده کنید. پیوند تا ۱۵ دقیقه اعتبار دارد و فقط یک‌بار قابل استفاده است. اگر درخواست بازیابی نداده‌اید، این پیام را نادیده بگیرید."
       : "Use the link to set a new password. It expires in 15 minutes and can be used once. If you did not request a reset, you can ignore this email.";
-  await deliverChallenge(send, challenge, subject, `${instructions}\n\n${link.href}`);
+  await deliverChallenge(
+    send,
+    challenge,
+    renderEmail({
+      locale,
+      kind: "security",
+      subject,
+      body: instructions,
+      action: { label: locale === "fa" ? "تعیین رمز جدید" : "Set a new password", url: link.href },
+    }),
+  );
 }
 
 export async function issueRecoveryVerification(
@@ -129,18 +139,27 @@ export async function issueRecoveryVerification(
       AND "verifiedRecoveryEmail" IS DISTINCT FROM "email"
   `,
   );
-  if (!challenge) return;
+  if (!challenge) return false;
   const subject =
     locale === "fa" ? "تأیید ایمیل بازیابی اوستا" : "Verify your Oosta recovery email";
   const instructions =
     locale === "fa"
       ? "این کد را در بخش امنیت حساب اوستا وارد کنید. کد تا ۱۵ دقیقه اعتبار دارد."
       : "Enter this code in Oosta account security. The code expires in 15 minutes.";
-  void deliverChallenge(send, challenge, subject, `${instructions}\n\n${challenge.token}`).catch(
-    () => {
-      console.error("[password-reset] Could not record the recovery email delivery result");
-    },
-  );
+  void deliverChallenge(
+    send,
+    challenge,
+    renderEmail({
+      locale,
+      kind: "security",
+      subject,
+      body: instructions,
+      code: challenge.token,
+    }),
+  ).catch(() => {
+    console.error("[password-reset] Could not record the recovery email delivery result");
+  });
+  return true;
 }
 
 function invalidChallenge(kind: RecoveryChallengeKind) {
@@ -170,13 +189,20 @@ async function findUsableChallenge(token: string, kind: RecoveryChallengeKind, u
 
 async function consumeChallenge(reset: PasswordReset, data: Prisma.UserUpdateManyMutationInput) {
   const { tokenHash, kind, userId, email, sessionVersion } = reset;
-  await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
     const now = new Date();
     const redeemed = await tx.passwordReset.updateMany({
       where: { tokenHash, usedAt: null, expiresAt: { gt: now } },
       data: { usedAt: now },
     });
     if (!redeemed.count) throw invalidChallenge(kind);
+    const before =
+      kind === "VERIFY"
+        ? await tx.user.findUnique({
+            where: { id: userId },
+            select: { verifiedRecoveryEmail: true },
+          })
+        : null;
     const updated = await tx.user.updateMany({
       where: {
         id: userId,
@@ -188,6 +214,7 @@ async function consumeChallenge(reset: PasswordReset, data: Prisma.UserUpdateMan
       data,
     });
     if (!updated.count) throw invalidChallenge(kind);
+    return before?.verifiedRecoveryEmail === null ? email : null;
   });
 }
 
@@ -199,5 +226,5 @@ export async function redeemPasswordReset({ token, newPassword }: ResetPasswordI
 
 export async function verifyRecoveryEmail(userId: string, token: string) {
   const verification = await findUsableChallenge(token, "VERIFY", userId);
-  await consumeChallenge(verification, { verifiedRecoveryEmail: verification.email });
+  return consumeChallenge(verification, { verifiedRecoveryEmail: verification.email });
 }

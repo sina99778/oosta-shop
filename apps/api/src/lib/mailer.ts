@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import type { Prisma } from "@prisma/client";
 import { env } from "../config/env";
 import { prisma } from "./prisma";
+import { renderEmail } from "./email-design";
 import {
   isRenewalReminderDue,
   queueRenewalReminders,
@@ -9,11 +10,25 @@ import {
 } from "../modules/orders/renewals";
 
 const labels = {
-  ORDER_DELIVERED: "سفارش تحویل شد",
-  ORDER_REJECTED: "رسید سفارش رد شد",
-  ORDER_REFUNDED: "بازپرداخت سفارش ثبت شد",
+  ORDER_DELIVERED: {
+    subject: "سفارشت آماده است",
+    body: "تحویل سفارش انجام شد. برای مشاهدهٔ محصول و راهنمای استفاده، وارد حساب اوستا شو و جزئیات سفارش را باز کن.",
+  },
+  ORDER_REJECTED: {
+    subject: "رسید سفارش تأیید نشد",
+    body: "برای دیدن نتیجهٔ بررسی و گزینه‌های پیگیری، وارد حساب اوستا شو و جزئیات سفارش را باز کن.",
+  },
+  ORDER_REFUNDED: {
+    subject: "بازپرداخت سفارش ثبت شد",
+    body: "وضعیت بازپرداخت و اطلاعات پیگیری را در جزئیات سفارش در حساب اوستا ببین.",
+  },
 };
-export type SendMail = (message: { to: string; subject: string; text: string }) => Promise<unknown>;
+export type SendMail = (message: {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+}) => Promise<unknown>;
 export async function queueOrderEmail(
   tx: Prisma.TransactionClient,
   orderId: string,
@@ -62,23 +77,22 @@ export async function sendNextOrderEmail(send: SendMail) {
       }
       await send({
         to: job.to,
-        subject: "یادآوری حساب اوستا",
-        text: [
-          "برای بررسی تاریخ تقریبی پایان اشتراک‌ها و گزینه‌های تمدید، وارد حساب کاربری خود در اوستا شوید.",
-          new URL("/fa/dashboard", env.WEB_BASE_URL).href,
-        ].join("\n"),
+        ...renderEmail({
+          locale: "fa",
+          kind: "notice",
+          subject: "یادآوری تمدید اشتراک",
+          body: "تاریخ تقریبی پایان اشتراک و گزینه‌های تمدید را در حساب اوستا ببین.",
+          action: {
+            label: "ورود به حساب اوستا",
+            url: new URL("/fa/dashboard", env.WEB_BASE_URL).href,
+          },
+        }),
       });
     } else {
       const order = await prisma.order.findUniqueOrThrow({
         where: { id: job.orderId },
         select: {
-          user: { select: { email: true } },
-          items: {
-            select: {
-              product: { select: { name: true } },
-              plan: { select: { label: true } },
-            },
-          },
+          user: { select: { email: true, verifiedRecoveryEmail: true } },
         },
       });
       if (order.user.email !== job.to) {
@@ -88,20 +102,28 @@ export async function sendNextOrderEmail(send: SendMail) {
         });
         return;
       }
-      const subject = labels[job.kind as keyof typeof labels];
+      if (!Object.hasOwn(labels, job.kind)) {
+        await prisma.emailOutbox.update({
+          where: { id: job.id },
+          data: { status: "REVIEW", lastError: "UNKNOWN_EMAIL_KIND" },
+        });
+        return;
+      }
+      const copy = labels[job.kind as keyof typeof labels];
+      const verified = order.user.verifiedRecoveryEmail === job.to;
       const link = new URL(
-        "/fa/dashboard/orders/" + encodeURIComponent(job.orderId),
+        verified ? "/fa/dashboard/orders/" + encodeURIComponent(job.orderId) : "/fa/dashboard",
         env.WEB_BASE_URL,
       );
       await send({
         to: job.to,
-        subject,
-        text: [
-          subject,
-          "سفارش " + job.orderId.slice(-8),
-          ...order.items.map((item) => item.product.name + " · " + item.plan.label),
-          link.href,
-        ].join("\n"),
+        ...renderEmail({
+          locale: "fa",
+          kind: job.kind === "ORDER_DELIVERED" ? "delivery" : "notice",
+          ...copy,
+          details: verified ? ["شمارهٔ سفارش " + job.orderId.slice(-8)] : [],
+          action: { label: verified ? "مشاهدهٔ سفارش" : "ورود به حساب اوستا", url: link.href },
+        }),
       });
     }
   } catch {

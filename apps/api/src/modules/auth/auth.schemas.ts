@@ -85,7 +85,10 @@ export const verifyRecoveryEmailRequestSchema = z.object({
   locale: recoveryLocaleField,
 });
 
-export const verifyRecoveryEmailSchema = z.object({ token: recoveryTokenField });
+export const verifyRecoveryEmailSchema = z.object({
+  token: recoveryTokenField,
+  locale: recoveryLocaleField,
+});
 
 export type SignupInput = z.infer<typeof signupSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

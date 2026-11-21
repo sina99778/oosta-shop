@@ -75,19 +75,17 @@ export function Header({
     { href: `${base}/products`, label: dict.products },
     { href: `${base}/blog`, label: dict.blog },
     { href: `${base}/support`, label: dict.support },
-    { href: cartHref, label: cartLabel },
     ...(user ? [{ href: `${base}/dashboard`, label: dict.dashboard }] : []),
     ...(user?.role === "ADMIN" ? [{ href: `${base}/admin`, label: dict.admin }] : []),
   ];
 
-  function cartLink(mobile = false) {
+  function cartLink() {
     return (
       <Link
-        key={cartHref}
         prefetch={false}
         href={cartHref}
-        className={mobile ? `oosta-button ${styles.mobileCart}` : styles.navLink}
-        data-button-variant={mobile ? "outline" : undefined}
+        className={`oosta-button ${styles.tool} ${styles.cartTool}`}
+        data-button-variant="outline"
         onClick={() => setOpenPath(null)}
         aria-current={
           pathname === cartHref || pathname.startsWith(`${cartHref}/`) ? "page" : undefined
@@ -95,7 +93,6 @@ export function Header({
         aria-label={count ? `${cartLabel} (${count})` : cartLabel}
       >
         <svg
-          className={styles.cartIcon}
           width="18"
           height="18"
           viewBox="0 0 24 24"
@@ -111,7 +108,6 @@ export function Header({
           <circle cx="8.5" cy="19" r="1.2" />
           <circle cx="18" cy="19" r="1.2" />
         </svg>
-        {!mobile && cartLabel}
         {count && (
           <span aria-hidden="true" className={styles.cartCount}>
             {count}
@@ -121,9 +117,8 @@ export function Header({
     );
   }
 
-  function navigation(mobile = false) {
+  function navigation() {
     return routes.map(({ href, label }) => {
-      if (href === cartHref) return mobile ? null : cartLink();
       const active = pathname === href || (href !== base && pathname.startsWith(`${href}/`));
       return (
         <Link
@@ -214,7 +209,7 @@ export function Header({
           {navigation()}
         </nav>
         <div className={styles.toolbar}>
-          {cartLink(true)}
+          {cartLink()}
           <ThemeToggle label={themeLabel} />
           <LocaleSwitcher current={locale} />
           <div className={styles.desktopAccount}>{accountActions()}</div>
@@ -250,7 +245,7 @@ export function Header({
         className={styles.mobileNav}
       >
         <Container className={styles.mobileInner}>
-          <div className={styles.mobileLinks}>{navigation(true)}</div>
+          <div className={styles.mobileLinks}>{navigation()}</div>
           {!loading && <div className={styles.mobileAccount}>{accountActions()}</div>}
         </Container>
       </nav>

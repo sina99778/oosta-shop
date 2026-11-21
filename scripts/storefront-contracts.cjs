@@ -187,8 +187,13 @@ assert(!header().includes('aria-label="سبد خرید (۲)"'));
 headerUser = { role: "USER", name: "Fixture" };
 assert(!header().includes('href="/fa/admin"'));
 assert(header().includes('aria-label="سبد خرید (۲)"'));
-assert.match(header(), /href="\/fa\/cart"[^>]*><svg[^>]*aria-hidden="true"/);
-assert.match(header(), /<a(?=[^>]*mobileCart)(?=[^>]*href="\/fa\/cart")[^>]*><svg/);
+const headerMarkup = header();
+assert.equal((headerMarkup.match(/href="\/fa\/cart"/g) ?? []).length, 1);
+assert.match(
+  headerMarkup,
+  /<div class="toolbar"><a[^>]*href="\/fa\/cart"[^>]*><svg[^>]*aria-hidden="true"/,
+);
+assert.doesNotMatch(headerMarkup, />سبد خرید</);
 headerUser = { role: "ADMIN", name: "Fixture admin" };
 assert(header().includes('href="/fa/admin"'));
 assert(!header().includes('aria-label="سبد خرید (۲)"'));

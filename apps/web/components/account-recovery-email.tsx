@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { useAuth } from "@/lib/auth";
 import type { Locale } from "@/lib/i18n";
@@ -12,6 +12,7 @@ import styles from "./account.module.css";
 export function AccountRecoveryEmail({ locale }: { locale: Locale }) {
   const { retrySession, token, user } = useAuth();
   const [codeSent, setCodeSent] = useState(false);
+  const [deliveryRequested, setDeliveryRequested] = useState<boolean>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fa = locale === "fa";
@@ -27,26 +28,41 @@ export function AccountRecoveryEmail({ locale }: { locale: Locale }) {
       if (codeSent) {
         await api.post(
           "/auth/recovery-email/verify",
-          { token: String(data.get("code") ?? "").trim() },
+          { token: String(data.get("code") ?? "").replace(/\s/g, ""), locale },
           token ?? undefined,
         );
         retrySession();
       } else {
-        await api.post(
+        const result = await api.post<{ deliveryRequested?: boolean }>(
           "/auth/recovery-email/request",
           { currentPassword: data.get("password"), locale },
           token ?? undefined,
         );
+        setDeliveryRequested(result.deliveryRequested);
         setCodeSent(true);
       }
     } catch (err) {
+      const invalidCode = codeSent && err instanceof ApiError && err.code === "VALIDATION_ERROR";
       setError(
-        apiErrorMessage(err, locale, fa ? "انجام نشد. دوباره تلاش کنید." : "Please try again."),
+        invalidCode
+          ? fa
+            ? "کد تأیید ناقص یا نامعتبر است. کد را کامل از ایمیل کپی کنید."
+            : "The verification code is incomplete or invalid. Copy the full code from your email."
+          : apiErrorMessage(err, locale, fa ? "انجام نشد. دوباره تلاش کنید." : "Please try again."),
       );
     } finally {
       setBusy(false);
     }
   }
+
+  const codeGuidance =
+    deliveryRequested === false
+      ? fa
+        ? "درخواست ارسال تازه ثبت نشد. کد قبلی را امتحان کنید. اگر آن را دریافت نکرده‌اید، پس از پایان مهلت ۱۵ دقیقه‌ای دوباره درخواست بدهید."
+        : "No new send was requested. Try your previous code. If it did not arrive, try again after the 15-minute window."
+      : fa
+        ? "صندوق ورودی و پوشهٔ هرزنامه را برای کد بررسی کنید. کد تا ۱۵ دقیقه اعتبار دارد."
+        : "Check your inbox and spam folder for the code. It expires after 15 minutes.";
 
   return (
     <section className={styles.panel} aria-labelledby="recovery-email-title">
@@ -66,9 +82,7 @@ export function AccountRecoveryEmail({ locale }: { locale: Locale }) {
         >
           <p role={codeSent ? "status" : undefined} className="text-sm leading-relaxed text-muted">
             {codeSent
-              ? fa
-                ? "کد ارسال‌شده به ایمیل را وارد کنید. کد ۱۵ دقیقه اعتبار دارد."
-                : "Enter the code in your email. It expires in 15 minutes."
+              ? codeGuidance
               : fa
                 ? "برای فعال کردن بازیابی رمز، ایمیل حسابتان را تأیید کنید."
                 : "Verify your account email to enable password recovery."}{" "}
