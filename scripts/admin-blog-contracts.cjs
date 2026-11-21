@@ -150,10 +150,12 @@ assert.match(
 assert(article.includes('href="/fa/blog"'));
 async function checkPublication() {
   const params = Promise.resolve({ locale: "fa", slug: live.slug });
-  assert.equal((await BlogPage({ params })).props.posts.length, 1);
+  const publicPosts = async () => React.Children.toArray((await BlogPage({ params })).props.children)
+    .find((child) => child.type === Journal).props.posts;
+  assert.equal((await publicPosts()).length, 1);
   await BlogPostPage({ params });
   isPublished = false;
-  assert.equal((await BlogPage({ params })).props.posts.length, 0);
+  assert.equal((await publicPosts()).length, 0);
   await assert.rejects(BlogPostPage({ params }), /Page not found/);
   console.log("PASS: admin articles, isolated Markdown preview, public journal and current publication state");
 }

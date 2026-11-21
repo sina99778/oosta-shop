@@ -34,12 +34,16 @@ async function main() {
         }),
       ),
     );
+    const specs = [{ label: "Provider", value: "Synthetic provider" }];
+    const curatedSpecs = [{ label: "Provider", value: "Existing provider" }];
+    await prisma.product.update({ where: { id: products[1].id }, data: { specs: curatedSpecs } });
     const records = products.map((product) => ({
       slug: product.slug,
       shortDescription: "Synthetic summary",
       description: "Reviewed synthetic product content",
       metaTitle: "Synthetic title",
       metaDescription: "Synthetic meta description",
+      specs,
       sources: [{ title: "Synthetic reference", url: "https://example.invalid/reference" }],
     }));
     const inputFile = path.join(directory, "top-fixture.fa.json");
@@ -50,9 +54,32 @@ async function main() {
       apiRoot: path.resolve(__dirname, "../src"),
       adminEmail: admin.email,
     };
+    await assert.rejects(
+      updater.run({ ...options, slugs: ["unknown-product"] }),
+      /Unknown content slug/,
+    );
+    const selected = {
+      ...options,
+      backupFile: path.join(directory, "single-backup.json"),
+      slugs: [products[0].slug],
+    };
+    assert.deepEqual((await updater.run(selected)).products, selected.slugs);
+    assert.deepEqual(await updater.run({ ...selected, apply: true }), { updated: 1, unchanged: 0 });
+    assert.equal(
+      (await prisma.product.findUniqueOrThrow({ where: { id: products[1].id } })).description,
+      "Original content",
+    );
     await updater.run(options);
-    assert.deepEqual(await updater.run({ ...options, apply: true }), { updated: 2, unchanged: 0 });
+    assert.deepEqual(await updater.run({ ...options, apply: true }), { updated: 1, unchanged: 1 });
     assert.deepEqual(await updater.run({ ...options, apply: true }), { updated: 0, unchanged: 2 });
+    assert.deepEqual(
+      (await prisma.product.findUniqueOrThrow({ where: { id: products[0].id } })).specs,
+      specs,
+    );
+    assert.deepEqual(
+      (await prisma.product.findUniqueOrThrow({ where: { id: products[1].id } })).specs,
+      curatedSpecs,
+    );
     const fresh = { ...options, backupFile: path.join(directory, "fresh-backup.json") };
     await updater.run(fresh);
     records.forEach((record) => {

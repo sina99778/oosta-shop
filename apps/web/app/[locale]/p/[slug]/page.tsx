@@ -5,7 +5,7 @@ import { isLocale } from "@/lib/i18n";
 import { Container } from "@/components/ui/container";
 import { Markdown } from "@/components/markdown";
 import { fetchJson } from "@/lib/seo";
-import { contentAlternates } from "@/lib/page-metadata";
+import { contentAlternates, DEFAULT_SHARE_IMAGE, metadataExcerpt } from "@/lib/page-metadata";
 import { sitePolicy } from "@/lib/site-policies";
 
 export const revalidate = 300;
@@ -32,14 +32,20 @@ export async function generateMetadata({
   if (!isLocale(locale)) notFound();
   const page = (await load(slug)) ?? sitePolicy(slug, locale);
   if (!page) return { title: "Not found" };
-  const description = page.content.replace(/[#*!]/g, "").slice(0, 160);
+  const description = metadataExcerpt(page.content);
   const alternates = contentAlternates(`/p/${encodeURIComponent(page.slug)}`);
   const url = alternates.canonical as string;
   return {
     title: page.title,
     description,
     alternates,
-    openGraph: { title: page.title, description, url, type: "website" },
+    openGraph: {
+      title: page.title,
+      description,
+      url,
+      type: "website",
+      images: [DEFAULT_SHARE_IMAGE],
+    },
   };
 }
 

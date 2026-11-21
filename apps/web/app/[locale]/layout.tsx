@@ -1,5 +1,6 @@
 import "../globals.css";
 import type { Metadata } from "next";
+import { TITLE_SUFFIX } from "@/lib/site-brand";
 import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import localFont from "next/font/local";
@@ -35,7 +36,7 @@ export async function generateMetadata({
   const base = siteUrl();
   return {
     metadataBase: new URL(base),
-    title: { default: dict.meta.title, template: `%s — oostaAI` },
+    title: { default: dict.meta.title, template: `%s${TITLE_SUFFIX}` },
     description: dict.meta.description,
     alternates: {
       canonical: `/${locale}`,

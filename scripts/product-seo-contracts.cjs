@@ -68,8 +68,12 @@ Module._load = function (request, ...args) {
       fetchJson: async (route) => {
         fetches++;
         if (route.startsWith("/products?"))
-          return { items: [product], pagination: { totalPages: 1 } };
-        if (route === "/blog") return { posts: [] };
+          return {
+            items: [product, { slug: "deepseek" }, { slug: "deepseek-api" }],
+            pagination: { totalPages: 1 },
+          };
+        if (route === "/blog")
+          return { posts: [{ slug: "buy-chatgpt-plus-iran", title: "ChatGPT guide" }] };
         if (route === "/pages") return { pages: [] };
         return route === "/payments/config" ? payment : missing ? null : { product };
       },
@@ -120,6 +124,8 @@ async function main() {
   assert.equal(item.offers.url, metadata.alternates.canonical);
   assert(!item.aggregateRating);
   const sitemapEntries = await sitemap();
+  assert(!sitemapEntries.some((entry) => entry.url.endsWith("/products/deepseek")));
+  assert(sitemapEntries.some((entry) => entry.url.endsWith("/products/deepseek-api")));
   assert(!sitemapEntries.some((entry) => entry.url.includes("/en/products/")));
   const listed = sitemapEntries.find((entry) => entry.url === metadata.alternates.canonical);
   assert.equal(listed.lastModified.toISOString(), product.updatedAt);
@@ -148,6 +154,9 @@ async function main() {
   assert(!rated.offers);
   product.name = "</script><script>unsafe()</script>";
   assert(!(await graphs()).html.includes("</script><script>unsafe()"));
+  product.slug = "chatgpt";
+  assert.match((await graphs()).html, /href="\/fa\/blog\/buy-chatgpt-plus-iran"/);
+  product.slug = "synthetic";
   product.image = "javascript:unsafe()";
   const unsafeImages = (await page.generateMetadata(props)).openGraph.images;
   assert.deepEqual(

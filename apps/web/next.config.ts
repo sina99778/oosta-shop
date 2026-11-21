@@ -1,11 +1,19 @@
 import path from "node:path";
 import type { NextConfig } from "next";
+import { PRODUCT_REDIRECTS } from "./lib/catalog-editorial";
 
 const nextConfig: NextConfig = {
   // Produce a self-contained server bundle for Docker.
   output: "standalone",
   // Trace workspace dependencies from the monorepo root so the bundle is complete.
   outputFileTracingRoot: path.join(__dirname, "../../"),
+  async redirects() {
+    return Object.entries(PRODUCT_REDIRECTS).map(([from, to]) => ({
+      source: `/:locale(en|fa)/products/${from}`,
+      destination: `/:locale/products/${to}`,
+      permanent: true,
+    }));
+  },
   async headers() {
     return [
       {

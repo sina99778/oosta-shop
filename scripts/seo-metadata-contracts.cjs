@@ -18,7 +18,7 @@ const { renderToStaticMarkup } = require("react-dom/server");
 const SITE = "https://oostaai.store";
 const post = {
   id: "synthetic-post",
-  slug: "synthetic-post",
+  slug: "buy-chatgpt-plus-iran",
   title: "Synthetic </script><script>unsafe()</script> post",
   excerpt: "A synthetic excerpt",
   hasCover: false,
@@ -30,7 +30,9 @@ const cmsPage = {
   id: "synthetic-page",
   slug: "about",
   title: "About",
-  content: "Synthetic page",
+  content:
+    "## About\n\n[Read the policy](/fa/p/terms)\n\n" +
+    "Complete sentences for customers. ".repeat(12),
   updatedAt: "2026-11-17T10:00:00.000Z",
 };
 const dictionaries = {
@@ -73,6 +75,7 @@ Module._load = function (request, ...args) {
         if (route === "/blog") return { posts: [post] };
         if (route === "/pages/about") return { page: cmsPage };
         if (route === "/pages") return { pages: [cmsPage] };
+        if (route === "/products/chatgpt") return { product: { slug: "chatgpt", name: "ChatGPT" } };
         if (route.startsWith("/products?")) return { items: [], pagination: { totalPages: 1 } };
         return null;
       },
@@ -95,7 +98,7 @@ Module._load = function (request, ...args) {
       },
     };
   if (request === "@/components/ui/container") return { Container: ({ children }) => children };
-  if (request.startsWith("@/components/"))
+  if (request.startsWith("@/components/") && request !== "@/components/related-content-links")
     return new Proxy({}, { get: (_target, key) => (key === "__esModule" ? false : stubComponent) });
   return originalLoad.call(this, request, ...args);
 };
@@ -118,6 +121,8 @@ const privatePages = [
 const sitemap = require("../apps/web/app/sitemap.ts").default;
 const robots = require("../apps/web/app/robots.ts").default;
 const { safeJsonLd } = require("../apps/web/lib/page-metadata.ts");
+const { analyzeSeo } = require("../apps/web/lib/seo-analyzer.ts");
+const nextConfig = require("../apps/web/next.config.ts").default;
 Module._load = originalLoad;
 
 const params = (locale, extra = {}) => ({ params: Promise.resolve({ locale, ...extra }) });
@@ -130,6 +135,19 @@ function jsonLdFrom(html) {
 async function main() {
   // The escaper must turn every "<" into the JSON escape, not leave it as "<".
   assert.equal(safeJsonLd({ a: "</script>" }), '{"a":"\\u003c/script>"}');
+  const seoInput = { slug: "fixture", shortDescription: "", description: "", metaDescription: "" };
+  const titleCheck = (length) =>
+    analyzeSeo({ ...seoInput, metaTitle: "a".repeat(length) }, "").checks[0].status;
+  assert.equal(titleCheck(50), "good");
+  assert.equal(titleCheck(51), "warn");
+  assert(
+    (await nextConfig.redirects()).some(
+      (rule) =>
+        rule.source === "/:locale(en|fa)/products/deepseek" &&
+        rule.destination === "/:locale/products/deepseek-api" &&
+        rule.permanent,
+    ),
+  );
 
   for (const [route, mod, title] of [
     ["/products", catalog, "catalogTitle"],
@@ -144,6 +162,21 @@ async function main() {
       assert.equal(meta.alternates.languages["x-default"], `${SITE}/fa${route}`);
       assert.equal(meta.title, dictionaries[locale].meta[title]);
       assert.equal(meta.openGraph.url, meta.alternates.canonical);
+      const html = renderToStaticMarkup(
+        await mod.default({
+          ...params(locale),
+          searchParams: Promise.resolve({}),
+        }),
+      );
+      const graph = jsonLdFrom(html)["@graph"];
+      assert.equal(
+        graph.find((item) => item["@type"] === "CollectionPage").url,
+        meta.openGraph.url,
+      );
+      assert.equal(
+        graph.find((item) => item["@type"] === "BreadcrumbList").itemListElement.at(-1).item,
+        meta.openGraph.url,
+      );
       // Social cards: a 1200x630 landscape image (a square one renders as a small thumbnail).
       assert.deepEqual(
         [
@@ -190,9 +223,15 @@ async function main() {
     assert.equal(meta.openGraph.modifiedTime, post.updatedAt);
     const pageMeta = await cms.generateMetadata(params(locale, { slug: cmsPage.slug }));
     assert.equal(pageMeta.alternates.canonical, `${SITE}/fa/p/about`);
+    assert.equal(pageMeta.openGraph.images[0].url, "/brand/oosta-og-1200x630.jpg");
+    assert.match(pageMeta.description, /^About Read the policy Complete sentences/);
+    assert(!/[\n[\]/]/.test(pageMeta.description));
+    assert(pageMeta.description.length <= 160);
+    assert(pageMeta.description.endsWith("customers.…"));
   }
   const postHtml = renderToStaticMarkup(await blogPost.default(params("en", { slug: post.slug })));
   assert(!postHtml.includes("</script><script>unsafe()"));
+  assert.match(postHtml, /href="\/en\/products\/chatgpt"/);
   const article = jsonLdFrom(postHtml);
   assert.equal(article["@type"], "BlogPosting");
   assert.equal(article.mainEntityOfPage, canonicalPost);

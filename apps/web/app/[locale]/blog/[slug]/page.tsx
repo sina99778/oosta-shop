@@ -4,13 +4,16 @@ import { notFound } from "next/navigation";
 import { getDictionary } from "../../dictionaries";
 import { isLocale } from "@/lib/i18n";
 import { JournalArticle } from "@/components/journal";
+import { RelatedContentLinks } from "@/components/related-content-links";
+import { ARTICLE_PRODUCTS } from "@/lib/catalog-editorial";
 import { fetchJson, siteUrl } from "@/lib/seo";
 import { assetUrl } from "@/lib/api";
-import type { BlogPostDetail } from "@/lib/types";
+import type { BlogPostDetail, ProductDetail } from "@/lib/types";
 import {
   CONTENT_LOCALE,
   DEFAULT_SHARE_IMAGE,
   contentAlternates,
+  metadataExcerpt,
   organizationJsonLd,
   safeJsonLd,
 } from "@/lib/page-metadata";
@@ -25,10 +28,11 @@ export async function generateMetadata({
 }: {
   params: Promise<{ locale: string; slug: string }>;
 }): Promise<Metadata> {
-  const { slug } = await params;
+  const { locale, slug } = await params;
+  if (!isLocale(locale)) notFound();
   const post = await load(slug);
   if (!post) return { title: "Not found" };
-  const description = post.excerpt || post.content.replace(/[#*!]/g, "").slice(0, 160);
+  const description = post.excerpt || metadataExcerpt(post.content);
   const image = post.hasCover
     ? new URL(assetUrl(`/blog-cover/${post.id}`), siteUrl()).href
     : undefined;
@@ -60,6 +64,16 @@ export default async function BlogPostPage({
   const dict = await getDictionary(locale);
   const post = await load(slug);
   if (!post) notFound();
+  const productSlugs = Object.hasOwn(ARTICLE_PRODUCTS, post.slug)
+    ? ARTICLE_PRODUCTS[post.slug]
+    : [];
+  const products = await Promise.all(
+    productSlugs.map((productSlug) =>
+      fetchJson<{ product: Pick<ProductDetail, "slug" | "name"> }>(
+        `/products/${encodeURIComponent(productSlug)}`,
+      ),
+    ),
+  );
 
   const cover = post.hasCover ? new URL(assetUrl(`/blog-cover/${post.id}`), siteUrl()).href : null;
   const url = `${siteUrl()}/${CONTENT_LOCALE}/blog/${encodeURIComponent(post.slug)}`;
@@ -83,6 +97,19 @@ export default async function BlogPostPage({
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }} />
       <JournalArticle post={post} locale={locale} back={dict.blog.back} />
+      <RelatedContentLinks
+        title={locale === "fa" ? "محصولات مرتبط" : "Related products"}
+        links={products.flatMap((result) =>
+          result
+            ? [
+                {
+                  href: `/${locale}/products/${encodeURIComponent(result.product.slug)}`,
+                  label: result.product.name,
+                },
+              ]
+            : [],
+        )}
+      />
     </>
   );
 }

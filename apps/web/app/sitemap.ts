@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { fetchJson, siteUrl } from "@/lib/seo";
 import { locales } from "@/lib/i18n";
 import { CONTENT_LOCALE } from "@/lib/page-metadata";
+import { PRODUCT_REDIRECTS } from "@/lib/catalog-editorial";
 
 export const revalidate = 3600;
 
@@ -31,6 +32,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Products, posts and CMS pages are single-language (Persian); their /en
   // copies canonicalize to /fa, so only the canonical URL is listed.
   for (const product of productSlugs) {
+    if (Object.hasOwn(PRODUCT_REDIRECTS, product.slug)) continue;
     const updatedAt = product.updatedAt ? new Date(product.updatedAt) : undefined;
     entries.push({
       url: `${site}/${CONTENT_LOCALE}/products/${encodeURIComponent(product.slug)}`,

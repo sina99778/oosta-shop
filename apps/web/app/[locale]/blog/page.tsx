@@ -6,7 +6,7 @@ import { isLocale } from "@/lib/i18n";
 import { fetchJson } from "@/lib/seo";
 import { Journal } from "@/components/journal";
 import type { BlogPostSummary } from "@/lib/types";
-import { localizedPageMetadata } from "@/lib/page-metadata";
+import { collectionJsonLd, localizedPageMetadata, safeJsonLd } from "@/lib/page-metadata";
 
 export async function generateMetadata({
   params,
@@ -25,5 +25,11 @@ export default async function BlogPage({ params }: { params: Promise<{ locale: s
   if (!isLocale(locale)) notFound();
   const dict = await getDictionary(locale);
   const data = await fetchJson<{ posts: BlogPostSummary[] }>("/blog", 0);
-  return <Journal locale={locale} dict={dict} posts={data?.posts ?? []} unavailable={!data} />;
+  const schema = collectionJsonLd(locale, "/blog", dict.meta.blogTitle, dict.meta.blogDescription);
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(schema) }} />
+      <Journal locale={locale} dict={dict} posts={data?.posts ?? []} unavailable={!data} />
+    </>
+  );
 }

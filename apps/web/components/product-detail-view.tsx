@@ -90,6 +90,9 @@ export function ProductDetailView({
   const plan = product.plans.find((p) => p.id === activePlanId) ?? null;
   const canBuy = !!plan && canBuyPlan(plan, payment);
   const localeFa = locale === "fa";
+  const unavailable = plan
+    ? availabilityOf(plan) === "OUT_OF_STOCK"
+    : product.availability === "OUT_OF_STOCK" || product.plans.length === 0;
   const numbers = new Intl.NumberFormat(localeFa ? "fa-IR" : "en-US", { maximumFractionDigits: 1 });
   const staleSelection = requestedPlanId !== undefined && !requestedPlan && !plan;
   const returnPath = `/${locale}/products/${encodeURIComponent(slug)}${plan ? `?plan=${encodeURIComponent(plan.id)}` : ""}`;
@@ -483,12 +486,23 @@ export function ProductDetailView({
         </Card>
         <div className={cn(layout.support, styles.supportNote)}>
           <span>
-            {locale === "fa"
-              ? "نوع دسترسی و شرایط پلن را پیش از خرید بررسی کن."
-              : "Review access type and plan terms before buying."}
+            {unavailable
+              ? localeFa
+                ? "این گزینه فعلاً ناموجود است."
+                : "This option is currently unavailable."
+              : localeFa
+                ? "نوع دسترسی و شرایط پلن را پیش از خرید بررسی کن."
+                : "Review access type and plan terms before buying."}
           </span>
           <a href={supportHref} target="_blank" rel="noopener noreferrer">
-            {locale === "fa" ? "پرسش پیش از خرید در تلگرام" : "Ask before buying on Telegram"} ↗
+            {unavailable
+              ? localeFa
+                ? "پیگیری موجودی در تلگرام"
+                : "Ask about availability on Telegram"
+              : localeFa
+                ? "پرسش پیش از خرید در تلگرام"
+                : "Ask before buying on Telegram"}{" "}
+            ↗
           </a>
         </div>
       </div>

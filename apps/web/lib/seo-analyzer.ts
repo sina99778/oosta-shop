@@ -1,5 +1,6 @@
 // Deterministic SEO analyzer — pure, dependency-free, always correct.
 // Powers the "SEO assistant" score + checklist (Yoast/RankMath style).
+import { TITLE_SUFFIX } from "./site-brand";
 
 export type SeoCheckStatus = "good" | "warn" | "bad" | "muted";
 export type SeoCheck = { id: string; status: SeoCheckStatus; info: string };
@@ -31,7 +32,11 @@ export function analyzeSeo(
   const kw = focusKeyword.trim().toLowerCase();
 
   const tl = title.length;
-  add("title", !title ? "bad" : tl >= 30 && tl <= 60 ? "good" : "warn", `${tl}`);
+  add(
+    "title",
+    !title ? "bad" : tl >= 30 && tl + TITLE_SUFFIX.length <= 60 ? "good" : "warn",
+    `${tl}`,
+  );
 
   const dl = desc.length;
   add("metaDesc", !desc ? "bad" : dl >= 120 && dl <= 160 ? "good" : "warn", `${dl}`);

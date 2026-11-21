@@ -32,15 +32,18 @@ export async function HomeSections({
   const learningHref = articles.length ? "#learning" : "#prompt-lab";
   const categories = categoryData?.categories ?? [];
   const categoryLabels: Record<string, string> = fa
-    ? {
-        "ai-accounts": "هوش مصنوعی",
-        "software-licenses": "نرم‌افزار و لایسنس",
-        "gift-cards": "گیفت‌کارت",
-      }
+    ? {}
     : {
-        "ai-accounts": "AI tools",
-        "software-licenses": "Software & licenses",
-        "gift-cards": "Gift cards",
+        learning: "Learning & languages",
+        "ai-and-creative-tools": "AI & creative tools",
+        "api-subscriptions": "API subscriptions & credits",
+        "digital-security": "Security & privacy",
+        "developer-tools": "Development & automation",
+        entertainment: "Entertainment & streaming",
+        "design-and-media": "Design & media",
+        "ai-tools": "AI tools",
+        "office-and-productivity": "Office & productivity",
+        "gaming-and-connectivity": "Gaming & connectivity",
       };
   const shortcuts = ["chatgpt", "gemini", "canva", "capcut"].flatMap((slug) =>
     selections.filter((product) => product.slug === slug),

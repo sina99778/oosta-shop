@@ -100,6 +100,21 @@ for (const product of products) {
   );
 }
 const chatgpt = products.find((product) => product.slug === "chatgpt");
+for (const slug of ["claude", "cursor", "grok"]) {
+  const product = products.find((entry) => entry.slug === slug);
+  assert(!/API/.test(product.metaTitle), slug);
+  assert(product.metaTitle.length <= 50, slug);
+}
+const withSpecs = products.filter((product) => product.specs?.length);
+assert.equal(withSpecs.length, 16);
+for (const product of withSpecs) {
+  assert.equal(new Set(product.specs.map(({ label }) => label)).size, product.specs.length);
+  assert(
+    product.specs.every(
+      ({ label, value }) => label.length <= 100 && value.length <= 500 && value.trim(),
+    ),
+  );
+}
 assert(chatgpt.description.includes("زمان ضمانت از تحویل اکانت شروع می‌شود."));
 assert(chatgpt.description.includes("موارد خارج از ضمانت"));
 assert(products.find((product) => product.slug === "gemini").metaTitle.includes("Pro"));

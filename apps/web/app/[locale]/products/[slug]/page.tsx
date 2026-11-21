@@ -4,12 +4,20 @@ import { notFound } from "next/navigation";
 import { getDictionary } from "../../dictionaries";
 import { isLocale } from "@/lib/i18n";
 import { ProductDetailView } from "@/components/product-detail-view";
+import { RelatedContentLinks } from "@/components/related-content-links";
+import { ARTICLE_PRODUCTS, PRODUCT_API_PAIRS } from "@/lib/catalog-editorial";
 import { fetchJson, siteUrl } from "@/lib/seo";
 import { getSiteSettings, telegramSupportHref } from "@/lib/settings";
 import { productImageUrl } from "@/lib/api";
-import type { PaymentConfig, ProductDetail } from "@/lib/types";
+import type { BlogPostSummary, PaymentConfig, ProductDetail } from "@/lib/types";
 import { availabilityOf, canBuyPlan } from "@/lib/product-availability";
-import { CONTENT_LOCALE, DEFAULT_SHARE_IMAGE, contentAlternates } from "@/lib/page-metadata";
+import {
+  CONTENT_LOCALE,
+  DEFAULT_SHARE_IMAGE,
+  contentAlternates,
+  metadataExcerpt,
+  safeJsonLd,
+} from "@/lib/page-metadata";
 
 const loadProduct = cache(
   async (slug: string) =>
@@ -32,10 +40,6 @@ function productUrl(locale: string, slug: string) {
   return `${siteUrl()}/${locale}/products/${encodeURIComponent(slug)}`;
 }
 
-function safeJsonLd(value: unknown): string {
-  return JSON.stringify(value).replace(/</g, "\\u003c");
-}
-
 export async function generateMetadata({
   params,
 }: {
@@ -47,8 +51,7 @@ export async function generateMetadata({
   if (!p) return { title: "Not found" };
 
   const title = p.metaTitle || p.name;
-  const description =
-    p.metaDescription || p.shortDescription || p.description.replace(/[#*]/g, "").slice(0, 160);
+  const description = p.metaDescription || p.shortDescription || metadataExcerpt(p.description);
   const image = imageFor(p);
   // Product copy is stored in Persian only, so /en/products/<slug> is the same
   // content in English chrome: both locales canonicalize to the Persian URL.
@@ -94,7 +97,46 @@ export default async function ProductDetailPage({
   // not a 200 soft-404 that search engines penalize.
   if (!p) notFound();
   const localPlans = p.plans.filter((plan) => availabilityOf(plan) === "LOCAL_STOCK");
-  const payment = localPlans.length ? await fetchJson<PaymentConfig>("/payments/config", 0) : null;
+  const articles = Object.entries(ARTICLE_PRODUCTS)
+    .filter(([, products]) => products.includes(p.slug))
+    .map(([article]) => article);
+  const apiSlug = Object.hasOwn(PRODUCT_API_PAIRS, p.slug) ? PRODUCT_API_PAIRS[p.slug] : undefined;
+  const appSlug = Object.entries(PRODUCT_API_PAIRS).find(([, api]) => api === p.slug)?.[0];
+  const relatedSlug = apiSlug ?? appSlug;
+  const [payment, blog, counterpart] = await Promise.all([
+    localPlans.length ? fetchJson<PaymentConfig>("/payments/config", 0) : null,
+    articles.length
+      ? fetchJson<{ posts: Pick<BlogPostSummary, "slug" | "title">[] }>("/blog")
+      : null,
+    relatedSlug
+      ? fetchJson<{ product: Pick<ProductDetail, "slug" | "name"> }>(
+          `/products/${encodeURIComponent(relatedSlug)}`,
+        )
+      : null,
+  ]);
+  const fa = locale === "fa";
+  const relatedLinks = [
+    ...(counterpart
+      ? [
+          {
+            href: `/${locale}/products/${encodeURIComponent(counterpart.product.slug)}`,
+            label: apiSlug
+              ? fa
+                ? `اعتبار API برای ${p.name}`
+                : `${p.name} API credits`
+              : fa
+                ? `اشتراک ${counterpart.product.name}`
+                : `${counterpart.product.name} subscription`,
+          },
+        ]
+      : []),
+    ...(blog?.posts ?? [])
+      .filter((post) => articles.includes(post.slug))
+      .map((post) => ({
+        href: `/${locale}/blog/${encodeURIComponent(post.slug)}`,
+        label: post.title,
+      })),
+  ];
   const prices = localPlans.flatMap((plan) => {
     if (!canBuyPlan(plan, payment)) return [];
     const price =
@@ -118,7 +160,7 @@ export default async function ProductDetailPage({
           url,
           sku: p.id,
           name: p.name,
-          description: p.shortDescription || p.description.replace(/[#*]/g, "").slice(0, 200),
+          description: p.shortDescription || metadataExcerpt(p.description, 200),
           image: imageFor(p) ? [imageFor(p)] : undefined,
           category: p.category.name,
           offers: offer
@@ -185,6 +227,10 @@ export default async function ProductDetailPage({
         payment={payment ? { online: payment.online, cardToCard: payment.cardToCard } : null}
         supportHref={telegramSupportHref(settings)}
         dict={dict}
+      />
+      <RelatedContentLinks
+        title={fa ? "راهنماها و گزینه‌های مرتبط" : "Related guides and options"}
+        links={relatedLinks}
       />
     </>
   );

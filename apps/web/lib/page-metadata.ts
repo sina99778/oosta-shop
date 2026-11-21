@@ -30,6 +30,44 @@ export function absoluteUrl(path: string): string {
   return `${siteUrl()}${path}`;
 }
 
+export function metadataExcerpt(markdown: string, limit = 160): string {
+  const plain = markdown
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}(?:#{1,6}|[-*+>]|\d+\.)\s+/gm, "")
+    .replace(/[*_`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (plain.length <= limit) return plain;
+  const prefix = plain.slice(0, limit - 1);
+  const space = plain[limit - 1] === " " ? prefix.length : prefix.lastIndexOf(" ");
+  return `${space > 0 ? prefix.slice(0, space).trimEnd() : prefix}…`;
+}
+
+export function collectionJsonLd(locale: Locale, path: string, title: string, description: string) {
+  const home = absoluteUrl(`/${locale}`);
+  const url = `${home}${path}`;
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        "@id": url,
+        url,
+        name: title,
+        description,
+        inLanguage: locale === "fa" ? "fa-IR" : "en",
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: locale === "fa" ? "خانه" : "Home", item: home },
+          { "@type": "ListItem", position: 2, name: title, item: url },
+        ],
+      },
+    ],
+  };
+}
+
 // A storefront page that exists in both locales with its own translated chrome
 // (home, catalog, blog index): self-canonical plus fa/en/x-default hreflang.
 export function localizedPageMetadata(

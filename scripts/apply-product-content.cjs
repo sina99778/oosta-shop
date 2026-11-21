@@ -2,16 +2,22 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { isDeepStrictEqual } = require("node:util");
 
 const fields = ["shortDescription", "description", "metaTitle", "metaDescription"];
-const matches = (row, data) => fields.every((field) => row[field] === data[field]);
+const matches = (row, data) =>
+  Object.entries(data).every(([field, value]) => isDeepStrictEqual(row[field], value));
 
-async function run({ directory, backupFile, apply = false, apiRoot, adminEmail }) {
+async function run({ directory, backupFile, apply = false, apiRoot, adminEmail, slugs = [] }) {
   const { prisma } = require(path.join(apiRoot, "lib/prisma"));
   const { updateProductSchema } = require(path.join(apiRoot, "modules/admin/admin.schemas"));
   const files = fs.readdirSync(directory).filter((name) => /^top-[a-z-]+\.fa\.json$/.test(name));
-  const records = files.flatMap((name) =>
-    JSON.parse(fs.readFileSync(path.join(directory, name), "utf8")),
+  const records = files
+    .flatMap((name) => JSON.parse(fs.readFileSync(path.join(directory, name), "utf8")))
+    .filter((record) => !slugs.length || slugs.includes(record.slug));
+  assert(
+    slugs.every((slug) => records.some((record) => record.slug === slug)),
+    "Unknown content slug",
   );
   assert(records.length > 0 && records.length <= 50, "Unexpected content batch size");
   assert.equal(new Set(records.map((item) => item.slug)).size, records.length, "Duplicate slugs");
@@ -22,9 +28,10 @@ async function run({ directory, backupFile, apply = false, apiRoot, adminEmail }
       record.sources.every((source) => new URL(source.url).protocol === "https:"),
       "Use HTTPS sources",
     );
-    const data = updateProductSchema.parse(
-      Object.fromEntries(fields.map((field) => [field, record[field]])),
-    );
+    const data = updateProductSchema.parse({
+      ...Object.fromEntries(fields.map((field) => [field, record[field]])),
+      specs: record.specs,
+    });
     assert(
       fields.every((field) => typeof data[field] === "string" && data[field].length > 0),
       "Missing content field",
@@ -36,6 +43,7 @@ async function run({ directory, backupFile, apply = false, apiRoot, adminEmail }
     slug: true,
     isActive: true,
     updatedAt: true,
+    specs: true,
     ...Object.fromEntries(fields.map((field) => [field, true])),
   };
   const rows = await prisma.product.findMany({
@@ -77,7 +85,10 @@ async function run({ directory, backupFile, apply = false, apiRoot, adminEmail }
           original && current && original.id === current.id && current.isActive,
           "Product scope changed",
         );
-        if (matches(current, change.data)) continue;
+        const { specs, ...content } = change.data;
+        // Keep specifications already curated in the admin panel.
+        const data = specs && !current.specs?.length ? { ...content, specs } : content;
+        if (matches(current, data)) continue;
         const result = await tx.product.updateMany({
           where: {
             id: original.id,
@@ -85,7 +96,7 @@ async function run({ directory, backupFile, apply = false, apiRoot, adminEmail }
             updatedAt: new Date(original.updatedAt),
             ...Object.fromEntries(fields.map((field) => [field, original[field]])),
           },
-          data: change.data,
+          data,
         });
         assert.equal(result.count, 1, "Product changed since preview; batch rolled back");
         updated++;
@@ -98,13 +109,14 @@ async function run({ directory, backupFile, apply = false, apiRoot, adminEmail }
 
 module.exports = { run };
 if (require.main === module) {
-  const [directory, backupFile, mode] = process.argv.slice(2);
+  const [directory, backupFile, mode, ...slugs] = process.argv.slice(2);
   assert(["--preview", "--apply"].includes(mode), "Choose preview or apply");
   const apiRoot = process.env.CONTENT_API_ROOT || "/app/apps/api/dist";
   run({
     directory,
     backupFile,
     apply: mode === "--apply",
+    slugs,
     apiRoot,
     adminEmail: process.env.CONTENT_ADMIN_EMAIL || "sinanaseri2004@gmail.com",
   })
