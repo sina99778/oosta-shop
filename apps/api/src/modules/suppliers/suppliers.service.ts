@@ -215,10 +215,10 @@ export type SourcePlan = {
   supplierMappings: unknown;
   durationDays: number | null;
 };
-export function matchingOffers(
+function eligibleOffers(
   plan: SourcePlan,
   all: Map<SupplierId, Catalog>,
-  now = Date.now(),
+  now: number,
 ): Array<{ offer: Offer; expiresAt: number }> {
   const variant = readVariant(plan.variant);
   if (plan.source !== "SUPPLIER" || !variant) return [];
@@ -227,8 +227,8 @@ export function matchingOffers(
     if (mapping.variantKey !== signature) return [];
     const c = all.get(mapping.supplier);
     if (!c) return [];
-    const age = now - Date.parse(c.fetchedAt);
-    if (age < 0 || age >= 60000) return [];
+    const fetchedAt = Date.parse(c.fetchedAt);
+    if (fetchedAt > now) return [];
     const offer = c.offers.find(
       (o) => o.externalId === mapping.externalId && o.fingerprint === mapping.fingerprint,
     );
@@ -241,23 +241,92 @@ export function matchingOffers(
         !(offer.stock === null && offer.onRequest && variant.delivery === "MANUAL"))
     )
       return [];
-    return [{ offer, expiresAt: Date.parse(c.fetchedAt) + 60000 }];
+    return [{ offer, expiresAt: fetchedAt + 60000 }];
   });
 }
-export async function sourceStates(plans: SourcePlan[]) {
+
+export function matchingOffers(plan: SourcePlan, all: Map<SupplierId, Catalog>, now = Date.now()) {
+  return eligibleOffers(plan, all, now).filter(({ expiresAt }) => expiresAt > now);
+}
+
+export type IndicativePrice = { amount: number; currency: "IRR"; expiresAt: string };
+
+function priceOffer(
+  { offer, expiresAt }: ReturnType<typeof matchingOffers>[number],
+  resolved: Awaited<ReturnType<typeof quotePricing>>,
+  now: Date,
+) {
+  return {
+    amount: indicativePrice(offer.cost, offer.currency, resolved.policy, now),
+    expiresAt: Math.min(
+      expiresAt,
+      resolved.rateExpiresAt,
+      rateExpiry(resolved.policy),
+      now.getTime() + 60000,
+    ),
+  };
+}
+
+export async function sourceStates(plans: SourcePlan[], includeIndicativePrice = false) {
   const result = new Map<
     string,
-    { inStock: boolean; availableStock: number; quoteRequired: boolean }
+    {
+      inStock: boolean;
+      availableStock: number;
+      quoteRequired: boolean;
+      indicativePrice: IndicativePrice | null;
+      stockUnconfirmed: boolean;
+    }
   >();
   if (!plans.some((p) => p.source === "SUPPLIER")) return result;
   const all = await catalogs();
+  const now = new Date();
+  const stockedOffers = new Map<string, ReturnType<typeof matchingOffers>>();
   for (const p of plans.filter((p) => p.source === "SUPPLIER")) {
-    const offers = matchingOffers(p, all);
+    const eligible = eligibleOffers(p, all, now.getTime());
+    const offers = eligible.filter(({ expiresAt }) => expiresAt > now.getTime());
+    if (includeIndicativePrice) {
+      const stocked = offers.filter(({ offer }) => (offer.stock ?? 0) > 0);
+      if (stocked.length) stockedOffers.set(p.id, stocked);
+    }
     result.set(p.id, {
       inStock: offers.length > 0,
       availableStock: Math.max(0, ...offers.map((x) => x.offer.stock ?? 0)),
       quoteRequired: true,
+      indicativePrice: null,
+      stockUnconfirmed: offers.length === 0 && eligible.some(({ offer }) => (offer.stock ?? 0) > 0),
     });
+  }
+  if (!stockedOffers.size) return result;
+  const policy = await getPricing();
+  if (!policy?.enabled) return result;
+  const resolved = await quotePricing(policy, now.getTime()).catch((error: unknown) => {
+    if (error instanceof AppError) return null;
+    throw error;
+  });
+  if (!resolved) return result;
+  for (const [id, offers] of stockedOffers) {
+    let lowest: ReturnType<typeof priceOffer> | null = null;
+    for (const offer of offers) {
+      try {
+        const price = priceOffer(offer, resolved, now);
+        if (price.expiresAt <= Date.now()) continue;
+        if (
+          !lowest ||
+          price.amount.lt(lowest.amount) ||
+          (price.amount.eq(lowest.amount) && price.expiresAt > lowest.expiresAt)
+        )
+          lowest = price;
+      } catch (error) {
+        if (!(error instanceof AppError)) throw error;
+      }
+    }
+    if (lowest)
+      result.get(id)!.indicativePrice = {
+        amount: Number(lowest.amount),
+        currency: "IRR",
+        expiresAt: new Date(lowest.expiresAt).toISOString(),
+      };
   }
   return result;
 }
@@ -291,20 +360,10 @@ export async function quote(planId: string) {
   }
   if (!offers.length)
     throw new AppError(409, "NO_CURRENT_OFFER", "No fresh matching supplier offer is available");
-  const prices = offers.flatMap(({ offer, expiresAt }) => {
+  const now = new Date();
+  const prices = offers.flatMap((offer) => {
     try {
-      const amount = indicativePrice(offer.cost, offer.currency, resolved.policy);
-      return [
-        {
-          amount,
-          expiresAt: Math.min(
-            expiresAt,
-            resolved.rateExpiresAt,
-            rateExpiry(resolved.policy),
-            Date.now() + 60000,
-          ),
-        },
-      ];
+      return [priceOffer(offer, resolved, now)];
     } catch (e) {
       if (e instanceof AppError && e.code === "PRICING_UNAVAILABLE") return [];
       throw e;

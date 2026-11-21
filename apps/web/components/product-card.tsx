@@ -5,6 +5,7 @@ import { productImageUrl } from "@/lib/api";
 import { availabilityOf, availabilityLabel } from "@/lib/product-availability";
 import type { Locale } from "@/lib/i18n";
 import type { ProductSummary } from "@/lib/types";
+import { IndicativePriceLabel } from "./indicative-price";
 import styles from "./shop.module.css";
 export type ProductCardLabels = {
   from: string;
@@ -28,7 +29,6 @@ export function ProductCard({
   const image = productImageUrl(product);
   const fa = locale === "fa";
   const availability = availabilityOf(product);
-  const onRequest = availability === "SUPPLIER_STOCK" || availability === "ON_REQUEST";
   const categoryNames: Record<string, string> = fa
     ? {
         "ai-accounts": "هوش مصنوعی",
@@ -84,7 +84,13 @@ export function ProductCard({
             </p>
           )}
           <div className={styles.cardPrice}>
-            {onRequest && <small>{fa ? "قیمت با استعلام" : "Price on request"}</small>}
+            {availability === "SUPPLIER_STOCK" && (
+              <IndicativePriceLabel price={product.indicativePriceFrom} locale={locale} from />
+            )}
+            {(availability === "ON_REQUEST" ||
+              (availability === "OUT_OF_STOCK" && product.supplierStockUnconfirmed)) && (
+              <small>{fa ? "قیمت با استعلام" : "Price on request"}</small>
+            )}
             {product.lowStock && (
               <p className={styles.lowStock}>
                 {product.availableStock.toLocaleString(fa ? "fa" : "en")} {labels.left}

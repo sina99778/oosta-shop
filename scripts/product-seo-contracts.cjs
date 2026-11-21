@@ -146,6 +146,13 @@ async function main() {
   assert(!(await graphs()).entities.some((entry) => entry["@type"] === "Product"));
   product.plans[0].quoteRequired = true;
   product.plans[0].source = "SUPPLIER";
+  product.plans[0].availability = "SUPPLIER_STOCK";
+  product.plans[0].indicativePrice = {
+    amount: 2600000,
+    currency: "IRR",
+    expiresAt: new Date(Date.now() + 30000).toISOString(),
+  };
+  product.indicativePriceFrom = product.plans[0].indicativePrice;
   payment = { online: true, cardToCard: true };
   assert(!(await graphs()).entities.some((entry) => entry["@type"] === "Product"));
   product.rating = { average: 4.5, count: 2 };

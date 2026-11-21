@@ -110,8 +110,7 @@ export async function fxStatus() {
       : null,
   };
 }
-export async function quotePricing(policy: Pricing) {
-  const now = Date.now();
+export async function quotePricing(policy: Pricing, now = Date.now()) {
   if (policy.rateSource !== "NAVASAN_FREE")
     return {
       policy,
@@ -145,7 +144,7 @@ export async function quotePricing(policy: Pricing) {
       updatedAt: referenceTime,
       refreshIntervalHours: 8,
     },
-    rateExpiresAt: Date.parse(referenceTime) + FX_MAX_AGE_MS,
+    rateExpiresAt: Math.min(Date.parse(referenceTime) + FX_MAX_AGE_MS, Date.parse(state.expiresAt)),
   };
 }
 export function startFxRefresh(): () => void {

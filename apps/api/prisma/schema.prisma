@@ -353,6 +353,7 @@ model ProductPlan {
   salePrice    Decimal?        @db.Decimal(12, 2) // discounted price (when set & < price)
   currency     String          @default("IRR")
   isActive     Boolean         @default(true)
+  sortOrder    Int             @default(0)
   source       String          @default("INTERNAL")
   variant      Json?
   supplierMappings Json?

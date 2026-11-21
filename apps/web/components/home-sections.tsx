@@ -23,10 +23,16 @@ export async function HomeSections({
 }) {
   const [categoryData, productData, blogData] = await Promise.all([
     fetchJson<{ categories: Category[] }>("/categories"),
-    fetchJson<Paginated<ProductSummary>>("/products?pageSize=8&sort=recommended"),
+    fetchJson<Paginated<ProductSummary>>("/products?pageSize=8&sort=recommended", 15),
     fetchJson<{ posts: BlogPostSummary[] }>("/blog"),
   ]);
-  const selections = productData?.items ?? [];
+  // eslint-disable-next-line react-hooks/purity -- This server component validates cached prices at request time.
+  const now = Date.now();
+  const selections = (productData?.items ?? []).map((product) =>
+    product.indicativePriceFrom && Date.parse(product.indicativePriceFrom.expiresAt) <= now
+      ? { ...product, indicativePriceFrom: null }
+      : product,
+  );
   const fa = locale === "fa";
   const articles = blogData?.posts.slice(0, 3) ?? [];
   const learningHref = articles.length ? "#learning" : "#prompt-lab";

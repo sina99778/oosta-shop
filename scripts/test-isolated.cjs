@@ -107,7 +107,9 @@ async function main() {
               ? "stock-mail-regressions"
               : process.argv.includes("--renewal-only")
                 ? "renewal-regressions"
-                : null;
+                : process.argv.includes("--catalog-search-only")
+                  ? "catalog-search-regressions"
+                  : null;
     if (focusedScript) {
       console.log(
         run(
@@ -171,16 +173,14 @@ async function main() {
         env,
       ),
     );
-    console.log(
-      run(
-        process.execPath,
-        [
-          path.join(root, "node_modules/tsx/dist/cli.mjs"),
-          "apps/api/scripts/catalog-sorting-regressions.ts",
-        ],
-        env,
-      ),
-    );
+    for (const name of ["catalog-search-regressions", "catalog-sorting-regressions"])
+      console.log(
+        run(
+          process.execPath,
+          [path.join(root, "node_modules/tsx/dist/cli.mjs"), `apps/api/scripts/${name}.ts`],
+          env,
+        ),
+      );
     console.log(
       run(
         process.execPath,

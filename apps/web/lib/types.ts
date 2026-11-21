@@ -3,6 +3,7 @@ import type { ProductVariant } from "./product-variant";
 
 export type ProductType = "ACCOUNT" | "LICENSE" | "GIFTCARD";
 export type Availability = "LOCAL_STOCK" | "SUPPLIER_STOCK" | "ON_REQUEST" | "OUT_OF_STOCK";
+export type IndicativePrice = { amount: number; currency: "IRR"; expiresAt: string };
 
 export type Category = {
   id: string;
@@ -25,6 +26,8 @@ export type ProductSummary = {
   category: CategoryRef;
   quoteRequired?: boolean;
   priceFrom: number | null;
+  indicativePriceFrom?: IndicativePrice | null;
+  supplierStockUnconfirmed?: boolean;
   pricePlanId?: string | null;
   priceDurationDays?: number | null;
   originalPriceFrom: number | null;
@@ -44,9 +47,12 @@ export type PlanDetail = {
   id: string;
   label: string;
   durationDays: number | null;
+  sortOrder?: number;
   variant?: ProductVariant | null;
   source?: "INTERNAL" | "SUPPLIER";
   quoteRequired?: boolean;
+  indicativePrice?: IndicativePrice | null;
+  supplierStockUnconfirmed?: boolean;
   price: number;
   salePrice: number | null;
   effectivePrice: number;

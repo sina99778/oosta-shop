@@ -151,6 +151,30 @@ async function main() {
         ],
       },
     });
+    const publicDetail = () => inject(app, { method: "GET", url: "/products/fx-fixture" });
+    const estimate = await publicDetail();
+    assert.equal(estimate.statusCode, 200, estimate.body);
+    assert.equal(estimate.json().product.plans[0].indicativePrice.amount, 2626000);
+    assert.equal(estimate.json().product.plans[0].indicativePrice.currency, "IRR");
+    assert(!estimate.body.includes("NAVASAN"));
+    assert(!estimate.body.includes(fp));
+    const catalogRow = await prisma.siteSetting.findUniqueOrThrow({
+      where: { key: "suppliers.catalog.canboso" },
+    });
+    const onRequestCatalog = JSON.parse(catalogRow.value);
+    onRequestCatalog.offers[0].stock = null;
+    onRequestCatalog.offers[0].onRequest = true;
+    await prisma.siteSetting.update({
+      where: { key: catalogRow.key },
+      data: { value: JSON.stringify(onRequestCatalog) },
+    });
+    const onRequest = await publicDetail();
+    assert.equal(onRequest.json().product.plans[0].availability, "ON_REQUEST");
+    assert.equal(onRequest.json().product.plans[0].indicativePrice, null);
+    await prisma.siteSetting.update({
+      where: { key: catalogRow.key },
+      data: { value: catalogRow.value },
+    });
     const quote = await call("POST", "/supplier-quotes", { planId: plan.id }, buyerToken);
     assert.equal(quote.statusCode, 200, quote.body);
     assert.equal(quote.json().quote.amount, 2626000);
@@ -197,6 +221,10 @@ async function main() {
     for (const rate of Object.values(stale.snapshot!.rates))
       rate.updatedAt = new Date(Date.now() - 11 * 3600000).toISOString();
     await save(stale);
+    const staleEstimate = await publicDetail();
+    assert.equal(staleEstimate.statusCode, 200, staleEstimate.body);
+    assert.equal(staleEstimate.json().product.plans[0].availability, "SUPPLIER_STOCK");
+    assert.equal(staleEstimate.json().product.plans[0].indicativePrice, null);
     assert.equal(
       (await call("POST", "/supplier-quotes", { planId: plan.id }, buyerToken)).statusCode,
       503,

@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { Markdown } from "@/components/markdown";
 import { ProductCard } from "@/components/product-card";
+import { IndicativePriceLabel } from "./indicative-price";
 import { ProductMark } from "@/components/product-mark";
 import { VariantSelector } from "./variant-selector";
 import { SupplierQuotePanel } from "./supplier-quote-panel";
@@ -76,11 +77,18 @@ export function ProductDetailView({
     ...product.galleryImageIds.map((id) => assetUrl(`/product-images/${id}`)),
   ];
   const requestedPlan = product.plans.find((p) => p.id === requestedPlanId);
+  const stocked = product.plans.filter((p) => {
+    const availability = availabilityOf(p);
+    return availability === "LOCAL_STOCK" || availability === "SUPPLIER_STOCK";
+  });
+  stocked.sort(
+    (a, b) =>
+      (b.sortOrder ?? 0) - (a.sortOrder ?? 0) ||
+      Number(availabilityOf(b) === "LOCAL_STOCK") - Number(availabilityOf(a) === "LOCAL_STOCK"),
+  );
   const defaultPlan =
     requestedPlanId === undefined
-      ? (product.plans.find((p) => availabilityOf(p) === "LOCAL_STOCK") ??
-        product.plans.find((p) => p.inStock) ??
-        product.plans[0])
+      ? (stocked[0] ?? product.plans.find((p) => p.inStock) ?? product.plans[0])
       : requestedPlan;
   const activePlanId = selectedPlan === undefined ? (defaultPlan?.id ?? null) : selectedPlan;
   const plan = product.plans.find((p) => p.id === activePlanId) ?? null;
@@ -371,6 +379,14 @@ export function ProductDetailView({
             </div>
           )}
           {/* Price */}
+          {(supplierCart || plan?.supplierStockUnconfirmed) && (
+            <div className="mt-2" aria-live="polite">
+              <IndicativePriceLabel
+                price={supplierCart ? plan.indicativePrice : null}
+                locale={locale}
+              />
+            </div>
+          )}
           {plan && !plan.quoteRequired && (
             <div className={cn("mt-2 flex flex-wrap items-end gap-3", styles.detailPrice)}>
               <span className="text-3xl font-bold">

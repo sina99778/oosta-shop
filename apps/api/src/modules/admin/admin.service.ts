@@ -227,6 +227,7 @@ export async function getProduct(id: string) {
         salePrice: pl.salePrice != null ? Number(pl.salePrice) : null,
         currency: pl.currency,
         isActive: pl.isActive,
+        sortOrder: pl.sortOrder,
         availableStock: inventory.available,
         inventory,
         supplierAvailability,
@@ -333,6 +334,7 @@ export async function createPlan(productId: string, input: CreatePlanInput) {
       salePrice: input.salePrice ?? null,
       currency: input.currency ?? "IRR",
       isActive: input.isActive ?? true,
+      sortOrder: input.sortOrder ?? 0,
       source,
       variant: variant ?? Prisma.DbNull,
       supplierMappings: mappings,
@@ -382,6 +384,7 @@ export async function updatePlan(id: string, input: UpdatePlanInput) {
     if (input.salePrice !== undefined) data.salePrice = input.salePrice;
     if (input.currency !== undefined) data.currency = input.currency;
     if (input.isActive !== undefined) data.isActive = input.isActive;
+    if (input.sortOrder !== undefined) data.sortOrder = input.sortOrder;
     if (input.durationDays !== undefined) data.durationDays = input.durationDays;
     if (input.source !== undefined) data.source = input.source;
     if (input.variant !== undefined) data.variant = variant ?? Prisma.DbNull;

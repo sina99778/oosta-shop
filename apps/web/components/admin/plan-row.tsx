@@ -18,6 +18,7 @@ export type EditablePlan = {
   price: number;
   salePrice: number | null;
   isActive: boolean;
+  sortOrder?: number;
   availableStock: number;
   inventory: { available: number; reserved: number; sold: number };
   supplierAvailability:
@@ -55,6 +56,7 @@ export function PlanRow({
   const [price, setPrice] = useState(String(plan.price));
   const [sale, setSale] = useState(plan.salePrice != null ? String(plan.salePrice) : "");
   const [active, setActive] = useState(plan.isActive);
+  const [sortOrder, setSortOrder] = useState(String(plan.sortOrder ?? 0));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -70,6 +72,7 @@ export function PlanRow({
           price: Number(price),
           salePrice: sale.trim() ? Number(sale) : null,
           isActive: active,
+          ...(Number(sortOrder) !== (plan.sortOrder ?? 0) ? { sortOrder: Number(sortOrder) } : {}),
           variant,
           source,
           durationDays: duration.trim() ? Number(duration) : null,
@@ -183,6 +186,17 @@ export function PlanRow({
           {fa ? "مشخصات تنوع و منابع" : "Configuration and sources"}
         </summary>
         <div className="mt-4 space-y-4">
+          <label className="block text-sm">
+            {fa ? "اولویت انتخاب پیش‌فرض (۰ تا ۱۰۰۰)" : "Default selection priority (0–1000)"}
+            <Input
+              type="number"
+              min={0}
+              max={1000}
+              step={1}
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value)}
+            />
+          </label>
           <label className="block text-sm">
             {fa
               ? "مدت اشتراک — روز؛ خالی یعنی بدون انقضا"

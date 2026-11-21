@@ -88,6 +88,7 @@ const p = {
 };
 const load = Module._load;
 let interactive;
+let hydrated = false;
 const interactionReact = {
   ...React,
   useState(initial) {
@@ -99,6 +100,10 @@ const interactionReact = {
   },
   useRef: (initial) => (interactive ? { current: initial } : React.useRef(initial)),
   useEffect: (...args) => (interactive ? undefined : React.useEffect(...args)),
+  useSyncExternalStore: (subscribe, getSnapshot, getServerSnapshot) =>
+    hydrated
+      ? getSnapshot()
+      : React.useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot),
 };
 const navigations = [];
 let cartChanges = 0;
@@ -250,6 +255,29 @@ function renderReturn(requestedPlanId, product = p) {
     }),
   );
 }
+const preferredPlans = {
+  ...p,
+  plans: p.plans.map((plan, index) => ({ ...plan, sortOrder: index ? 100 : 0 })),
+};
+const checkedPlan = (html, id) =>
+  new RegExp(`<input(?=[^>]*checked="")(?=[^>]*value="${id}")[^>]*>`).test(html);
+assert(checkedPlan(renderReturn(undefined, preferredPlans), "fixture-manual"));
+assert(checkedPlan(renderReturn("fixture-auto", preferredPlans), "fixture-auto"));
+for (const availability of ["OUT_OF_STOCK", "ON_REQUEST"]) {
+  const fallback = {
+    ...preferredPlans,
+    plans: [
+      preferredPlans.plans[0],
+      {
+        ...preferredPlans.plans[1],
+        availability,
+        availableStock: 0,
+        inStock: availability === "ON_REQUEST",
+      },
+    ],
+  };
+  assert(checkedPlan(renderReturn(undefined, fallback), "fixture-auto"));
+}
 assert.match(
   renderReturn(p.plans[1].id),
   /checked="" value="fixture-manual"|value="fixture-manual" checked=""/,
@@ -277,8 +305,46 @@ const soldOut = renderReturn("sold-out", productWithSoldOutPlan);
 assert.match(soldOut, /checked="" value="sold-out"|value="sold-out" checked=""/);
 assert.match(soldOut, /Notify me when available/);
 assert.doesNotMatch(soldOut, /Add to cart/);
+assert.doesNotMatch(soldOut, /Price on request/);
+const staleSupplier = renderReturn("sold-out", {
+  ...productWithSoldOutPlan,
+  plans: productWithSoldOutPlan.plans.map((plan) =>
+    plan.id === "sold-out" ? { ...plan, supplierStockUnconfirmed: true } : plan,
+  ),
+});
+assert.match(staleSupplier, /Price on request/);
+assert.doesNotMatch(staleSupplier, /Add to cart/);
 const guest = renderReturn(p.plans[1].id, { ...p, hasImage: false });
 assert.match(guest, /Add to cart/);
+const indicativePrice = {
+  amount: 2600000,
+  currency: "IRR",
+  expiresAt: new Date(Date.now() + 30000).toISOString(),
+};
+const supplierEstimateProduct = {
+  ...p,
+  plans: p.plans.map((plan) => ({
+    ...plan,
+    indicativePrice: plan.id === p.plans[0].id ? indicativePrice : null,
+  })),
+};
+const guestEstimate = renderReturn(p.plans[0].id, supplierEstimateProduct);
+assert.match(guestEstimate, /Estimated price/);
+assert.match(guestEstimate, /2,600,000 IRR/);
+assert.doesNotMatch(renderReturn(p.plans[1].id, supplierEstimateProduct), /2,600,000 IRR/);
+hydrated = true;
+const expiredEstimate = renderReturn(p.plans[0].id, {
+  ...supplierEstimateProduct,
+  plans: [
+    {
+      ...supplierEstimateProduct.plans[0],
+      indicativePrice: { ...indicativePrice, expiresAt: "2000-01-01T00:00:00.000Z" },
+    },
+  ],
+});
+hydrated = false;
+assert.match(expiredEstimate, /Price on request/);
+assert.doesNotMatch(expiredEstimate, /2,600,000 IRR/);
 const requestOnly = renderReturn(p.plans[1].id, {
   ...p,
   plans: [{ ...p.plans[1], availableStock: 0, availability: "ON_REQUEST" }],
@@ -310,6 +376,28 @@ assert.match(home, /href="\/fa\/products\?category=fixture"/);
 assert.doesNotMatch(home, /<select[^>]+name="sort"/);
 assert(!home.includes("Empty category"));
 assert(!home.includes("اشتراک و حساب کاربری"));
+const homeEstimate = renderToStaticMarkup(
+  React.createElement(HomeCatalog, {
+    locale: "fa",
+    products: [{ ...p, indicativePriceFrom: indicativePrice }],
+    categories: [],
+    categoryLabels: {},
+    unavailable: false,
+  }),
+);
+assert.match(homeEstimate, /قیمت تقریبی از/);
+assert.match(homeEstimate, /<bdi>۲۶۰٬۰۰۰ تومان<\/bdi>/);
+assert.match(homeEstimate, /href="\/fa\/products\/fixture"/);
+const staleHome = renderToStaticMarkup(
+  React.createElement(HomeCatalog, {
+    locale: "fa",
+    products: [{ ...p, availability: "OUT_OF_STOCK", supplierStockUnconfirmed: true }],
+    categories: [],
+    categoryLabels: {},
+    unavailable: false,
+  }),
+);
+assert.match(staleHome, /قیمت با استعلام/);
 const renderProduct = () =>
   renderToStaticMarkup(
     React.createElement(ProductDetailView, {

@@ -123,6 +123,7 @@ async function main() {
     };
     const created = await call("POST", `/admin/products/${product.id}/plans`, {
       label: "Supplier fixture plan",
+      sortOrder: 15,
       durationDays: 30,
       price: 9999990,
       source: "SUPPLIER",
@@ -130,6 +131,10 @@ async function main() {
     });
     assert.equal(created.statusCode, 201, created.body);
     const plan = created.json().plan;
+    assert.equal(plan.sortOrder, 15);
+    assert.equal((await call("PATCH", `/admin/plans/${plan.id}`, { sortOrder: 50 }, buyerToken)).statusCode, 403);
+    assert.equal((await call("PATCH", `/admin/plans/${plan.id}`, { sortOrder: 1001 })).statusCode, 400);
+    assert.equal((await call("PATCH", `/admin/plans/${plan.id}`, { sortOrder: 50 })).statusCode, 200);
     assert.equal(plan.variant.warranty.kind, "NONE");
     const map = (supplier: string, offer: typeof offer1, automaticVerified = false) => ({
       supplier,
@@ -169,14 +174,17 @@ async function main() {
     const detail = await call("GET", "/products/supplier-fixture", undefined, null);
     assert.equal(detail.statusCode, 200, detail.body);
     const publicPlan = detail.json().product.plans[0];
+    assert.equal(publicPlan.sortOrder, 50);
     assert.equal(publicPlan.price, 0);
     assert.equal(publicPlan.quoteRequired, true);
     assert.equal(publicPlan.inStock, true);
     assert.equal(publicPlan.availability, "SUPPLIER_STOCK");
+    assert.equal(publicPlan.indicativePrice, null);
     assert.equal(detail.json().product.availability, "SUPPLIER_STOCK");
     assert.equal(detail.json().product.availableStock, 0);
     const adminDetail = await call("GET", `/admin/products/${product.id}`);
     assert.equal(adminDetail.statusCode, 200);
+    assert.equal(adminDetail.json().product.plans[0].sortOrder, 50);
     assert.deepEqual(adminDetail.json().product.plans[0].supplierAvailability, {
       kind: "confirmed",
       count: publicPlan.availableStock,
@@ -224,6 +232,63 @@ async function main() {
     });
     assert.equal(rejectedFloor.statusCode, 400);
     assert.equal((await call("PATCH", "/admin/suppliers/pricing", {}, buyerToken)).statusCode, 403);
+    const priorPublicRequests = requests;
+    const priced = await call("GET", "/products/supplier-fixture", undefined, null);
+    assert.equal(priced.statusCode, 200, priced.body);
+    const pricedProduct = priced.json().product;
+    const pricedPlan = pricedProduct.plans.find(
+      (candidate: { id: string }) => candidate.id === plan.id,
+    );
+    const estimate = pricedPlan.indicativePrice;
+    const expiresAt = new Date(Date.parse(one.json().catalog.fetchedAt) + 60000).toISOString();
+    assert.deepEqual(estimate, { amount: 2600000, currency: "IRR", expiresAt });
+    assert.deepEqual(pricedProduct.indicativePriceFrom, estimate);
+    assert.equal(pricedProduct.priceFrom, null);
+    assert.equal(pricedProduct.supplierStockUnconfirmed, false);
+    assert.equal(pricedPlan.price, 0);
+    assert(!priced.body.includes(offer1.fingerprint));
+    assert(!priced.body.includes("canboso"));
+    const pricedCatalog = await call("GET", "/products?category=supplier-fixtures", undefined, null);
+    assert.equal(pricedCatalog.statusCode, 200, pricedCatalog.body);
+    assert.match(String(pricedCatalog.headers["cache-control"]), /no-store/);
+    assert.deepEqual(pricedCatalog.json().items[0].indicativePriceFrom, estimate);
+    const localPriceFixture = await prisma.product.create({
+      data: {
+        slug: "local-price-fixture",
+        name: "Local price fixture",
+        description: "Sorting fixture",
+        type: "ACCOUNT",
+        categoryId: category.id,
+        plans: { create: { label: "Local plan", price: 300000, currency: "IRT" } },
+      },
+      include: { plans: true },
+    });
+    await prisma.inventoryItem.create({
+      data: {
+        type: "ACCOUNT",
+        productId: localPriceFixture.id,
+        planId: localPriceFixture.plans[0].id,
+      },
+    });
+    for (const [sort, expected] of [
+      ["price_asc", [product.id, localPriceFixture.id]],
+      ["price_desc", [localPriceFixture.id, product.id]],
+    ] as const) {
+      const sorted = await call(
+        "GET",
+        `/products?category=supplier-fixtures&sort=${sort}`,
+        undefined,
+        null,
+      );
+      assert.equal(sorted.statusCode, 200, sorted.body);
+      assert.deepEqual(
+        sorted.json().items.map((item: { id: string }) => item.id),
+        expected,
+      );
+    }
+    await prisma.inventoryItem.deleteMany({ where: { productId: localPriceFixture.id } });
+    await prisma.product.delete({ where: { id: localPriceFixture.id } });
+    assert.equal(requests, priorPublicRequests, "Public prices must use saved snapshots only");
     const quoted = await call("POST", "/supplier-quotes", { planId: plan.id }, buyerToken);
     assert.equal(quoted.statusCode, 200, quoted.body);
     assert.match(String(quoted.headers["cache-control"]), /no-store/);
@@ -262,8 +327,23 @@ async function main() {
     assert.equal(stale.json().product.plans[0].availability, "OUT_OF_STOCK");
     assert.equal(stale.json().product.quoteRequired, false);
     assert.equal(stale.json().product.priceFrom, null);
+    assert.equal(stale.json().product.indicativePriceFrom, null);
+    assert.equal(stale.json().product.plans[0].indicativePrice, null);
+    assert.equal(stale.json().product.supplierStockUnconfirmed, true);
+    assert.equal(stale.json().product.plans[0].supplierStockUnconfirmed, true);
+    const staleList = await call("GET", "/products?category=supplier-fixtures", undefined, null);
+    assert.equal(staleList.json().items[0].supplierStockUnconfirmed, true);
     for (const id of ["canboso", "canboso2"]) {
       await replaceCatalog(id, (c) => {
+        c.offers[0].stock = 0;
+      });
+    }
+    const soldOut = await call("GET", "/products/supplier-fixture", undefined, null);
+    assert.equal(soldOut.json().product.supplierStockUnconfirmed, false);
+    assert.equal(soldOut.json().product.plans[0].supplierStockUnconfirmed, false);
+    for (const id of ["canboso", "canboso2"]) {
+      await replaceCatalog(id, (c) => {
+        c.offers[0].stock = 10;
         c.fetchedAt = new Date().toISOString();
       });
     }
@@ -281,6 +361,10 @@ async function main() {
         }),
       },
     });
+    const staleFx = await call("GET", "/products/supplier-fixture", undefined, null);
+    assert.equal(staleFx.statusCode, 200, staleFx.body);
+    assert.equal(staleFx.json().product.availability, "SUPPLIER_STOCK");
+    assert.equal(staleFx.json().product.indicativePriceFrom, null);
     assert.equal(
       (await call("POST", "/supplier-quotes", { planId: plan.id }, buyerToken)).statusCode,
       503,

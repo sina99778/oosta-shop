@@ -1,5 +1,5 @@
 import { readVariant } from "../suppliers/variant";
-import { sourceStates } from "../suppliers/suppliers.service";
+import { sourceStates, type IndicativePrice } from "../suppliers/suppliers.service";
 // Public catalog read model: categories, product listings (filter/sort/paginate),
 // bestselling, product detail (gallery, specs, sale price, rating, related), and
 // customer review submission.
@@ -8,6 +8,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/httpError";
 import type { ListProductsQuery } from "./catalog.schemas";
+import { searchProducts } from "./catalog.search";
 
 const LOW_STOCK_THRESHOLD = 5;
 const availabilityOrder = ["OUT_OF_STOCK", "ON_REQUEST", "SUPPLIER_STOCK", "LOCAL_STOCK"] as const;
@@ -148,6 +149,8 @@ type ProductSummary = {
   type: ProductWithRelations["type"];
   category: { id: string; name: string; slug: string };
   priceFrom: number | null;
+  indicativePriceFrom: IndicativePrice | null;
+  supplierStockUnconfirmed: boolean;
   pricePlanId: string | null;
   priceDurationDays: number | null;
   originalPriceFrom: number | null;
@@ -195,6 +198,20 @@ function toSummary(
     planAvailability(availableStock),
     ...product.plans.map((p) => planAvailability(0, supplierStates.get(p.id))),
   ]);
+  let indicativePriceFrom: IndicativePrice | null = null;
+  if (availability === "SUPPLIER_STOCK") {
+    for (const plan of product.plans) {
+      const estimate = supplierStates.get(plan.id)?.indicativePrice;
+      if (
+        estimate &&
+        (!indicativePriceFrom ||
+          estimate.amount < indicativePriceFrom.amount ||
+          (estimate.amount === indicativePriceFrom.amount &&
+            estimate.expiresAt > indicativePriceFrom.expiresAt))
+      )
+        indicativePriceFrom = estimate;
+    }
+  }
   return {
     id: product.id,
     name: product.name,
@@ -209,6 +226,10 @@ function toSummary(
       slug: product.category.slug,
     },
     priceFrom: cheapest ? cheapest.effectivePrice : null,
+    indicativePriceFrom,
+    supplierStockUnconfirmed:
+      availability === "OUT_OF_STOCK" &&
+      product.plans.some((plan) => supplierStates.get(plan.id)?.stockUnconfirmed),
     pricePlanId: cheapest?.plan.id ?? null,
     priceDurationDays: cheapest?.plan.durationDays ?? null,
     originalPriceFrom: cheapest?.onSale ? cheapest.price : null,
@@ -283,7 +304,6 @@ export async function listCategories() {
 export async function listProducts(query: ListProductsQuery) {
   const where: Prisma.ProductWhereInput = { isActive: true };
   if (query.category) where.category = { slug: query.category };
-  if (query.q) where.name = { contains: query.q, mode: "insensitive" };
   if (query.featured) where.isFeatured = true;
 
   // For these orders, stock and ratings are display data rather than sort inputs.
@@ -291,14 +311,18 @@ export async function listProducts(query: ListProductsQuery) {
   const orderBy = [
     { sortOrder: "desc" },
     { createdAt: "desc" },
+    { id: "asc" },
   ] satisfies Prisma.ProductOrderByWithRelationInput[];
   const start = (query.page - 1) * query.pageSize;
-  const ranked = ["recommended", "newest", "popular", "bestselling"].includes(query.sort)
-    ? await prisma.product.findMany({
+  const searchMatches = query.q ? await searchProducts(query.q, query) : null;
+  const rankedSort = ["recommended", "newest", "popular", "bestselling"].includes(query.sort);
+  const ranked = rankedSort
+    ? (searchMatches ??
+      (await prisma.product.findMany({
         where,
         orderBy,
         select: { id: true, slug: true, createdAt: true, sortOrder: true },
-      })
+      })))
     : null;
   if (ranked) {
     if (query.sort === "popular") {
@@ -327,8 +351,9 @@ export async function listProducts(query: ListProductsQuery) {
     }
   }
   const pageIds = ranked?.slice(start, start + query.pageSize).map((item) => item.id);
+  const matchingIds = pageIds ?? searchMatches?.map((item) => item.id);
   const products = await prisma.product.findMany({
-    where: pageIds ? { ...where, id: { in: pageIds } } : where,
+    where: matchingIds ? { ...where, id: { in: matchingIds } } : where,
     include: { category: true, plans: { where: { isActive: true } } },
     omit: omitImageData,
     orderBy,
@@ -336,7 +361,10 @@ export async function listProducts(query: ListProductsQuery) {
 
   const ids = products.map((p) => p.id);
   const [sourceStatus, availMap, ratingMap] = await Promise.all([
-    sourceStates(products.flatMap((p) => p.plans)),
+    sourceStates(
+      products.flatMap((p) => p.plans),
+      true,
+    ),
     availableCountByProduct(ids),
     ratingByProduct(ids),
   ]);
@@ -346,16 +374,17 @@ export async function listProducts(query: ListProductsQuery) {
 
   if (query.sort === "price_asc" || query.sort === "price_desc") {
     const direction = query.sort === "price_asc" ? 1 : -1;
+    const displayedPrice = (product: ProductSummary) => {
+      if (product.priceFrom !== null) return comparablePrice(product.priceFrom, product.currency);
+      const estimate = product.indicativePriceFrom;
+      return estimate ? comparablePrice(estimate.amount, estimate.currency) : null;
+    };
     summaries.sort((a, b) => {
-      if (a.priceFrom === null || b.priceFrom === null)
-        return (
-          Number(a.priceFrom === null) - Number(b.priceFrom === null) || a.id.localeCompare(b.id)
-        );
-      return (
-        direction *
-          (comparablePrice(a.priceFrom, a.currency) - comparablePrice(b.priceFrom, b.currency)) ||
-        a.id.localeCompare(b.id)
-      );
+      const left = displayedPrice(a);
+      const right = displayedPrice(b);
+      if (left === null || right === null)
+        return Number(left === null) - Number(right === null) || a.id.localeCompare(b.id);
+      return direction * (left - right) || a.id.localeCompare(b.id);
     });
   } else if (query.sort === "available") {
     summaries.sort(
@@ -386,7 +415,10 @@ export async function getBestselling(limit: number) {
     omit: omitImageData,
   });
   const ids = products.map((p) => p.id);
-  const sourceStatus = await sourceStates(products.flatMap((p) => p.plans));
+  const sourceStatus = await sourceStates(
+    products.flatMap((p) => p.plans),
+    true,
+  );
 
   const [availMap, ratingMap, soldRows] = await Promise.all([
     availableCountByProduct(ids),
@@ -420,7 +452,7 @@ export async function getProductBySlug(slug: string) {
     where: { slug, isActive: true },
     include: {
       category: true,
-      plans: { where: { isActive: true }, orderBy: { price: "asc" } },
+      plans: { where: { isActive: true }, orderBy: [{ price: "asc" }, { id: "asc" }] },
       images: { orderBy: { sortOrder: "asc" }, select: { id: true } },
     },
     omit: omitImageData,
@@ -431,7 +463,7 @@ export async function getProductBySlug(slug: string) {
 
   const [counts, external] = await Promise.all([
     availableCountByProduct([product.id]),
-    sourceStates(product.plans),
+    sourceStates(product.plans, true),
   ]);
   const planAvail = counts.get(product.id);
 
@@ -445,9 +477,12 @@ export async function getProductBySlug(slug: string) {
       id: plan.id,
       label: plan.label,
       durationDays: plan.durationDays,
+      sortOrder: plan.sortOrder,
       variant: readVariant(plan.variant),
       source: plan.source,
       quoteRequired: plan.source === "SUPPLIER",
+      indicativePrice: source?.indicativePrice ?? null,
+      supplierStockUnconfirmed: source?.stockUnconfirmed ?? false,
       price: plan.source === "SUPPLIER" ? 0 : view.price,
       salePrice: plan.source === "SUPPLIER" ? null : view.salePrice,
       effectivePrice: plan.source === "SUPPLIER" ? 0 : view.effectivePrice,
@@ -526,7 +561,10 @@ async function getRelated(productId: string, categoryId: string, limit: number) 
   const selected = products.sort(familiarFirst).slice(0, limit);
   const ids = selected.map((p) => p.id);
   const [sourceStatus, availMap, ratingMap] = await Promise.all([
-    sourceStates(selected.flatMap((p) => p.plans)),
+    sourceStates(
+      selected.flatMap((p) => p.plans),
+      true,
+    ),
     availableCountByProduct(ids),
     ratingByProduct(ids),
   ]);
