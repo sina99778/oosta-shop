@@ -75,6 +75,7 @@ services:
         # Public origin for canonical/og/JSON-LD URLs on pages prerendered at
         # build time (the VPS overlay's NEXT_PUBLIC_API_URL=/api has no origin).
         NEXT_PUBLIC_WEB_URL: ${PUBLIC_ORIGIN}
+        NEXT_PUBLIC_GA_MEASUREMENT_ID: ${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}
     restart: unless-stopped
     environment:
       # Server-side rendering talks to the API over the Docker network directly —

@@ -18,17 +18,24 @@ const vps = yaml.load(read("docker-compose.vps.yml"));
 const args = { ...prod.services.web.build.args, ...(vps.services.web.build?.args ?? {}) };
 assert.equal(args.NEXT_PUBLIC_WEB_URL, "${PUBLIC_ORIGIN}", "web build gets the public origin");
 assert.equal(args.NEXT_PUBLIC_API_URL, "/api", "VPS keeps the same-origin API path");
+assert.equal(args.NEXT_PUBLIC_GA_MEASUREMENT_ID, "${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}");
 
 // 2. Dockerfile: the arg reaches the environment of the build stage before
 // `npm run build`, and is not copied into the runtime stage as a new default.
 const dockerfile = read("apps/web/Dockerfile");
-const [buildStage] = dockerfile.split(/^FROM .* AS runtime$/m);
+const [buildStage, runtimeStage] = dockerfile.split(/^FROM .* AS runtime$/m);
 const buildAt = buildStage.indexOf("RUN npm run build");
 assert(buildAt > 0, "build stage runs the web build");
 const argAt = buildStage.search(/^ARG NEXT_PUBLIC_WEB_URL(=.*)?$/m);
 const envAt = buildStage.search(/^ENV NEXT_PUBLIC_WEB_URL=\$NEXT_PUBLIC_WEB_URL$/m);
 assert(argAt >= 0 && argAt < buildAt, "ARG NEXT_PUBLIC_WEB_URL before the build");
 assert(envAt > argAt && envAt < buildAt, "ENV NEXT_PUBLIC_WEB_URL before the build");
+const gaArgAt = buildStage.search(/^ARG NEXT_PUBLIC_GA_MEASUREMENT_ID=$/m);
+const gaEnvAt = buildStage.search(
+  /^ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=\$NEXT_PUBLIC_GA_MEASUREMENT_ID$/m,
+);
+assert(gaArgAt >= 0 && gaArgAt < gaEnvAt && gaEnvAt < buildAt, "GA4 stays opt-in at build time");
+assert(!runtimeStage.includes("NEXT_PUBLIC_GA_MEASUREMENT_ID"));
 
 // 3. siteUrl(): with the VPS build env it returns the real origin; without the
 // web URL it shows the localhost fallback this contract guards against.

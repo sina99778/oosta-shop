@@ -14,6 +14,7 @@ import { DEFAULT_SHARE_IMAGE } from "@/lib/page-metadata";
 import { Providers } from "@/components/providers";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
+import { GoogleAnalytics } from "@/components/google-analytics";
 import { Track } from "@/components/track";
 
 const geistSans = Geist({ variable: "--font-geist-sans", preload: false });
@@ -100,6 +101,7 @@ export default async function LocaleLayout({
             {locale === "fa" ? "رفتن به محتوای اصلی" : "Skip to main content"}
           </a>
           <Track />
+          <GoogleAnalytics />
           {announcement ? (
             <div className="oosta-announcement bg-brand-gradient px-4 py-2 text-center text-sm font-medium text-white">
               {announcement}

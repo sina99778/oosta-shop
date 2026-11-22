@@ -328,13 +328,82 @@ async function main() {
   const safeContact = renderToStaticMarkup(await cms.default(params("en", { slug: "contact" })));
   assert(safeContact.includes('href="/en/support"'));
   assert(!/subject=|ext=|unrelated\.example/.test(safeContact));
+  const expectedPolicyTerms = {
+    terms: {
+      fa: ["قیمت تقریبی", "فاکتور نهایی", "سبد مهمان", "کارت‌به‌کارت"],
+      en: ["Estimated price", "final invoice", "Guest cart", "24 hours"],
+    },
+    "return-policy": {
+      fa: ["ضمانت کامل", "ضمانت فقط مشکل ورود", "بدون ضمانت", "بازگشت وجه"],
+      en: ["Full coverage", "Login issues only", "No warranty", "Refunds"],
+    },
+    "privacy-policy": {
+      fa: ["اعلان موجودی به ایمیل حساب", "بازنشانی رمز", "آمار بازدید", "گوگل آنالیتیکس"],
+      en: ["account email to reset", "stock-availability alert", "without cookies", "Google Analytics"],
+    },
+  };
   for (const slug of ["terms", "return-policy", "privacy-policy"]) {
     const canonical = `${SITE}/fa/p/${slug}`;
     const metadata = await cms.generateMetadata(params("fa", { slug }));
     assert.equal(metadata.alternates.canonical, canonical);
-    const html = renderToStaticMarkup(await cms.default(params("fa", { slug })));
-    assert.match(html, /<h1[^>]*>[^<]+<\/h1>/);
+    for (const locale of ["fa", "en"]) {
+      const html = renderToStaticMarkup(await cms.default(params(locale, { slug })));
+      assert.match(html, /<h1[^>]*>[^<]+<\/h1>/);
+      assert.match(html, /<h2[^>]*>[^<]+<\/h2>/, `${slug} (${locale}) needs h2 section headings`);
+      for (const phrase of expectedPolicyTerms[slug][locale]) {
+        assert(html.includes(phrase), `Missing "${phrase}" in ${slug} (${locale})`);
+      }
+    }
   }
+
+  const {
+    parseGaMeasurementId,
+    isGaTrackablePath,
+    gaPageViewFields,
+  } = require("../apps/web/lib/google-analytics.ts");
+  assert.equal(parseGaMeasurementId(" G-AB12CD34EF "), "G-AB12CD34EF");
+  for (const bad of ["", undefined, "G-bad!", "<script>alert(1)</script>", "UA-123456-1", "G-12"]) {
+    assert.equal(parseGaMeasurementId(bad), null, `Reject GA ID ${String(bad)}`);
+  }
+  for (const ok of ["/fa", "/en", "/fa/products/chatgpt", "/fa/p/about", "/en/blog"]) {
+    assert.equal(isGaTrackablePath(ok), true, `Track public path ${ok}`);
+  }
+  for (const blocked of [
+    "/fa/admin",
+    "/en/admin/orders",
+    "/fa/dashboard",
+    "/fa/dashboard/inbox",
+    "/fa/support",
+    "/fa/checkout/card/123",
+    "/fa/cart/review/1",
+    "/fa/cart",
+    "/fa/login",
+    "/fa/signup",
+    "/api/health",
+    "/fa/products/chatgpt?token=secret",
+    "/fa/products/chatgpt/extra",
+    "//example.invalid/fa/products/chatgpt",
+    "/fa/reset-password",
+    "/fa/forgot-password",
+    "",
+    null,
+    undefined,
+  ]) {
+    assert.equal(isGaTrackablePath(blocked), false, `Skip GA on private path ${String(blocked)}`);
+  }
+  assert.deepEqual(
+    gaPageViewFields("/fa/products/chatgpt", SITE, "https://external.example/private?token=secret"),
+    {
+      page_path: "/fa/products/chatgpt",
+      page_location: `${SITE}/fa/products/chatgpt`,
+      page_referrer: "https://external.example/",
+      page_title: "/fa/products/chatgpt",
+    },
+  );
+  assert.equal(gaPageViewFields("/fa", SITE, "").page_referrer, `${SITE}/`);
+  assert.equal(gaPageViewFields("/fa", SITE, "invalid referrer").page_referrer, `${SITE}/`);
+  assert.equal(gaPageViewFields("/fa", SITE, "file:///private/path").page_referrer, `${SITE}/`);
+  assert.equal(gaPageViewFields("/fa/cart", SITE, ""), null);
   await assert.rejects(cms.default(params("fa", { slug: "missing" })), /NOT_FOUND/);
   assert(urls.includes(`${SITE}/en/products`) && urls.includes(`${SITE}/en/blog`));
   assert(!urls.some((url) => /\/en\/(blog|p|products)\/./.test(url)));
