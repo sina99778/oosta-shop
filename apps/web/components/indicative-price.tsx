@@ -9,10 +9,12 @@ export function IndicativePriceLabel({
   price,
   locale,
   from = false,
+  compact = false,
 }: {
   price?: IndicativePrice | null;
   locale: Locale;
   from?: boolean;
+  compact?: boolean;
 }) {
   const expiresAt = Date.parse(price?.expiresAt ?? "");
   const isFresh = useCallback(() => expiresAt > Date.now(), [expiresAt]);
@@ -42,7 +44,7 @@ export function IndicativePriceLabel({
             ? "قیمت تقریبی"
             : "Estimated price"}
       </small>
-      <strong className={from ? undefined : "text-3xl font-bold"}>
+      <strong className={from || compact ? undefined : "text-3xl font-bold"}>
         <bdi>{formatPrice(price.amount, price.currency, locale)}</bdi>
       </strong>
     </>

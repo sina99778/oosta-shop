@@ -398,7 +398,7 @@ const soldOut = renderReturn("sold-out", productWithSoldOutPlan);
 assert.match(soldOut, /checked="" value="sold-out"|value="sold-out" checked=""/);
 assert.match(soldOut, /Notify me when available/);
 assert.doesNotMatch(soldOut, /Add to cart/);
-assert.doesNotMatch(soldOut, /Price on request/);
+assert.doesNotMatch(soldOut.split('aria-label="Quick plan selection"')[0], /Price on request/);
 const staleSupplier = renderReturn("sold-out", {
   ...productWithSoldOutPlan,
   plans: productWithSoldOutPlan.plans.map((plan) =>
@@ -422,9 +422,79 @@ const supplierEstimateProduct = {
   })),
 };
 const guestEstimate = renderReturn(p.plans[0].id, supplierEstimateProduct);
+const { VariantSelector } = require("../apps/web/components/variant-selector.tsx");
+const selectorPlans = [
+  { ...supplierEstimateProduct.plans[0], sortOrder: 20 },
+  {
+    ...p.plans[1],
+    sortOrder: 30,
+    availability: "LOCAL_STOCK",
+    source: "INTERNAL",
+    quoteRequired: false,
+  },
+  ...[100, 70, 50].map((sortOrder) => ({ ...p.plans[0], id: `stock-${sortOrder}`, sortOrder })),
+  {
+    ...p.plans[0],
+    id: "unavailable",
+    sortOrder: 1000,
+    availability: "OUT_OF_STOCK",
+    inStock: false,
+  },
+];
+function renderSelector(plans, value = "stock-70") {
+  return renderToStaticMarkup(
+    React.createElement(VariantSelector, {
+      plans,
+      value,
+      locale: "en",
+      onChange: () => {},
+    }),
+  );
+}
+const selectorHtml = renderSelector(selectorPlans);
+const [quick, complete] = selectorHtml.split("<details");
+assert.match(quick, /aria-label="Quick plan selection"/);
+assert.deepEqual(
+  [...quick.matchAll(/data-plan-id="([^"]+)"/g)].map((m) => m[1]),
+  ["stock-100", "stock-70", "stock-50", "fixture-manual"],
+);
+assert.match(
+  quick,
+  /aria-pressed="true"[^>]*data-plan-id="stock-70"|data-plan-id="stock-70"[^>]*aria-pressed="true"/,
+);
+assert.deepEqual(
+  [...complete.matchAll(/type="radio"[^>]*value="([^"]+)"/g)].map((m) => m[1]),
+  ["stock-100", "stock-70", "stock-50", "fixture-manual", "fixture-auto", "unavailable"],
+);
+assert.match(complete, /Estimated price/);
+assert.match(complete, /2,600,000 IRR/);
+assert.match(quick, /(?:Individual|Team|Shared)/);
+assert.match(quick, /(?:No warranty|days warranty)/);
+assert.doesNotMatch(complete, /text-3xl/);
+hydrated = true;
+const staleSelector = renderSelector([
+  {
+    ...selectorPlans[0],
+    indicativePrice: { ...indicativePrice, expiresAt: "2000-01-01T00:00:00.000Z" },
+  },
+  selectorPlans[1],
+]);
+hydrated = false;
+assert.match(staleSelector, /Price on request/);
+assert.doesNotMatch(staleSelector, /2,600,000 IRR/);
+assert.doesNotMatch(renderSelector([selectorPlans[0]]), /Quick plan selection/);
+assert.doesNotMatch(
+  renderSelector([selectorPlans.at(-1), { ...selectorPlans.at(-1), id: "none" }]),
+  /Quick plan selection/,
+);
 assert.match(guestEstimate, /Estimated price/);
 assert.match(guestEstimate, /2,600,000 IRR/);
-assert.doesNotMatch(renderReturn(p.plans[1].id, supplierEstimateProduct), /2,600,000 IRR/);
+assert.doesNotMatch(
+  renderReturn(p.plans[1].id, supplierEstimateProduct).split(
+    'aria-label="Quick plan selection"',
+  )[0],
+  /2,600,000 IRR/,
+);
 hydrated = true;
 const expiredEstimate = renderReturn(p.plans[0].id, {
   ...supplierEstimateProduct,

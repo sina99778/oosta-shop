@@ -27,7 +27,13 @@ import styles from "./shop.module.css";
 import { cn } from "@/lib/cn";
 import { formatPrice, formatDate } from "@/lib/format";
 import { planDisplayLabel, planTrustSummary } from "@/lib/product-variant";
-import { availabilityLabel, availabilityOf, canBuyPlan } from "@/lib/product-availability";
+import {
+  availabilityLabel,
+  availabilityOf,
+  canBuyPlan,
+  isStockedPlan,
+  plansByAvailability,
+} from "@/lib/product-availability";
 import type { Locale } from "@/lib/i18n";
 import type { CheckoutMethods } from "@/lib/product-availability";
 import type { ProductDetail } from "@/lib/types";
@@ -79,15 +85,7 @@ export function ProductDetailView({
     ...product.galleryImageIds.map((id) => assetUrl(`/product-images/${id}`)),
   ];
   const requestedPlan = product.plans.find((p) => p.id === requestedPlanId);
-  const stocked = product.plans.filter((p) => {
-    const availability = availabilityOf(p);
-    return availability === "LOCAL_STOCK" || availability === "SUPPLIER_STOCK";
-  });
-  stocked.sort(
-    (a, b) =>
-      (b.sortOrder ?? 0) - (a.sortOrder ?? 0) ||
-      Number(availabilityOf(b) === "LOCAL_STOCK") - Number(availabilityOf(a) === "LOCAL_STOCK"),
-  );
+  const stocked = plansByAvailability(product.plans).filter(isStockedPlan);
   const defaultPlan =
     requestedPlanId === undefined
       ? (stocked[0] ?? product.plans.find((p) => p.inStock) ?? product.plans[0])
@@ -104,7 +102,10 @@ export function ProductDetailView({
     ? {
         label: planDisplayLabel(plan.label, localeFa),
         price: plan.quoteRequired ? (
-          <IndicativePriceLabel price={supplierCart ? plan.indicativePrice : null} locale={locale} />
+          <IndicativePriceLabel
+            price={supplierCart ? plan.indicativePrice : null}
+            locale={locale}
+          />
         ) : (
           <strong>
             <bdi>{formatPrice(plan.effectivePrice, plan.currency, locale)}</bdi>
@@ -152,12 +153,20 @@ export function ProductDetailView({
     setBuyError(null);
     try {
       if (sessionError) {
-        setBuyError(localeFa ? "وضعیت ورود مشخص نیست. صفحه را تازه کن." : "Reload to check your sign-in status.");
+        setBuyError(
+          localeFa
+            ? "وضعیت ورود مشخص نیست. صفحه را تازه کن."
+            : "Reload to check your sign-in status.",
+        );
         return;
       }
       if (!user) {
         if (addGuestCartItem(plan.id) === "full") {
-          setBuyError(localeFa ? "سبد مهمان پر است و تا ۱۰ قلم جا دارد." : "Your guest cart already has ten items.");
+          setBuyError(
+            localeFa
+              ? "سبد مهمان پر است و تا ۱۰ قلم جا دارد."
+              : "Your guest cart already has ten items.",
+          );
           return;
         }
       } else {
@@ -202,7 +211,7 @@ export function ProductDetailView({
     }
   }
 
-  const planPicker = product.plans.some((p) => p.variant) ? (
+  const planPicker = (
     <VariantSelector
       key={slug + JSON.stringify(product.plans.map((p) => [p.id, p.variant, p.durationDays]))}
       plans={product.plans}
@@ -210,61 +219,6 @@ export function ProductDetailView({
       onChange={selectPlan}
       locale={locale}
     />
-  ) : (
-    <details className="mt-3 rounded-xl border border-border" open={product.plans.length === 1}>
-      <summary className="oosta-disclosure min-h-14 p-4 font-medium">
-        <span className="min-w-0">
-          {locale === "fa" ? "انتخاب نوع اشتراک" : "Choose subscription"}
-          {plan && (
-            <bdi
-              dir={localeFa ? "rtl" : "ltr"}
-              className="mt-1 block text-sm font-normal text-muted"
-            >
-              {planDisplayLabel(plan.label, localeFa)}
-            </bdi>
-          )}
-        </span>
-      </summary>
-      <div className="max-h-[32rem] space-y-2 overflow-y-auto border-t border-border p-4">
-        {product.plans.map((pl) => (
-          <label
-            key={pl.id}
-            className={cn(
-              "flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-lg border p-3 transition-colors",
-              activePlanId === pl.id ? "border-primary bg-surface" : "border-border",
-            )}
-          >
-            <span className="flex min-w-0 items-center gap-3">
-              <input
-                type="radio"
-                name="plan"
-                className="accent-primary"
-                checked={activePlanId === pl.id}
-                onChange={() => selectPlan(pl.id)}
-              />
-              <span className="break-words font-medium">
-                <bdi>{planDisplayLabel(pl.label, locale === "fa")}</bdi>
-              </span>
-            </span>
-            <span className="flex flex-wrap items-center gap-3">
-              {!pl.quoteRequired && (
-                <span className="font-semibold">
-                  {pl.onSale && (
-                    <span className="me-2 text-xs text-muted line-through">
-                      {formatPrice(pl.price, pl.currency, locale)}
-                    </span>
-                  )}
-                  {formatPrice(pl.effectivePrice, pl.currency, locale)}
-                </span>
-              )}
-              <Badge tone={availabilityOf(pl) === "LOCAL_STOCK" ? "success" : "muted"}>
-                {availabilityLabel(pl, locale)}
-              </Badge>
-            </span>
-          </label>
-        ))}
-      </div>
-    </details>
   );
 
   return (
@@ -373,7 +327,6 @@ export function ProductDetailView({
                 : "Your previous plan is unavailable. Please choose a plan again."}
             </p>
           )}
-          {!plan && planPicker}
           {plan && (
             <div className={layout.terms}>
               <p className="font-semibold">
@@ -476,7 +429,9 @@ export function ProductDetailView({
           {trustSummary && (
             <dl
               className={layout.trustSummary}
-              aria-label={localeFa ? "خلاصهٔ ضمانت و تحویل پلن" : "Plan warranty and delivery summary"}
+              aria-label={
+                localeFa ? "خلاصهٔ ضمانت و تحویل پلن" : "Plan warranty and delivery summary"
+              }
             >
               <div className={layout.trustSummaryRow}>
                 <dt>{localeFa ? "ضمانت" : "Warranty"}</dt>
@@ -514,9 +469,11 @@ export function ProductDetailView({
               </div>
             </dl>
           )}
-          {plan && (
-            <div className={layout.change}>
-              <h3 className="text-sm font-semibold">{localeFa ? "تغییر پلن" : "Change plan"}</h3>
+          {product.plans.length > 0 && (
+            <div className={plan ? layout.change : undefined}>
+              {plan && (
+                <h3 className="text-sm font-semibold">{localeFa ? "تغییر پلن" : "Change plan"}</h3>
+              )}
               {planPicker}
             </div>
           )}
