@@ -20,6 +20,7 @@ type Job = {
   amount: string;
   maximumCost: string;
   remaining: string;
+  usesLiveWallet?: boolean;
   currency: string;
   wallet?: { amount: string; currency: string } | null;
 };
@@ -107,10 +108,18 @@ function SupplierJob({
         if (typeof next === "string") setCost(next);
       }
       if (error instanceof ApiError && error.code === "SUPPLIER_WALLET_UNAVAILABLE") {
-        const info = error.details as { shortfall?: string; currency?: string } | undefined;
+        const info = error.details as
+          | { shortfall?: string; currency?: string; source?: string }
+          | undefined;
         if (info?.shortfall) {
           setMessage(
-            (fa ? "کسری بودجهٔ مجاز: " : "Authorized budget shortfall: ") +
+            (info.source === "wallet"
+              ? fa
+                ? "کسری موجودی ربات: "
+                : "Provider wallet shortfall: "
+              : fa
+                ? "کسری بودجهٔ مجاز: "
+                : "Authorized budget shortfall: ") +
               info.shortfall +
               " " +
               info.currency,
@@ -135,11 +144,16 @@ function SupplierJob({
         {fa ? "تأمین" : "Cost"}{" "}
         <bdi>
           {job.maximumCost} {job.currency}
-        </bdi>{" "}
-        · {fa ? "بودجهٔ باقی‌مانده" : "Remaining budget"}{" "}
-        <bdi>
-          {job.remaining} {job.currency}
         </bdi>
+        {!job.usesLiveWallet && (
+          <>
+            {" "}
+            · {fa ? "بودجهٔ باقی‌مانده" : "Remaining budget"}{" "}
+            <bdi>
+              {job.remaining} {job.currency}
+            </bdi>
+          </>
+        )}
         {job.wallet && (
           <>
             {" "}
@@ -152,28 +166,30 @@ function SupplierJob({
       </p>
       {job.state === "AWAITING_FUNDS" && (
         <>
-          <div className="flex flex-wrap items-end gap-2">
-            <label>
-              {fa ? "مبلغ شارژ انجام‌شده" : "Top-up already made"}{" "}
-              <input
-                className="block rounded-lg border border-border bg-card p-2"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                inputMode="decimal"
-                disabled={busy}
-              />
-            </label>
-            <Button
-              disabled={busy || !amount}
-              onClick={() => {
-                const key = requestId ?? crypto.randomUUID();
-                setRequestId(key);
-                void act("funding", { amount, requestId: key });
-              }}
-            >
-              {fa ? "ثبت شارژ" : "Record top-up"}
-            </Button>
-          </div>
+          {!job.usesLiveWallet && (
+            <div className="flex flex-wrap items-end gap-2">
+              <label>
+                {fa ? "مبلغ شارژ انجام‌شده" : "Top-up already made"}{" "}
+                <input
+                  className="block rounded-lg border border-border bg-card p-2"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  inputMode="decimal"
+                  disabled={busy}
+                />
+              </label>
+              <Button
+                disabled={busy || !amount}
+                onClick={() => {
+                  const key = requestId ?? crypto.randomUUID();
+                  setRequestId(key);
+                  void act("funding", { amount, requestId: key });
+                }}
+              >
+                {fa ? "ثبت شارژ" : "Record top-up"}
+              </Button>
+            </div>
+          )}
           {confirmBuy || cost ? (
             <Button
               disabled={busy}

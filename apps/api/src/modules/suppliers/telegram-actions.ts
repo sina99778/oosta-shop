@@ -94,9 +94,14 @@ export function registerSupplierTelegram(
       "آخرین مبلغ مصوب: " + amount(approved),
       "موجودی کیف پول: " + amount(wallet),
       "کسری موجودی: " + amount(shortfall),
-      "ماندهٔ سقف مجاز خرید: " + amount(budget),
     );
-    if (blocked) lines.push(blocks[blocked]);
+    if (!snapshot.usesLiveWallet) lines.push("ماندهٔ سقف مجاز خرید: " + amount(budget));
+    if (blocked)
+      lines.push(
+        blocked === "BUDGET" && snapshot.usesLiveWallet
+          ? "کیف پول درگیر خرید دیگری است یا خرید از این تأمین‌کننده فعال نیست."
+          : blocks[blocked],
+      );
     if (note) lines.push(note);
     const refresh = Markup.button.callback("بررسی دوبارهٔ موجودی", "supplier_refresh_" + id);
     const rows = [[refresh]];

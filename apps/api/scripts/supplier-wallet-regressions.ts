@@ -7,6 +7,8 @@ import { normalizeCatalog } from "../src/modules/suppliers/catalog";
 import { variantSchema, variantKey } from "../src/modules/suppliers/variant";
 import { walletAdapter, liveSupplierRegistry } from "../src/modules/suppliers/live-adapters";
 import {
+  dispatchManualSupplier,
+  manualSupplierWalletSnapshot,
   processSupplierFulfillment,
   reconcileSupplierFulfillment,
 } from "../src/modules/suppliers/fulfillment";
@@ -461,6 +463,80 @@ async function budget(supplier = "canboso") {
   return prisma.supplierWalletBudget.findUniqueOrThrow({ where: { supplier } });
 }
 
+async function verifyManualBatmanWallet() {
+  const f = await fixture("ventebot", "AWAITING_FUNDS");
+  env.SUPPLIER_MANUAL_APPROVAL = true;
+  try {
+    const admin = await prisma.user.create({
+      data: { name: "Synthetic buyer operator", passwordHash: "unused", role: "ADMIN" },
+    });
+    const receipt = await prisma.receipt.create({
+      data: {
+        orderId: f.order.id,
+        imageData: Buffer.from("synthetic"),
+        mimeType: "image/png",
+        status: "APPROVED",
+      },
+    });
+    await prisma.order.update({
+      where: { id: f.order.id },
+      data: {
+        paymentProvider: "CARD_TO_CARD",
+        paymentRefId: `card:${receipt.id}`,
+        paymentMetadata: {
+          manualSupplier: true,
+          quoteId: f.job.quoteId,
+          number: "1234567890123456",
+          holder: "Synthetic",
+          bank: "Synthetic",
+          expiresAt: f.job.expiresAt.toISOString(),
+        },
+      },
+    });
+    await prisma.supplierWalletBudget.update({
+      where: { supplier: "ventebot" },
+      data: { remainingAmount: "0.16" },
+    });
+    await assert.rejects(dispatchManualSupplier(f.job.id, f.user.id, f.registry), {
+      statusCode: 403,
+    });
+    assert.equal(posts, 0);
+    const snapshot = await manualSupplierWalletSnapshot({ id: f.job.id }, admin.id, f.registry);
+    assert.equal(
+      snapshot.blocked,
+      null,
+      "BatmanBot manual dispatch must use the funded live wallet",
+    );
+    wallet = "0.1";
+    await assert.rejects(dispatchManualSupplier(f.job.id, admin.id, f.registry), {
+      code: "SUPPLIER_WALLET_UNAVAILABLE",
+    });
+    assert.equal(posts, 0);
+    wallet = "2";
+    await prisma.supplierWalletBudget.update({
+      where: { supplier: "ventebot" },
+      data: { activeReference: "other-purchase", remainingAmount: 0 },
+    });
+    await assert.rejects(dispatchManualSupplier(f.job.id, admin.id, f.registry), {
+      code: "SUPPLIER_WALLET_UNAVAILABLE",
+    });
+    assert.equal(posts, 0);
+    await prisma.supplierWalletBudget.update({
+      where: { supplier: "ventebot" },
+      data: { activeReference: null, remainingAmount: "0.16" },
+    });
+    const result = await dispatchManualSupplier(f.job.id, admin.id, f.registry);
+    assert.equal(result.state, "DELIVERED");
+    assert.equal(posts, 1);
+    assert.equal((await budget("ventebot")).remainingAmount.toString(), "0.16");
+    assert.equal((await budget("ventebot")).activeReference, null);
+    await assert.rejects(dispatchManualSupplier(f.job.id, admin.id, f.registry));
+    assert.equal(posts, 1);
+  } finally {
+    env.SUPPLIER_MANUAL_APPROVAL = false;
+  }
+}
+
 async function onlineWelcomeFixture() {
   const f = await fixture();
   await prisma.supplierFulfillment.delete({ where: { id: f.job.id } });
@@ -837,6 +913,7 @@ async function main() {
   console.log(
     "PASS: failed initialization releases a welcome gift, and late supplier payments require review",
   );
+  await verifyManualBatmanWallet();
   await verifyCapcutCheckout();
 }
 main()

@@ -20,7 +20,7 @@ import { readMappings } from "./variant";
 import { quotePricing } from "./fx.service";
 import { indicativePrice } from "./pricing";
 import { readVariant, variantKey } from "./variant";
-import { reserveWallet, settleWallet } from "./wallet-budget";
+import { manualUsesLiveWallet, reserveWallet, settleWallet } from "./wallet-budget";
 import { readManualSupplier } from "./manual-payment";
 import { requireManualAdmin } from "./manual-admin";
 import { queueOrderEmail } from "../../lib/mailer";
@@ -490,6 +490,15 @@ async function quoteManualSupplier(job: SupplierFulfillment, registry: Registry)
   return selected;
 }
 
+function walletAmount(
+  wallet: { currency: string; amount: string } | null | undefined,
+  currency: string,
+) {
+  return wallet?.currency === currency && /^\d{1,12}(\.\d{1,6})?$/.test(wallet.amount)
+    ? new Prisma.Decimal(wallet.amount)
+    : null;
+}
+
 type ManualSupplierPointer = { id: string } | { orderId: string };
 export async function manualSupplierWalletSnapshot(
   pointer: ManualSupplierPointer,
@@ -524,6 +533,7 @@ export async function manualSupplierWalletSnapshot(
     product: item?.product.name ?? "",
     plan: item?.plan.label ?? "",
     approved,
+    usesLiveWallet: manualUsesLiveWallet(job.supplier),
   };
   const adapter = registry.get(job.supplier as SupplierId);
   if (job.state !== "AWAITING_FUNDS")
@@ -534,10 +544,7 @@ export async function manualSupplierWalletSnapshot(
     prisma.supplierWalletBudget.findUnique({ where: { supplier: job.supplier } }),
   ]);
   const cost = quote ? new Prisma.Decimal(quote.quote.cost) : null;
-  const wallet =
-    rawWallet?.currency === job.currency && /^\d{1,12}(\.\d{1,6})?$/.test(rawWallet.amount)
-      ? new Prisma.Decimal(rawWallet.amount)
-      : null;
+  const wallet = walletAmount(rawWallet, job.currency);
   const budgetAmount =
     budget?.enabled && budget.currency === job.currency ? budget.remainingAmount : null;
   const shortfall = cost && wallet ? Prisma.Decimal.max(0, cost.sub(wallet)) : null;
@@ -545,10 +552,19 @@ export async function manualSupplierWalletSnapshot(
     ? "PRICE"
     : !wallet
       ? "WALLET"
-      : !budgetAmount || budget?.activeReference || cost.gt(budgetAmount) || wallet.gt(budgetAmount)
+      : !budgetAmount ||
+          budget?.activeReference ||
+          (!fields.usesLiveWallet && (cost.gt(budgetAmount) || wallet.gt(budgetAmount)))
         ? "BUDGET"
         : null;
-  return { ...fields, cost, wallet, budget: budgetAmount, shortfall, blocked };
+  return {
+    ...fields,
+    cost,
+    wallet,
+    budget: fields.usesLiveWallet ? null : budgetAmount,
+    shortfall,
+    blocked,
+  };
 }
 
 export async function dispatchManualSupplier(
@@ -576,6 +592,16 @@ export async function dispatchManualSupplier(
       cost: cost.toString(),
       currency: job.currency,
     });
+  const usesLiveWallet = adapter.capabilities.walletExposure && manualUsesLiveWallet(job.supplier);
+  const liveBalance = usesLiveWallet
+    ? walletAmount(await adapter.walletBalance?.().catch(() => null), job.currency)
+    : null;
+  if (usesLiveWallet && !liveBalance)
+    throw new AppError(
+      503,
+      "SUPPLIER_WALLET_UNAVAILABLE",
+      "Supplier wallet balance could not be verified",
+    );
   await prisma.$transaction(async (tx) => {
     await lockOrder(tx, job.orderId);
     await requireManualAdmin(tx, adminId);
@@ -600,7 +626,8 @@ export async function dispatchManualSupplier(
         expiresAt: new Date(selected.expiry),
       },
     });
-    if (adapter.capabilities.walletExposure) await reserveWallet(tx, ready);
+    if (adapter.capabilities.walletExposure)
+      await reserveWallet(tx, ready, liveBalance ?? undefined);
     if (cost.gt(approved))
       await tx.siteSetting.create({
         data: {

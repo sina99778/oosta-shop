@@ -7,6 +7,7 @@ import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/httpError";
 import { readManualSupplier } from "./manual-payment";
 import { queueOrderEmail } from "../../lib/mailer";
+import { manualUsesLiveWallet } from "./wallet-budget";
 
 export const supplierAmount = z
   .string()
@@ -51,6 +52,7 @@ export async function manualSupplierJobs(orderId?: string, id?: string) {
     amount: order.totalAmount.toString(),
     product: order.items[0]?.product.name,
     plan: order.items[0]?.plan.label,
+    usesLiveWallet: manualUsesLiveWallet(job.supplier),
     remaining:
       budgets.find((budget) => budget.supplier === job.supplier)?.remainingAmount.toString() ?? "0",
   }));
