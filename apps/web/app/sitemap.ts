@@ -3,6 +3,7 @@ import { fetchJson, siteUrl } from "@/lib/seo";
 import { locales } from "@/lib/i18n";
 import { CONTENT_LOCALE } from "@/lib/page-metadata";
 import { PRODUCT_REDIRECTS } from "@/lib/catalog-editorial";
+import { indexedPolicySlugs } from "@/lib/site-policies";
 
 export const revalidate = 3600;
 
@@ -54,9 +55,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   const pages = await fetchJson<{ pages: { slug: string }[] }>("/pages", 0);
-  for (const page of pages?.pages ?? []) {
+  const pageSlugs = new Set([
+    ...indexedPolicySlugs,
+    ...(pages?.pages ?? []).map((page) => page.slug),
+  ]);
+  for (const slug of pageSlugs) {
     entries.push({
-      url: `${site}/${CONTENT_LOCALE}/p/${encodeURIComponent(page.slug)}`,
+      url: `${site}/${CONTENT_LOCALE}/p/${encodeURIComponent(slug)}`,
       changeFrequency: "monthly",
       priority: 0.5,
     });

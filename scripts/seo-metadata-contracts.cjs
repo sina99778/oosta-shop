@@ -284,6 +284,10 @@ async function main() {
   const postEntry = (await sitemap()).find((entry) => entry.url === canonicalPost);
   assert.equal(postEntry.lastModified.toISOString(), post.updatedAt);
   assert(urls.includes(`${SITE}/fa/p/about`));
+  for (const slug of ["terms", "return-policy", "privacy-policy"]) {
+    assert.equal(urls.filter((url) => url === `${SITE}/fa/p/${slug}`).length, 1);
+    assert(!urls.includes(`${SITE}/en/p/${slug}`));
+  }
   const cmsAbout = await cms.generateMetadata(params("fa", { slug: "about" }));
   assert.equal(cmsAbout.title, cmsPage.title);
   assert.match(

@@ -1,6 +1,7 @@
 import type { Locale } from "./i18n";
 
 export const siteInfoSlugs = ["about", "contact"] as const;
+export const indexedPolicySlugs = ["terms", "return-policy", "privacy-policy"] as const;
 
 export const sitePolicies = [
   {
