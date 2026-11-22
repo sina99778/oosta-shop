@@ -39,6 +39,12 @@ export const supplierEndpoints: Record<
     env: "VENTEBOT_API_KEY",
     label: "VenteBot",
   },
+  getdigitaltools: {
+    url: "https://shop-bot-production-07f9.up.railway.app/api/products",
+    header: "x-api-key",
+    env: "GETDIGITALTOOLS_API_KEY",
+    label: "GetDigitalTools",
+  },
 };
 export const offerSchema = z
   .object({
@@ -97,11 +103,11 @@ function clean(v: unknown, max: number): string {
 }
 export function normalizeCatalog(supplier: SupplierId, body: unknown, now = new Date()): Catalog {
   const data = obj(body);
-  if (
-    (data.success !== true && data.ok !== true) ||
-    !Array.isArray(data.products) ||
-    data.products.length > 5000
-  )
+  const digital = supplier === "getdigitaltools";
+  const successful = digital
+    ? data.success !== false && data.ok !== false
+    : data.success === true || data.ok === true;
+  if (!successful || !Array.isArray(data.products) || data.products.length > 5000)
     throw new AppError(502, "SUPPLIER_RESPONSE_INVALID", "Supplier catalog format is invalid");
   const offers: Offer[] = [];
   let rejected = 0;
@@ -109,6 +115,15 @@ export function normalizeCatalog(supplier: SupplierId, body: unknown, now = new 
   for (const entry of data.products) {
     try {
       const p = obj(entry);
+      if (
+        digital &&
+        (p.min_qty !== 1 ||
+          typeof p.max_qty !== "number" ||
+          !Number.isSafeInteger(p.max_qty) ||
+          p.max_qty < 1 ||
+          typeof p.stock !== "number")
+      )
+        throw new Error();
       if (
         typeof p.name !== "string" ||
         p.name.length > 300 ||
@@ -139,9 +154,16 @@ export function normalizeCatalog(supplier: SupplierId, body: unknown, now = new 
         decimal.decimalPlaces() > 6
       )
         throw new Error();
-      const currency =
-        supplier === "aitoolify" ? "USDT" : supplier.startsWith("canboso") ? price.currency : "USD";
-      const rawStock = p.stock_quantity ?? p.stock ?? available.available ?? null;
+      const currency = digital
+        ? p.currency
+        : supplier === "aitoolify"
+          ? "USDT"
+          : supplier.startsWith("canboso")
+            ? price.currency
+            : "USD";
+      const rawStock = digital
+        ? p.stock
+        : (p.stock_quantity ?? p.stock ?? available.available ?? null);
       const name = clean(p.name, 300);
       const description = clean(p.description, 4000);
       const rawType = p.productType ?? p.type ?? p.delivery_type;
@@ -152,7 +174,13 @@ export function normalizeCatalog(supplier: SupplierId, body: unknown, now = new 
         flags.push("WARRANTY_CONFLICT");
       if (/activation on your mail/i.test(name) && p.requires_email === false)
         flags.push("INPUT_CONFLICT");
-      if (/send.{0,70}(?:email|mail).{0,30}(?:pas|password)/i.test(description))
+      if (
+        /send.{0,70}(?:email|mail).{0,30}(?:pas|password)/i.test(description) ||
+        (digital &&
+          /automatic.{0,45}(?:sheerid|student verification)|(?:submit|paste).{0,60}(?:sheerid|verification link)/i.test(
+            description,
+          ))
+      )
         flags.push("SENSITIVE_MANUAL_FLOW");
       const delivery =
         supplier === "aitoolify" && p.requires_email === false && !flags.includes("INPUT_CONFLICT")
@@ -190,6 +218,7 @@ export function normalizeCatalog(supplier: SupplierId, body: unknown, now = new 
             p.requires_email ?? null,
             p.auto_delivery ?? null,
             days,
+            ...(digital ? [p.min_qty, p.max_qty] : []),
           ]),
         )
         .digest("hex");

@@ -90,6 +90,59 @@ assert.equal(
   "Admin validation must retain structured variants",
 );
 const { normalizeCatalog } = require("../apps/api/src/modules/suppliers/catalog.ts");
+const digitalProduct = {
+  id: 193,
+  name: "Fixture Pro subscription",
+  description: "Activation warranty only",
+  price: 2.8,
+  currency: "USD",
+  stock: 16,
+  min_qty: 1,
+  max_qty: 100,
+};
+const digital = normalizeCatalog("getdigitaltools", {
+  products: [
+    digitalProduct,
+    { ...digitalProduct, id: 194, currency: "USDT", stock: 0 },
+    { ...digitalProduct, id: 195, currency: "EUR" },
+    { ...digitalProduct, id: 196, min_qty: 2 },
+    { ...digitalProduct, id: 197, stock: null },
+    { ...digitalProduct, id: 198, description: "Submit automatic SheerID student verification" },
+  ],
+});
+assert.equal(digital.rejected, 3);
+assert.deepEqual(
+  digital.offers
+    .slice(0, 2)
+    .map(({ externalId, cost, currency, stock, delivery, warranty }) => ({
+      externalId,
+      cost,
+      currency,
+      stock,
+      delivery,
+      warranty,
+    })),
+  [
+    {
+      externalId: "193",
+      cost: "2.8",
+      currency: "USD",
+      stock: 16,
+      delivery: "UNVERIFIED",
+      warranty: { kind: "NONE", days: 0 },
+    },
+    {
+      externalId: "194",
+      cost: "2.8",
+      currency: "USDT",
+      stock: 0,
+      delivery: "UNVERIFIED",
+      warranty: { kind: "NONE", days: 0 },
+    },
+  ],
+);
+assert(digital.offers[2].flags.includes("SENSITIVE_MANUAL_FLOW"));
+assert.throws(() => normalizeCatalog("getdigitaltools", { success: false, products: [] }));
 const c1 = normalizeCatalog("canboso", {
   success: true,
   walletCurrency: "USD",
@@ -198,6 +251,20 @@ async function networkContracts() {
     };
     const c = await fetchCatalog("canboso");
     assert(!JSON.stringify(c).includes("SYNTHETIC-CATALOG-SECRET"));
+    process.env.GETDIGITALTOOLS_API_KEY = "SYNTHETIC-DIGITAL-SECRET";
+    global.fetch = async (url, options) => {
+      assert.equal(url, "https://shop-bot-production-07f9.up.railway.app/api/products");
+      assert.equal(options.method, "GET");
+      assert.equal(options.redirect, "error");
+      assert.equal(new Headers(options.headers).get("x-api-key"), "SYNTHETIC-DIGITAL-SECRET");
+      return Response.json({
+        products: [{ ...digitalProduct, description: "SYNTHETIC-DIGITAL-SECRET" }],
+      });
+    };
+    const reseller = await fetchCatalog("getdigitaltools");
+    assert.equal(reseller.offers[0].description, "[redacted]");
+    const { liveSupplierRegistry } = require("../apps/api/src/modules/suppliers/live-adapters.ts");
+    assert.equal(liveSupplierRegistry().has("getdigitaltools"), false);
     global.fetch = async () => new Response("SYNTHETIC-CATALOG-SECRET", { status: 429 });
     await assert.rejects(
       () => fetchCatalog("canboso"),
@@ -214,6 +281,7 @@ async function networkContracts() {
   } finally {
     global.fetch = original;
     delete process.env.CANBOSO_API_KEY;
+    delete process.env.GETDIGITALTOOLS_API_KEY;
   }
 }
 networkContracts().catch((e) => {

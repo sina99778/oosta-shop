@@ -66,7 +66,14 @@ export function variantKey(value: Variant, durationDays: number | null): string 
     )
     .digest("hex");
 }
-export const supplierIds = ["toolsmarket", "aitoolify", "canboso", "canboso2", "ventebot"] as const;
+export const supplierIds = [
+  "toolsmarket",
+  "aitoolify",
+  "canboso",
+  "canboso2",
+  "ventebot",
+  "getdigitaltools",
+] as const;
 export const mappingSchema = z
   .object({
     supplier: z.enum(supplierIds),
