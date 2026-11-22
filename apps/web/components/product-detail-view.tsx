@@ -370,7 +370,7 @@ export function ProductDetailView({
           )}
           {plan && availabilityOf(plan) === "OUT_OF_STOCK" && user?.role !== "ADMIN" && (
             <StockAlertButton
-              key={JSON.stringify([plan.id, token])}
+              key={`alert:${plan.id}:${token ?? ""}`}
               planId={plan.id}
               locale={locale}
               loginPath={loginPath}
@@ -380,7 +380,7 @@ export function ProductDetailView({
           )}
           {plan?.quoteRequired && availabilityOf(plan) === "ON_REQUEST" && (
             <SupplierQuotePanel
-              key={plan.id + JSON.stringify(plan.variant) + (token ?? "anonymous")}
+              key={`quote:${plan.id}:${JSON.stringify(plan.variant)}:${token ?? "anonymous"}`}
               plan={plan}
               token={token}
               locale={locale}
@@ -394,7 +394,7 @@ export function ProductDetailView({
           )}
           {(canBuy || supplierCart) && (
             <ProductPurchaseAction
-              key={plan?.id}
+              key={`buy:${plan?.id ?? ""}`}
               locale={locale}
               summary={purchaseSummary}
               feedback={
@@ -478,7 +478,7 @@ export function ProductDetailView({
             </div>
           )}
           {plan?.variant && (
-            <details key={plan.id} className="mt-4 rounded-xl border border-border">
+            <details key={`terms:${plan.id}`} className="mt-4 rounded-xl border border-border">
               <summary className="oosta-disclosure min-h-12 p-4 text-sm font-medium">
                 {locale === "fa" ? "شرایط اشتراک انتخاب‌شده" : "Selected subscription terms"}
               </summary>

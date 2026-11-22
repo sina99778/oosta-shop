@@ -625,6 +625,26 @@ function actionIn(node, action) {
   }
 }
 
+function assertUniqueSiblingKeys(node, trail = "root") {
+  if (!node || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    const keys = new Set();
+    for (const child of node) {
+      if (React.isValidElement(child) && child.key !== null) {
+        assert(!keys.has(child.key), `Duplicate React sibling key "${child.key}" at ${trail}`);
+        keys.add(child.key);
+      }
+      assertUniqueSiblingKeys(child, trail);
+    }
+    return;
+  }
+  if (React.isValidElement(node)) {
+    const name =
+      typeof node.type === "function" ? node.type.name || "Component" : String(node.type);
+    assertUniqueSiblingKeys(node.props?.children, `${trail}>${name}`);
+  }
+}
+
 async function checkCartActions() {
   const originalPost = api.post;
   const localPlan = {
@@ -662,6 +682,7 @@ async function checkCartActions() {
           interactive = undefined;
         }
       };
+      if (!quoted) assertUniqueSiblingKeys(view());
       if (quoted) {
         api.post = async (url) => {
           assert.equal(url, "/supplier-quotes");
@@ -701,6 +722,24 @@ async function checkCartActions() {
       assert.equal(navigations.at(-1), "/en/cart");
     }
     assert.equal(cartChanges, 3);
+    for (const availability of ["OUT_OF_STOCK", "ON_REQUEST"]) {
+      interactive = { values: [], index: 0 };
+      try {
+        assertUniqueSiblingKeys(
+          ProductDetailView({
+            locale: "en",
+            dict: en,
+            payment: paymentOptions,
+            product: {
+              ...p,
+              plans: [{ ...p.plans[0], availableStock: 0, availability }],
+            },
+          }),
+        );
+      } finally {
+        interactive = undefined;
+      }
+    }
     const storefront = require("node:fs").readFileSync(
       path.resolve(__dirname, "../apps/web/components/storefront.module.css"),
       "utf8",
