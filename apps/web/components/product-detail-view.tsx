@@ -477,12 +477,19 @@ export function ProductDetailView({
               {planPicker}
             </div>
           )}
-          {plan?.variant && (
+          {plan && (plan.activationTerms || plan.variant) && (
             <details key={`terms:${plan.id}`} className="mt-4 rounded-xl border border-border">
               <summary className="oosta-disclosure min-h-12 p-4 text-sm font-medium">
-                {locale === "fa" ? "شرایط اشتراک انتخاب‌شده" : "Selected subscription terms"}
+                {plan.activationTerms
+                  ? locale === "fa"
+                    ? "شرایط و ضوابط فعال‌سازی این پلن"
+                    : "Activation rules and plan terms"
+                  : locale === "fa"
+                    ? "شرایط اشتراک انتخاب‌شده"
+                    : "Selected subscription terms"}
               </summary>
               <div className="space-y-3 border-t border-border p-4 text-sm leading-7">
+                {plan.activationTerms && <Markdown text={plan.activationTerms} />}
                 <p className="text-muted">
                   {locale === "fa"
                     ? "برای پیگیری مشکل، شمارهٔ سفارش و شرح خطا را در تیکت ثبت کن. رمز حساب و کد تأیید را در تیکت ننویس."

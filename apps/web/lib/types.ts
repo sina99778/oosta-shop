@@ -48,6 +48,7 @@ export type PlanDetail = {
   label: string;
   durationDays: number | null;
   sortOrder?: number;
+  activationTerms?: string | null;
   variant?: ProductVariant | null;
   source?: "INTERNAL" | "SUPPLIER";
   quoteRequired?: boolean;

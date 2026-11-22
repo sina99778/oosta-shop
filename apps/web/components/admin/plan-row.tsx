@@ -19,6 +19,7 @@ export type EditablePlan = {
   salePrice: number | null;
   isActive: boolean;
   sortOrder?: number;
+  activationTerms?: string | null;
   availableStock: number;
   inventory: { available: number; reserved: number; sold: number };
   supplierAvailability:
@@ -57,6 +58,7 @@ export function PlanRow({
   const [sale, setSale] = useState(plan.salePrice != null ? String(plan.salePrice) : "");
   const [active, setActive] = useState(plan.isActive);
   const [sortOrder, setSortOrder] = useState(String(plan.sortOrder ?? 0));
+  const [activationTerms, setActivationTerms] = useState(plan.activationTerms ?? "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -64,6 +66,7 @@ export function PlanRow({
     if (!token) return;
     setBusy(true);
     setErr(null);
+    const nextTerms = activationTerms.trim() || null;
     try {
       await api.patch(
         `/admin/plans/${plan.id}`,
@@ -73,6 +76,7 @@ export function PlanRow({
           salePrice: sale.trim() ? Number(sale) : null,
           isActive: active,
           ...(Number(sortOrder) !== (plan.sortOrder ?? 0) ? { sortOrder: Number(sortOrder) } : {}),
+          ...(nextTerms !== (plan.activationTerms ?? null) ? { activationTerms: nextTerms } : {}),
           variant,
           source,
           durationDays: duration.trim() ? Number(duration) : null,
@@ -243,6 +247,18 @@ export function PlanRow({
               fa={fa}
             />
           )}
+          <label className="block text-sm">
+            {fa
+              ? "شرایط و ضوابط فعال‌سازی این پلن (اختیاری)"
+              : "Plan activation terms (optional)"}
+            <textarea
+              rows={4}
+              maxLength={4000}
+              value={activationTerms}
+              onChange={(e) => setActivationTerms(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-border bg-card p-3 text-sm leading-6 text-foreground focus-visible:outline-2 focus-visible:outline-primary"
+            />
+          </label>
           <Button onClick={save} disabled={busy}>
             {t.save}
           </Button>

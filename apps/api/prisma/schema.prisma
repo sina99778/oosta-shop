@@ -354,6 +354,7 @@ model ProductPlan {
   currency     String          @default("IRR")
   isActive     Boolean         @default(true)
   sortOrder    Int             @default(0)
+  activationTerms String?
   source       String          @default("INTERNAL")
   variant      Json?
   supplierMappings Json?

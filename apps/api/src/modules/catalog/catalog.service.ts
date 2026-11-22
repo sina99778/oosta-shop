@@ -503,6 +503,7 @@ export async function getProductBySlug(slug: string) {
       label: plan.label,
       durationDays: plan.durationDays,
       sortOrder: plan.sortOrder,
+      activationTerms: plan.activationTerms,
       variant: readVariant(plan.variant),
       source: plan.source,
       quoteRequired: plan.source === "SUPPLIER",

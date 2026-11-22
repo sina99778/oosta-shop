@@ -56,6 +56,13 @@ export const createPlanSchema = z.object({
   currency: z.enum(["IRR", "IRT"]).optional(),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().min(0).max(1000).optional(),
+  activationTerms: z
+    .string()
+    .trim()
+    .max(4000)
+    .transform((v) => (v ? v : null))
+    .nullable()
+    .optional(),
   source: z.enum(["INTERNAL", "SUPPLIER"]).optional(),
   variant: variantSchema.nullable().optional(),
   supplierMappings: z.array(mappingSchema).max(20).optional(),

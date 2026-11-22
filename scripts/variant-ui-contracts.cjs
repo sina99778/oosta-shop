@@ -231,6 +231,36 @@ assert(
   ).includes('href="https://t.me/oostaAiSupport"'),
 );
 assert(html.includes('value="fixture-manual"'), "Preserve the original plan ID");
+const termsHtml = renderToStaticMarkup(
+  React.createElement(ProductDetailView, {
+    locale: "fa",
+    product: {
+      ...viewedProduct,
+      plans: [
+        {
+          ...viewedProduct.plans[0],
+          variant: null,
+          activationTerms:
+            "## نکات فعال‌سازی\n- فقط یک دستگاه\n\n[Unsafe](javascript:alert(1)) · [تماس](/fa/p/contact)",
+        },
+      ],
+    },
+    payment: paymentOptions,
+    dict,
+  }),
+);
+assert(termsHtml.includes("شرایط و ضوابط فعال‌سازی این پلن"));
+assert(
+  !/<details[^>]*\bopen(?:=|[\s>])[^>]*>\s*<summary[^>]*>شرایط و ضوابط فعال‌سازی این پلن/.test(
+    termsHtml,
+  ),
+  "Keep activation terms collapsed initially",
+);
+assert(termsHtml.includes("نکات فعال‌سازی"));
+assert(termsHtml.includes("فقط یک دستگاه"));
+assert(!/<a\b[^>]*href=["']?javascript:/i.test(termsHtml));
+assert(!termsHtml.includes(">Unsafe</a>"));
+assert(termsHtml.includes('href="/fa/p/contact"'));
 const {
   planDisplayLabel,
   planOptionValue,
