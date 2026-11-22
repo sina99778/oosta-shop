@@ -6,6 +6,7 @@ import { createApp } from "../src/app";
 import { env } from "../src/config/env";
 import { prisma } from "../src/lib/prisma";
 import { hashPassword } from "../src/lib/password";
+import { issueSessionToken } from "../src/lib/userSessions";
 import { newWelcomeCode } from "../src/modules/orders/welcome-gift";
 
 async function main() {
@@ -254,12 +255,44 @@ async function main() {
     "An account promoted since issuance cannot use customer reset",
   );
   await prisma.user.update({ where: { id: user.id }, data: { role: "USER" } });
+  const activeBefore = await prisma.userSession.count({
+    where: { userId: user.id, revokedAt: null },
+  });
+  assert(activeBefore >= 2, "Failed reset attempts must leave existing devices active");
   const attempts = await Promise.all([confirm(freshToken), confirm(freshToken)]);
   assert.deepEqual(attempts.map(({ statusCode }) => statusCode).sort(), [204, 400]);
+  assert.equal(
+    await prisma.userSession.count({ where: { userId: user.id, revokedAt: null } }),
+    0,
+    "Successful password recovery must revoke the old device rows",
+  );
+  await assert.rejects(
+    issueSessionToken(user, {}),
+    { statusCode: 401, code: "UNAUTHORIZED" },
+    "A login based on pre-reset credentials must not add an active device after reset",
+  );
   assert.equal((await confirm(freshToken)).statusCode, 400);
   assert.equal((await post("/auth/login", { identifier: email, password })).statusCode, 401);
+  const afterReset = await post("/auth/login", { identifier: email, password: newPassword });
+  assert.equal(afterReset.statusCode, 200);
+  const newSessions = await inject(app, {
+    method: "GET",
+    url: "/auth/sessions",
+    headers: { authorization: `Bearer ${afterReset.json().token}` },
+  });
+  assert.equal(newSessions.statusCode, 200, newSessions.body);
+  assert.deepEqual(
+    newSessions.json().sessions.map((session: { current: boolean }) => session.current),
+    [true],
+  );
   assert.equal(
-    (await post("/auth/login", { identifier: email, password: newPassword })).statusCode,
+    (
+      await inject(app, {
+        method: "GET",
+        url: "/auth/me",
+        headers: { authorization: `Bearer ${otherUser.json().token}` },
+      })
+    ).statusCode,
     200,
   );
   const revoked = await inject(app, {

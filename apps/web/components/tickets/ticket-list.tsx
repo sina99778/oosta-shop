@@ -15,7 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { formatDate } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
-import type { TicketListItem } from "@/lib/types";
+import type { OrderSummary, TicketListItem } from "@/lib/types";
+import { ImagePicker, ticketImageError } from "./ticket-attachment";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 import styles from "../account.module.css";
 
@@ -46,19 +47,35 @@ export function TicketList({
     orderRef ? (fa ? `پیگیری سفارش #${orderRef}` : `Order #${orderRef} support`) : "",
   );
   const [body, setBody] = useState("");
+  const [image, setImage] = useState<File | null>(null);
+  const { data: orderData } = useApi<{ orders: OrderSummary[] }>(
+    token ? "/orders" : null,
+    token ?? undefined,
+  );
+  const orders = orderData?.orders ?? [];
+  const [orderChoice, setOrderChoice] = useState<string | null>(null);
+  const orderId =
+    orderChoice ?? (orderRef ? (orders.find((o) => o.id.endsWith(orderRef))?.id ?? "") : "");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const sending = useRef(false);
+  const imageError = ticketImageError(image, fa);
+  const ready = Boolean(subject.trim() && (body.trim() || image) && !imageError);
 
   async function create(event: FormEvent) {
     event.preventDefault();
-    if (!token || sending.current || !subject.trim() || !body.trim()) return;
+    if (!token || sending.current || !ready) return;
     sending.current = true;
     setBusy(true);
     setMessage(null);
     let navigating = false;
     try {
-      const ticket = await api.post<{ id: string }>("/tickets", { subject, body }, token);
+      const form = new FormData();
+      form.set("subject", subject);
+      form.set("body", body);
+      if (orderId) form.set("orderId", orderId);
+      if (image) form.set("image", image);
+      const ticket = await api.upload<{ id: string }>("/tickets", form, token);
       router.push(`/${locale}/support/${encodeURIComponent(ticket.id)}`);
       navigating = true;
     } catch (err) {
@@ -67,7 +84,16 @@ export function TicketList({
           ? fa
             ? "تعداد پیام‌ها زیاد است. کمی بعد دوباره تلاش کن."
             : "Too many requests. Try again shortly."
-          : dict.common.somethingWrong,
+          : err instanceof ApiError && err.code === "ORDER_NOT_FOUND"
+            ? fa
+              ? "این سفارش در حساب تو پیدا نشد."
+              : "That order isn't in your account."
+            : err instanceof ApiError &&
+                (err.code === "BAD_FILE_TYPE" || err.code === "INVALID_FILE")
+              ? fa
+                ? "تصویر پذیرفته نشد؛ یک JPG، PNG یا WebP تا ۵ مگابایت بفرست."
+                : "That image wasn't accepted; use a JPG, PNG or WebP up to 5 MB."
+              : dict.common.somethingWrong,
       );
     } finally {
       if (!navigating) {
@@ -120,6 +146,12 @@ export function TicketList({
                   </p>
                   <p className={styles.rowMeta}>
                     <time dateTime={ticket.updatedAt}>{formatDate(ticket.updatedAt, locale)}</time>
+                    {ticket.orderId && (
+                      <>
+                        {" · "}
+                        {fa ? "سفارش" : "Order"} <bdi dir="ltr">#{ticket.orderId.slice(-8)}</bdi>
+                      </>
+                    )}
                   </p>
                 </div>
                 <Badge tone={ticketTone(ticket.status)}>
@@ -152,6 +184,24 @@ export function TicketList({
                 required
               />
             </label>
+            {orders.length > 0 && (
+              <label className="grid gap-2 text-sm font-medium">
+                <span>{fa ? "سفارش مرتبط (اختیاری)" : "Related order (optional)"}</span>
+                <select
+                  className={styles.select}
+                  value={orderId}
+                  onChange={(event) => setOrderChoice(event.target.value)}
+                  disabled={busy}
+                >
+                  <option value="">{fa ? "بدون سفارش" : "No order"}</option>
+                  {orders.map((order) => (
+                    <option key={order.id} value={order.id}>
+                      {`#${order.id.slice(-8)}${order.firstProductName ? ` · ${order.firstProductName}` : ""} · ${formatDate(order.createdAt, locale)}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label className="grid gap-2 text-sm font-medium">
               <span>{t.message}</span>
               <textarea
@@ -163,9 +213,21 @@ export function TicketList({
                 rows={5}
                 aria-describedby="ticket-safety"
                 disabled={busy}
-                required
+                required={!image}
               />
             </label>
+            <ImagePicker
+              id="ticket-image"
+              file={image}
+              onChange={setImage}
+              disabled={busy}
+              locale={locale}
+            />
+            {imageError && (
+              <p role="alert" className="text-sm text-danger">
+                {imageError}
+              </p>
+            )}
             <p id="ticket-safety" className="text-sm text-muted">
               {fa
                 ? "رمز حساب، کد تأیید یا اطلاعات کارت بانکی را در تیکت ننویس."
@@ -176,7 +238,7 @@ export function TicketList({
                 {message}
               </p>
             )}
-            <Button type="submit" disabled={busy || !subject.trim() || !body.trim()}>
+            <Button type="submit" disabled={busy || !ready}>
               {busy ? <Spinner /> : t.send}
             </Button>
           </form>

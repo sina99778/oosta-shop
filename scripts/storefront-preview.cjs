@@ -76,8 +76,10 @@ const server = http.createServer((req, res) => {
         (!search || p.name.toLowerCase().includes(search)),
     );
     const sort = url.searchParams.get("sort");
-    if (sort === "price_asc") selected.sort((a, b) => (a.priceFrom ?? Infinity) - (b.priceFrom ?? Infinity));
-    if (sort === "price_desc") selected.sort((a, b) => (b.priceFrom ?? -Infinity) - (a.priceFrom ?? -Infinity));
+    if (sort === "price_asc")
+      selected.sort((a, b) => (a.priceFrom ?? Infinity) - (b.priceFrom ?? Infinity));
+    if (sort === "price_desc")
+      selected.sort((a, b) => (b.priceFrom ?? -Infinity) - (a.priceFrom ?? -Infinity));
     const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
     const pageSize = Math.max(1, Math.min(50, Number(url.searchParams.get("pageSize")) || 12));
     body = {
@@ -184,14 +186,15 @@ const web = spawn(
     "--use-system-ca",
     path.join(root, "node_modules/next/dist/bin/next"),
     "dev",
-    path.join(root, "apps/web"),
+    ".",
     "-p",
     "3101",
     "-H",
     "127.0.0.1",
   ],
   {
-    cwd: root,
+    // next.config.ts imports local TypeScript modules, which Next resolves from the app root.
+    cwd: path.join(root, "apps/web"),
     windowsHide: true,
     stdio: "inherit",
     env: {

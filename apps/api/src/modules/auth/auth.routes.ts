@@ -26,8 +26,14 @@ import {
   logoutAll,
   me,
   resetPassword,
+  revokeOtherSessions,
+  revokeSession,
+  sessions,
   signup,
 } from "./auth.controller";
+import { z } from "zod";
+
+const sessionParams = z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/) });
 
 export const authRouter = Router();
 
@@ -44,6 +50,15 @@ authRouter.post(
 );
 authRouter.post("/logout", logout);
 authRouter.post("/logout-all", authenticate, logoutAll);
+authRouter.get("/sessions", authenticate, sessions);
+authRouter.post("/sessions/revoke-others", authRateLimiter, authenticate, revokeOtherSessions);
+authRouter.delete(
+  "/sessions/:id",
+  authRateLimiter,
+  authenticate,
+  validate({ params: sessionParams }),
+  revokeSession,
+);
 
 export function createPasswordResetRouter(send?: SendMail) {
   const router = Router();

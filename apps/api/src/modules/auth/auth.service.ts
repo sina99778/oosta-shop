@@ -3,7 +3,7 @@
 import type { Prisma, User } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { hashPassword, verifyPassword } from "../../lib/password";
-import { signAccessToken } from "../../lib/jwt";
+import { issueSessionToken, revokeSessions, type SessionMeta } from "../../lib/userSessions";
 import { AppError } from "../../utils/httpError";
 import { newWelcomeCode } from "../orders/welcome-gift";
 import type { ChangePasswordInput, LoginInput, SignupInput } from "./auth.schemas";
@@ -29,11 +29,14 @@ function toPublicUser(user: User): PublicUser {
   };
 }
 
-function issueToken(user: User): string {
-  return signAccessToken({ sub: user.id, role: user.role, sv: user.sessionVersion });
+function issueToken(user: User, meta: SessionMeta): Promise<string> {
+  return issueSessionToken(user, meta);
 }
 
-export async function registerUser(input: SignupInput): Promise<AuthResult> {
+export async function registerUser(
+  input: SignupInput,
+  meta: SessionMeta = {},
+): Promise<AuthResult> {
   const orConditions: Prisma.UserWhereInput[] = [];
   if (input.email) orConditions.push({ email: input.email });
   if (input.phone) orConditions.push({ phone: input.phone });
@@ -63,10 +66,10 @@ export async function registerUser(input: SignupInput): Promise<AuthResult> {
     throw error;
   }
 
-  return { user: toPublicUser(user), token: issueToken(user) };
+  return { user: toPublicUser(user), token: await issueToken(user, meta) };
 }
 
-export async function loginUser(input: LoginInput): Promise<AuthResult> {
+export async function loginUser(input: LoginInput, meta: SessionMeta = {}): Promise<AuthResult> {
   const identifier = input.identifier.trim();
   const user = await prisma.user.findFirst({
     where: { OR: [{ email: identifier }, { phone: identifier }] },
@@ -81,7 +84,7 @@ export async function loginUser(input: LoginInput): Promise<AuthResult> {
     throw new AppError(401, "UNAUTHORIZED", "Invalid credentials");
   }
 
-  return { user: toPublicUser(user), token: issueToken(user) };
+  return { user: toPublicUser(user), token: await issueToken(user, meta) };
 }
 
 // Requires the current password, then rotates the hash and bumps sessionVersion in
@@ -90,6 +93,7 @@ export async function loginUser(input: LoginInput): Promise<AuthResult> {
 export async function changePassword(
   userId: string,
   input: ChangePasswordInput,
+  meta: SessionMeta = {},
 ): Promise<AuthResult> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new AppError(401, "UNAUTHORIZED", "User no longer exists");
@@ -113,7 +117,10 @@ export async function changePassword(
       );
     throw error;
   }
-  return { user: toPublicUser(updated), token: issueToken(updated) };
+  // The version bump already rejects older tokens; ending the rows keeps the device
+  // list truthful. The caller continues on a fresh session.
+  await revokeSessions(userId);
+  return { user: toPublicUser(updated), token: await issueToken(updated, meta) };
 }
 
 // "Log out on every device": revokes all existing tokens for this user.
@@ -122,6 +129,7 @@ export async function revokeAllSessions(userId: string): Promise<void> {
     where: { id: userId },
     data: { sessionVersion: { increment: 1 } },
   });
+  await revokeSessions(userId);
 }
 
 export async function getUserById(id: string): Promise<PublicUser> {

@@ -254,7 +254,137 @@
   padding: 0.4rem 0.85rem 0.85rem;
 }
 .sessionPanel {
-  border-color: color-mix(in srgb, var(--c-danger-text) 32%, var(--c-border));
+  border-color: var(--c-border);
+}
+.sessionsHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+.devices {
+  display: grid;
+  margin-block-start: 1rem;
+  border: 1px solid var(--c-border);
+  border-radius: 0.85rem;
+  overflow: hidden;
+  list-style: none;
+  padding: 0;
+}
+.devices li {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  border-block-start: 1px solid var(--c-border);
+}
+.devices li:first-child {
+  border-block-start: 0;
+}
+.deviceIcon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  background: var(--c-surface);
+  color: var(--c-muted);
+}
+.devices li[data-current="true"] .deviceIcon {
+  background: var(--c-mint);
+  color: #102b28;
+}
+.deviceText {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 0.1rem;
+}
+.deviceText strong {
+  font-size: 0.9375rem;
+  text-align: start;
+}
+.deviceText small {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+}
+.currentDevice {
+  flex: none;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  background: var(--c-mint);
+  color: #102b28;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+.sessionsFoot {
+  margin-block-start: 1rem;
+}
+.select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-control);
+  background: var(--c-card);
+  color: var(--c-fg);
+  font: inherit;
+  font-size: 0.9375rem;
+}
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.pickedFile {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.35rem 0.25rem 0.7rem;
+  border-radius: 999px;
+  background: var(--c-surface);
+  font-size: 0.8125rem;
+}
+.pickedFile button {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  color: var(--c-danger-text);
+}
+.attachment {
+  display: grid;
+  gap: 0.35rem;
+  margin-block-start: 0.65rem;
+  max-width: 20rem;
+}
+.attachment img {
+  width: 100%;
+  max-height: 16rem;
+  object-fit: contain;
+  border-radius: 0.65rem;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+}
+.attachment figcaption {
+  color: var(--c-muted);
+  font-size: 0.75rem;
+}
+.attachmentPlaceholder {
+  display: grid;
+  place-items: center;
+  min-height: 6rem;
+  border-radius: 0.65rem;
+  background: var(--c-surface);
+  color: var(--c-muted);
+  font-size: 0.8125rem;
 }
 .coupon {
   padding: clamp(1.15rem, 4vw, 2rem);

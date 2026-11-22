@@ -9,6 +9,7 @@ import { looksLikeApiKey, resolveApiKey } from "../lib/apiKey";
 import { prisma } from "../lib/prisma";
 import { isTrustedCookieWrite, readSessionCookie } from "../lib/sessionCookie";
 import { AppError } from "../utils/httpError";
+import { TOUCH_INTERVAL_MS } from "../lib/userSessions";
 
 // Accepts either a user JWT (Authorization: Bearer <jwt>) OR an API key
 // (X-API-Key: oosta_sk_… , or Authorization: Bearer oosta_sk_…). API keys
@@ -80,6 +81,29 @@ export async function authenticate(
     if (user.sessionVersion !== payload.sv) {
       next(new AppError(401, "UNAUTHORIZED", "Session has been revoked"));
       return;
+    }
+    if (payload.sid) {
+      // Device sessions can be revoked one by one from the account security page.
+      const session = await prisma.userSession.findUnique({
+        where: { id: payload.sid },
+        select: { userId: true, revokedAt: true, expiresAt: true, lastSeenAt: true },
+      });
+      if (
+        !session ||
+        session.userId !== user.id ||
+        session.revokedAt ||
+        session.expiresAt.getTime() <= Date.now()
+      ) {
+        next(new AppError(401, "UNAUTHORIZED", "Session has been revoked"));
+        return;
+      }
+      if (Date.now() - session.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
+        await prisma.userSession.updateMany({
+          where: { id: payload.sid, revokedAt: null },
+          data: { lastSeenAt: new Date() },
+        });
+      }
+      req.sessionId = payload.sid;
     }
     req.user = { id: user.id, role: user.role };
     req.authMethod = cookieToken ? "cookie" : "bearer";

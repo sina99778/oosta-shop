@@ -11,6 +11,7 @@ import { validate } from "../../middleware/validate";
 import { uploadProductImage } from "../../middleware/upload";
 import * as schemas from "./admin.schemas";
 import * as ctrl from "./admin.controller";
+import { ticketAttachmentParamsSchema } from "../tickets/tickets.schemas";
 
 export const adminRouter = Router();
 
@@ -160,6 +161,11 @@ adminRouter.delete("/reviews/:id", validate({ params: schemas.idParamSchema }), 
 // Support tickets
 adminRouter.get("/tickets", validate({ query: schemas.ticketsQuerySchema }), ctrl.listTickets);
 adminRouter.get("/tickets/:id", validate({ params: schemas.idParamSchema }), ctrl.getTicket);
+adminRouter.get(
+  "/tickets/:id/messages/:messageId/attachment",
+  validate({ params: ticketAttachmentParamsSchema }),
+  ctrl.getTicketAttachment,
+);
 adminRouter.post(
   "/tickets/:id/messages",
   validate({ params: schemas.idParamSchema, body: schemas.ticketReplySchema }),

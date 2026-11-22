@@ -1,0 +1,122 @@
+/* 404 and error screens from the redesign: the master on the navy stage. */
+.stage {
+  background: var(--c-navy);
+  color: #f3f6f8;
+  border-block-end: 3px solid var(--c-mint);
+}
+.inner {
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  gap: clamp(1.5rem, 4vw, 3.5rem);
+  max-width: 1168px;
+  margin-inline: auto;
+  padding: clamp(2.5rem, 7vw, 5rem) clamp(1rem, 4vw, 2rem);
+}
+.art {
+  width: clamp(180px, 26vw, 340px);
+  height: auto;
+}
+.copy {
+  display: grid;
+  gap: 1rem;
+  max-width: 34rem;
+}
+.code {
+  color: var(--c-mint);
+  font-size: clamp(4.5rem, 11vw, 7.5rem);
+  font-weight: 900;
+  line-height: 1;
+}
+.copy h1 {
+  font-size: clamp(1.75rem, 3.5vw, 2.6rem);
+  font-weight: 850;
+  line-height: 1.4;
+}
+.copy p {
+  color: #bdc8d3;
+  line-height: 1.85;
+}
+.search {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.4rem;
+  border-radius: 0.9rem;
+  border: 1px solid #41576c;
+  background: #172a40;
+}
+.search input {
+  flex: 1;
+  min-width: 0;
+  min-height: 2.9rem;
+  padding-inline: 0.75rem;
+  border: 0;
+  background: transparent;
+  color: #f3f6f8;
+  font: inherit;
+}
+.search input::placeholder {
+  color: #b3c3ce;
+}
+.search input:focus-visible {
+  outline: none;
+}
+.search:focus-within {
+  border-color: var(--c-mint);
+}
+.search button,
+.actions .primary {
+  --c-primary: var(--c-mint);
+  --c-primary-hover: #d5f7e9;
+  --c-on-primary: #102b28;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.actions a,
+.actions button {
+  min-height: 46px;
+  padding-inline: 1.25rem;
+}
+.ghost {
+  --button-fill: transparent;
+  --button-ink: #f3f6f8;
+  --button-line: #516578;
+  --button-hover: rgb(255 255 255 / 6%);
+  --button-light: transparent;
+  --button-depth: 0 0 transparent;
+}
+.plain {
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  max-width: 40rem;
+  margin-inline: auto;
+  padding: clamp(3rem, 9vw, 6rem) 1rem;
+  text-align: center;
+}
+.plain h1 {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 850;
+}
+.plain p {
+  color: var(--c-muted);
+  line-height: 1.85;
+}
+.warn {
+  display: grid;
+  place-items: center;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 50%;
+  background: var(--c-warning-bg);
+  color: var(--c-warning);
+}
+@media (min-width: 56rem) {
+  .inner {
+    grid-template-columns: auto minmax(0, 1fr);
+    justify-items: start;
+  }
+}

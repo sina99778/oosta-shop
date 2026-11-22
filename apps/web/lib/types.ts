@@ -107,11 +107,26 @@ export type AdminReviewList = {
 
 // Support tickets
 export type TicketStatus = "OPEN" | "ANSWERED" | "CLOSED";
-export type TicketMessage = { id: string; body: string; isStaff: boolean; createdAt: string };
+export type TicketAttachmentInfo = { name: string | null; mime: string; size: number };
+export type TicketMessage = {
+  id: string;
+  body: string;
+  isStaff: boolean;
+  createdAt: string;
+  attachment?: TicketAttachmentInfo | null;
+};
+export type TicketOrderRef = {
+  id: string;
+  createdAt: string;
+  totalAmount: number;
+  currency: string;
+  paymentStatus: string;
+};
 export type TicketListItem = {
   id: string;
   subject: string;
   status: TicketStatus;
+  orderId?: string | null;
   messageCount: number;
   lastMessage: string;
   updatedAt: string;
@@ -122,6 +137,7 @@ export type TicketDetail = {
   status: TicketStatus;
   createdAt: string;
   updatedAt: string;
+  order?: TicketOrderRef | null;
   messages: TicketMessage[];
 };
 type TicketUser = { id: string; name: string; email: string | null; phone: string | null };
@@ -138,7 +154,10 @@ export type AdminTicketList = {
   openCount: number;
   pagination: Pagination;
 };
-export type AdminTicketDetail = TicketDetail & { user: TicketUser };
+export type AdminTicketDetail = TicketDetail & {
+  user: TicketUser;
+  customer?: { memberSince: string; orderCount: number };
+};
 
 // Blog
 export type BlogPostSummary = {
@@ -148,10 +167,17 @@ export type BlogPostSummary = {
   excerpt: string | null;
   hasCover: boolean;
   coverAlt?: string | null;
+  tag?: string | null;
+  readingMinutes?: number;
   publishedAt: string | null;
   updatedAt?: string;
 };
-export type BlogPostDetail = BlogPostSummary & { content: string };
+export type BlogLinkedProduct = { id: string; slug: string; name: string; type: ProductType };
+export type BlogPostDetail = BlogPostSummary & {
+  content: string;
+  related?: BlogPostSummary[];
+  products?: BlogLinkedProduct[];
+};
 export type AdminBlogPost = {
   id: string;
   slug: string;
@@ -170,6 +196,7 @@ export type AdminBlogPostDetail = {
   status: "DRAFT" | "PUBLISHED";
   hasCover: boolean;
   coverAlt?: string | null;
+  tag?: string | null;
   publishedAt: string | null;
 };
 

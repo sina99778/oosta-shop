@@ -16,6 +16,7 @@ import type { Locale } from "@/lib/i18n";
 import type { TicketDetail } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 import { ticketTone } from "./ticket-list";
+import { ImagePicker, TicketAttachment, ticketImageError } from "./ticket-attachment";
 import styles from "../account.module.css";
 
 export function TicketThread({
@@ -36,6 +37,8 @@ export function TicketThread({
     token ?? undefined,
   );
   const [body, setBody] = useState("");
+  const [image, setImage] = useState<File | null>(null);
+  const imageError = ticketImageError(image, fa);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [replySaved, setReplySaved] = useState(false);
@@ -43,14 +46,22 @@ export function TicketThread({
 
   async function reply(event: FormEvent) {
     event.preventDefault();
-    if (!token || !body.trim() || sending.current) return;
+    if (!token || (!body.trim() && !image) || imageError || sending.current) return;
     sending.current = true;
     setBusy(true);
     setActionError(null);
     setReplySaved(false);
     try {
-      await api.post(`/tickets/${ticketId}/messages`, { body }, token);
+      if (image) {
+        const form = new FormData();
+        form.set("body", body);
+        form.set("image", image);
+        await api.upload(`/tickets/${ticketId}/messages`, form, token);
+      } else {
+        await api.post(`/tickets/${ticketId}/messages`, { body }, token);
+      }
       setBody("");
+      setImage(null);
       setReplySaved(true);
       refetch();
     } catch (err) {
@@ -103,6 +114,24 @@ export function TicketThread({
           <QueryError message={dict.common.somethingWrong} onRetry={refetch} />
         ) : (
           <>
+            {ticket.order && (
+              <Link
+                href={`/${locale}/dashboard/orders/${encodeURIComponent(ticket.order.id)}`}
+                className={styles.row}
+              >
+                <div>
+                  <p className={styles.rowTitle}>
+                    {fa ? "سفارش مرتبط" : "Related order"}{" "}
+                    <bdi dir="ltr">#{ticket.order.id.slice(-8)}</bdi>
+                  </p>
+                  <p className={styles.rowMeta}>
+                    <time dateTime={ticket.order.createdAt}>
+                      {formatDate(ticket.order.createdAt, locale)}
+                    </time>
+                  </p>
+                </div>
+              </Link>
+            )}
             <section
               className={`${styles.panel} ${styles.stack}`}
               aria-labelledby="conversation-title"
@@ -122,9 +151,20 @@ export function TicketThread({
                         {formatDate(message.createdAt, locale)}
                       </time>
                     </div>
-                    <p dir="auto" className="mt-2">
-                      {message.body}
-                    </p>
+                    {message.body && (
+                      <p dir="auto" className="mt-2">
+                        {message.body}
+                      </p>
+                    )}
+                    {message.attachment && token && (
+                      <TicketAttachment
+                        path={`/tickets/${encodeURIComponent(ticketId)}/messages/${encodeURIComponent(message.id)}/attachment`}
+                        token={token}
+                        name={message.attachment.name}
+                        size={message.attachment.size}
+                        locale={locale}
+                      />
+                    )}
                   </li>
                 ))}
               </ol>
@@ -138,11 +178,23 @@ export function TicketThread({
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   rows={4}
-                  required
+                  required={!image}
                   disabled={busy}
                   className={styles.textarea}
                 />
               </label>
+              <ImagePicker
+                id="reply-image"
+                file={image}
+                onChange={setImage}
+                disabled={busy}
+                locale={locale}
+              />
+              {imageError && (
+                <p role="alert" className="text-sm text-danger">
+                  {imageError}
+                </p>
+              )}
               {ticket.status === "CLOSED" && (
                 <p className="text-sm text-muted">
                   {fa
@@ -156,7 +208,10 @@ export function TicketThread({
                 </p>
               )}
               <div>
-                <Button type="submit" disabled={busy || !body.trim()}>
+                <Button
+                  type="submit"
+                  disabled={busy || (!body.trim() && !image) || Boolean(imageError)}
+                >
                   {busy ? <Spinner /> : t.send}
                 </Button>
               </div>

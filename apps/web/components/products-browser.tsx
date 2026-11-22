@@ -38,6 +38,17 @@ export function readCatalogFilters(params: CatalogParams) {
   return { category, term, sort, page };
 }
 
+const accessValues = ["PERSONAL", "SHARED", "TEAM"] as const;
+const deliveryValues = ["AUTOMATIC", "MANUAL"] as const;
+
+/** Optional catalog filters added by the storefront redesign; unknown values are ignored. */
+export function readExtraFilters(params: CatalogParams) {
+  const access = accessValues.find((value) => value === params.access) ?? "";
+  const delivery = deliveryValues.find((value) => value === params.delivery) ?? "";
+  const inStock = params.inStock === "true";
+  return { access, delivery, inStock };
+}
+
 export async function ProductsBrowser({
   locale,
   dict,
@@ -48,10 +59,14 @@ export async function ProductsBrowser({
   params: CatalogParams;
 }) {
   const { category, term, sort, page } = readCatalogFilters(params);
+  const { access, delivery, inStock } = readExtraFilters(params);
   const fa = locale === "fa";
   const query = new URLSearchParams({ page: String(page), pageSize: "12", sort });
   if (category) query.set("category", category);
   if (term) query.set("q", term);
+  if (access) query.set("access", access);
+  if (delivery) query.set("delivery", delivery);
+  if (inStock) query.set("inStock", "true");
   const [products, categories, settings] = await Promise.all([
     fetchJson<Paginated<ProductSummary>>(`/products?${query}`, 0),
     fetchJson<{ categories: Category[] }>("/categories"),
@@ -70,6 +85,9 @@ export async function ProductsBrowser({
     if (slug) next.set("category", slug);
     if (term) next.set("q", term);
     if (sort !== "recommended") next.set("sort", sort);
+    if (access) next.set("access", access);
+    if (delivery) next.set("delivery", delivery);
+    if (inStock) next.set("inStock", "true");
     if (targetPage > 1) next.set("page", String(targetPage));
     return `/${locale}/products${next.size ? `?${next}` : ""}`;
   }
@@ -84,6 +102,18 @@ export async function ProductsBrowser({
         "software-licenses": "Software & licenses",
         "gift-cards": "Gift cards",
       };
+  const filtered = Boolean(access || delivery || inStock);
+  const accessOptions: [string, string][] = [
+    ["", fa ? "همه" : "Any"],
+    ["PERSONAL", fa ? "اختصاصی" : "Individual"],
+    ["SHARED", fa ? "اشتراکی" : "Shared"],
+    ["TEAM", fa ? "تیمی" : "Team"],
+  ];
+  const deliveryOptions: [string, string][] = [
+    ["", fa ? "همه" : "Any"],
+    ["AUTOMATIC", fa ? "خودکار و آنی" : "Automatic"],
+    ["MANUAL", fa ? "دستی" : "Manual"],
+  ];
   const selectedCategory = categories?.categories.find((item) => item.slug === category);
   const categoryName = selectedCategory
     ? (categoryLabels[selectedCategory.slug] ?? selectedCategory.name)
@@ -100,6 +130,11 @@ export async function ProductsBrowser({
             <span>{dict.products.title}</span>
           </div>
           <h1 id="shop-title">{fa ? "اشتراک‌ها و ابزارها" : "Subscriptions and tools"}</h1>
+          <p className={styles.introLead}>
+            {fa
+              ? "بگو برای چه کاری نیازش داری؛ پلن‌ها را از نظر قیمت، مدت، ضمانت و شیوهٔ تحویل کنار هم ببین."
+              : "Start from what you need, then compare plans by price, duration, warranty and delivery."}
+          </p>
         </div>
       </section>
       <div className={styles.content}>
@@ -109,6 +144,9 @@ export async function ProductsBrowser({
         >
           <ProductSearchForm locale={locale} className={styles.searchForm}>
             {category && <input type="hidden" name="category" value={category} />}
+            {access && <input type="hidden" name="access" value={access} />}
+            {delivery && <input type="hidden" name="delivery" value={delivery} />}
+            {inStock && <input type="hidden" name="inStock" value="true" />}
             <label className={styles.searchLabel}>
               {fa ? "جست‌وجوی محصول" : "Search products"}
               <input
@@ -176,6 +214,51 @@ export async function ProductsBrowser({
                 ))}
             </nav>
           </details>
+          <form
+            method="get"
+            action={`/${locale}/products`}
+            className={styles.filterForm}
+            aria-label={fa ? "فیلترهای پلن" : "Plan filters"}
+          >
+            {category && <input type="hidden" name="category" value={category} />}
+            {term && <input type="hidden" name="q" value={term} />}
+            {sort !== "recommended" && <input type="hidden" name="sort" value={sort} />}
+            <label className={styles.stockToggle}>
+              <input type="checkbox" name="inStock" value="true" defaultChecked={inStock} />
+              <span>{fa ? "فقط موجودها" : "In stock only"}</span>
+            </label>
+            <fieldset>
+              <legend>{fa ? "نوع دسترسی" : "Access type"}</legend>
+              {accessOptions.map(([value, label]) => (
+                <label key={value || "any"}>
+                  <input
+                    type="radio"
+                    name="access"
+                    value={value}
+                    defaultChecked={access === value}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </fieldset>
+            <fieldset>
+              <legend>{fa ? "شیوهٔ تحویل" : "Delivery"}</legend>
+              {deliveryOptions.map(([value, label]) => (
+                <label key={value || "any"}>
+                  <input
+                    type="radio"
+                    name="delivery"
+                    value={value}
+                    defaultChecked={delivery === value}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </fieldset>
+            <Button type="submit" variant="soft">
+              {fa ? "اعمال فیلترها" : "Apply filters"}
+            </Button>
+          </form>
         </section>
         <div className={styles.results} aria-live="polite">
           <span>
@@ -188,7 +271,7 @@ export async function ProductsBrowser({
               </>
             )}
           </span>
-          {(term || category || sort !== "recommended") && (
+          {(term || category || sort !== "recommended" || filtered) && (
             <Link prefetch={false} href={`/${locale}/products`}>
               {fa ? "پاک کردن فیلترها" : "Clear filters"} ×
             </Link>

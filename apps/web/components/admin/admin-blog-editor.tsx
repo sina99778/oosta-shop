@@ -86,6 +86,7 @@ function Editor({
   const [slugTouched, setSlugTouched] = useState(!!post);
   const [excerpt, setExcerpt] = useState(post?.excerpt ?? "");
   const [coverAlt, setCoverAlt] = useState(post?.coverAlt ?? "");
+  const [tag, setTag] = useState(post?.tag ?? "");
   const [content, setContent] = useState(post?.content ?? "");
   const [status, setStatus] = useState<AdminBlogPostDetail["status"]>(post?.status ?? "DRAFT");
   const [storedPublicSlug, setStoredPublicSlug] = useState(
@@ -134,6 +135,7 @@ function Editor({
       slug,
       excerpt: excerpt.trim() || null,
       coverAlt: coverAlt.trim() || null,
+      tag: tag.trim() || null,
       content,
       status,
     };
@@ -253,6 +255,25 @@ function Editor({
                 rows={2}
                 onChange={(e) => setExcerpt(e.target.value)}
               />
+            </label>
+            <label>
+              <span>
+                {fa ? "برچسب موضوع (مثلاً مقایسه یا راهنمای خرید)" : "Topic tag (e.g. Comparison)"}
+              </span>
+              <input
+                value={tag}
+                maxLength={40}
+                list="journal-tags"
+                onChange={(e) => setTag(e.target.value)}
+              />
+              <datalist id="journal-tags">
+                {(fa
+                  ? ["مقایسه", "راهنمای خرید", "پرامپت", "آموزش", "امنیت"]
+                  : ["Comparison", "Buying guide", "Prompts", "Tutorial", "Security"]
+                ).map((option) => (
+                  <option key={option} value={option} />
+                ))}
+              </datalist>
             </label>
             <label>
               <span>{t.coverAlt}</span>

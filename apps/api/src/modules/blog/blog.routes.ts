@@ -4,6 +4,7 @@ import { validate } from "../../middleware/validate";
 import { uploadProductImage } from "../../middleware/upload";
 import {
   createPostSchema,
+  listPostsQuerySchema,
   postParamsSchema,
   postSlugSchema,
   updatePostSchema,
@@ -12,7 +13,7 @@ import * as ctrl from "./blog.controller";
 
 // Public blog routes (mounted at the app root).
 export const blogRouter = Router();
-blogRouter.get("/blog", ctrl.listPublished);
+blogRouter.get("/blog", validate({ query: listPostsQuerySchema }), ctrl.listPublished);
 blogRouter.get("/blog-media/:id", ctrl.media);
 blogRouter.get("/blog-cover/:id", ctrl.cover);
 blogRouter.get("/blog/:slug", validate({ params: postSlugSchema }), ctrl.getBySlug);

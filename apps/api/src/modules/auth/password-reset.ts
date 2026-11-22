@@ -219,6 +219,12 @@ async function consumeChallenge(reset: PasswordReset, data: Prisma.UserUpdateMan
       data,
     });
     if (!updated.count) throw invalidChallenge(kind);
+    if (kind === "RESET") {
+      await tx.userSession.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+    }
     return before?.verifiedRecoveryEmail === null ? email : null;
   });
 }

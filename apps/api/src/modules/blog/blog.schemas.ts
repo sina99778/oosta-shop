@@ -12,6 +12,14 @@ export const createPostSchema = z.object({
   slug,
   excerpt: z.string().trim().max(500).nullable().optional(),
   coverAlt: z.string().trim().max(200).nullable().optional(),
+  // One editorial topic such as "مقایسه" or "راهنمای خرید"; empty clears it.
+  tag: z
+    .string()
+    .trim()
+    .max(40)
+    .nullable()
+    .optional()
+    .transform((value) => (value ? value : value === undefined ? undefined : null)),
   content: z.string().trim().min(1).max(100000),
   status: z.enum(["DRAFT", "PUBLISHED"]).optional(),
 });
@@ -22,6 +30,9 @@ export const updatePostSchema = createPostSchema
 
 export const postParamsSchema = z.object({ id: z.string().min(1) });
 export const postSlugSchema = z.object({ slug: z.string().trim().min(1) });
+export const listPostsQuerySchema = z.object({
+  tag: z.string().trim().min(1).max(40).optional(),
+});
 
 export type CreatePostInput = z.infer<typeof createPostSchema>;
 export type UpdatePostInput = z.infer<typeof updatePostSchema>;

@@ -19,6 +19,12 @@ import type { Dictionary } from "@/app/[locale]/dictionaries";
 
 type Filter = "" | "PENDING" | "APPROVED" | "REJECTED";
 
+// Flags reviews that carry links, handles or phone numbers for a closer look; never auto-rejects.
+export function looksPromotional(comment: string | null): boolean {
+  if (!comment) return false;
+  return /https?:\/\/|www\.|t\.me\/|@[a-z0-9_]{4,}|(?:\+98|0)9\d{9}|[۰-۹]{10,}/i.test(comment);
+}
+
 function stars(n: number): string {
   return "★★★★★☆☆☆☆☆".slice(5 - n, 10 - n);
 }
@@ -30,6 +36,7 @@ function tone(status: string): "success" | "muted" | "danger" {
 
 export function AdminReviews({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const { token } = useAuth();
+  const fa = locale === "fa";
   const t = dict.admin.reviews;
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<Filter>("PENDING");
@@ -118,6 +125,11 @@ export function AdminReviews({ locale, dict }: { locale: Locale; dict: Dictionar
                     {stars(r.rating)}
                   </p>
                   {r.comment && <p className="mt-1">{r.comment}</p>}
+                  {looksPromotional(r.comment) && (
+                    <p className="mt-1">
+                      <Badge tone="danger">{fa ? "مشکوک به تبلیغ" : "Possible spam"}</Badge>
+                    </p>
+                  )}
                   <p className="mt-1 text-xs text-muted">{formatDate(r.createdAt, locale)}</p>
                 </div>
                 <Badge tone={tone(r.status)}>

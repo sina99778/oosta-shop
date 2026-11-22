@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { AccountFrame } from "@/components/account-frame";
 import { AccountRecoveryEmail } from "@/components/account-recovery-email";
+import { AccountSessions } from "@/components/account-sessions";
 import { PasswordStrength } from "@/components/password-strength";
 import { PasswordInput } from "@/components/password-input";
 import { Button } from "@/components/ui/button";
@@ -25,17 +25,16 @@ function Field({ id, label, children }: { id: string; label: string; children: R
   );
 }
 
-// Change password (revokes every other session) and "sign out on every device".
+// Change password (revokes every other session) and the signed-in device list.
 export function AccountSecurity({ locale }: { locale: Locale }) {
-  const { changePassword, logoutAll } = useAuth();
-  const router = useRouter();
+  const { changePassword } = useAuth();
   const fa = locale === "fa";
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [busy, setBusy] = useState<"password" | "all" | null>(null);
+  const [busy, setBusy] = useState<"password" | null>(null);
   const [message, setMessage] = useState<{
-    area: "password" | "all";
+    area: "password";
     tone: "ok" | "error";
     text: string;
   } | null>(null);
@@ -91,19 +90,6 @@ export function AccountSecurity({ locale }: { locale: Locale }) {
     } catch (error) {
       setMessage({ area: "password", tone: "error", text: errorText(error) });
     } finally {
-      setBusy(null);
-    }
-  }
-
-  async function onLogoutAll() {
-    if (busy) return;
-    setBusy("all");
-    setMessage(null);
-    try {
-      await logoutAll();
-      router.replace(`/${locale}/login`);
-    } catch (error) {
-      setMessage({ area: "all", tone: "error", text: errorText(error) });
       setBusy(null);
     }
   }
@@ -180,34 +166,7 @@ export function AccountSecurity({ locale }: { locale: Locale }) {
           </form>
         </section>
 
-        <section
-          className={`${styles.panel} ${styles.sessionPanel}`}
-          aria-labelledby="sessions-title"
-        >
-          <h2 id="sessions-title" className="text-lg font-bold">
-            {fa ? "خروج از همه دستگاه‌ها" : "Sign out everywhere"}
-          </h2>
-          <p className="mt-2 text-sm text-muted">
-            {fa
-              ? "اگر فکر می‌کنید کسی به حساب شما دسترسی دارد، همه نشست‌ها را باطل کنید و بعد رمز را عوض کنید."
-              : "If you think someone else has access, end every session and then change your password."}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-4"
-            onClick={() => void onLogoutAll()}
-            disabled={busy !== null}
-          >
-            {busy === "all" ? <Spinner /> : null}
-            {fa ? "خروج از همه دستگاه‌ها" : "Sign out of all devices"}
-          </Button>
-          {message?.area === "all" && (
-            <p role="alert" className="mt-3 text-sm text-danger">
-              {message.text}
-            </p>
-          )}
-        </section>
+        <AccountSessions locale={locale} />
       </div>
     </AccountFrame>
   );

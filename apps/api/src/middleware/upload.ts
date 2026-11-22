@@ -69,4 +69,34 @@ function singleImage(field: "receipt" | "image"): RequestHandler {
 }
 
 export const uploadReceiptImage = singleImage("receipt");
+
+// Ticket screenshots: one JPEG/PNG/WebP up to 5 MB plus the ticket text fields.
+const TICKET_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const ticketUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { ...uploadLimits, fields: 3, parts: 4, fieldSize: 6000 },
+});
+export const uploadTicketImage: RequestHandler = (req, res, next) => {
+  ticketUpload.single("image")(req, res, (error: unknown) => {
+    if (error) return next(error);
+    if (!req.file) return next();
+    const mimeType = req.file.mimetype.toLowerCase();
+    if (!TICKET_MIMES.has(mimeType) || !validSignature(req.file.buffer, mimeType, false)) {
+      return next(new AppError(400, "BAD_FILE_TYPE", "Attach a JPG, PNG or WebP screenshot"));
+    }
+    req.file.mimetype = mimeType;
+    next();
+  });
+};
+
+// Keeps only a short, printable base name for display; never used as a path.
+export function safeAttachmentName(name: string | undefined): string | null {
+  const base = (name ?? "").split(/[\\/]/).pop() ?? "";
+  const cleaned = base
+    // eslint-disable-next-line no-control-regex -- control characters are removed on purpose.
+    .replace(/[\u0000-\u001f\u007f"<>]/g, "")
+    .trim()
+    .slice(0, 120);
+  return cleaned || null;
+}
 export const uploadProductImage = singleImage("image");

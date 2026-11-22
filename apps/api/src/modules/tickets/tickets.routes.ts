@@ -2,8 +2,20 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { authenticate } from "../../middleware/auth";
 import { validate } from "../../middleware/validate";
-import { createTicketSchema, ticketMessageSchema, ticketParamsSchema } from "./tickets.schemas";
-import { addMyMessage, createTicket, getMyTicket, listMyTickets } from "./tickets.controller";
+import { uploadTicketImage } from "../../middleware/upload";
+import {
+  createTicketSchema,
+  ticketAttachmentParamsSchema,
+  ticketMessageSchema,
+  ticketParamsSchema,
+} from "./tickets.schemas";
+import {
+  addMyMessage,
+  createTicket,
+  getMyAttachment,
+  getMyTicket,
+  listMyTickets,
+} from "./tickets.controller";
 
 export const ticketsRouter = Router();
 const ticketWrites = rateLimit({
@@ -18,12 +30,24 @@ const ticketWrites = rateLimit({
 });
 
 ticketsRouter.use(authenticate);
-ticketsRouter.post("/", ticketWrites, validate({ body: createTicketSchema }), createTicket);
+ticketsRouter.post(
+  "/",
+  ticketWrites,
+  uploadTicketImage,
+  validate({ body: createTicketSchema }),
+  createTicket,
+);
 ticketsRouter.get("/", listMyTickets);
 ticketsRouter.get("/:id", validate({ params: ticketParamsSchema }), getMyTicket);
+ticketsRouter.get(
+  "/:id/messages/:messageId/attachment",
+  validate({ params: ticketAttachmentParamsSchema }),
+  getMyAttachment,
+);
 ticketsRouter.post(
   "/:id/messages",
   ticketWrites,
+  uploadTicketImage,
   validate({ params: ticketParamsSchema, body: ticketMessageSchema }),
   addMyMessage,
 );

@@ -305,6 +305,22 @@ export async function listProducts(query: ListProductsQuery) {
   const where: Prisma.ProductWhereInput = { isActive: true };
   if (query.category) where.category = { slug: query.category };
   if (query.featured) where.isFeatured = true;
+  const planFilters: Prisma.ProductPlanWhereInput[] = [];
+  if (query.access) planFilters.push({ variant: { path: ["access"], equals: query.access } });
+  if (query.delivery === "MANUAL")
+    planFilters.push({ variant: { path: ["delivery"], equals: "MANUAL" } });
+  if (query.delivery === "AUTOMATIC")
+    // Plans without variant metadata are local stock, which is delivered automatically.
+    planFilters.push({
+      OR: [
+        { variant: { path: ["delivery"], equals: "AUTOMATIC" } },
+        { variant: { equals: Prisma.AnyNull }, source: "INTERNAL" },
+      ],
+    });
+  const matchingPlans = { isActive: true, AND: planFilters } satisfies Prisma.ProductPlanWhereInput;
+  if (planFilters.length) where.plans = { some: matchingPlans };
+  if (query.inStock) where.id = { in: await purchasableProductIds(where, matchingPlans) };
+  const filtered = Boolean(planFilters.length || query.inStock);
 
   // For these orders, stock and ratings are display data rather than sort inputs.
   // Rank lightweight candidates and load the richer data only for the visible page.
@@ -316,8 +332,14 @@ export async function listProducts(query: ListProductsQuery) {
   const start = (query.page - 1) * query.pageSize;
   const searchMatches = query.q ? await searchProducts(query.q, query) : null;
   const rankedSort = ["recommended", "newest", "popular", "bestselling"].includes(query.sort);
+  const allowed =
+    filtered && searchMatches
+      ? new Set(
+          (await prisma.product.findMany({ where, select: { id: true } })).map((row) => row.id),
+        )
+      : null;
   const ranked = rankedSort
-    ? (searchMatches ??
+    ? (searchMatches?.filter((item) => !allowed || allowed.has(item.id)) ??
       (await prisma.product.findMany({
         where,
         orderBy,
@@ -353,7 +375,8 @@ export async function listProducts(query: ListProductsQuery) {
   const pageIds = ranked?.slice(start, start + query.pageSize).map((item) => item.id);
   const matchingIds = pageIds ?? searchMatches?.map((item) => item.id);
   const products = await prisma.product.findMany({
-    where: matchingIds ? { ...where, id: { in: matchingIds } } : where,
+    // AND keeps filter id sets (in stock only) intact when search narrows the page.
+    where: matchingIds ? { AND: [where, { id: { in: matchingIds } }] } : where,
     include: { category: true, plans: { where: { isActive: true } } },
     omit: omitImageData,
     orderBy,
@@ -408,6 +431,34 @@ export async function listProducts(query: ListProductsQuery) {
   };
 }
 
+// Ids of active products with at least one purchasable plan (local or supplier stock,
+// or a priced-on-request supplier offer). Used by the "in stock only" filter.
+async function purchasableProductIds(
+  where: Prisma.ProductWhereInput,
+  matchingPlans: Prisma.ProductPlanWhereInput,
+): Promise<string[]> {
+  const products = await prisma.product.findMany({
+    where,
+    include: { category: true, plans: { where: matchingPlans } },
+    omit: omitImageData,
+  });
+  if (!products.length) return [];
+  const [sourceStatus, availMap] = await Promise.all([
+    sourceStates(
+      products.flatMap((p) => p.plans),
+      true,
+    ),
+    availableCountByProduct(products.map((p) => p.id)),
+  ]);
+  return products
+    .filter(
+      (product) =>
+        toSummary(product, availMap.get(product.id), undefined, sourceStatus).availability !==
+        "OUT_OF_STOCK",
+    )
+    .map((product) => product.id);
+}
+
 export async function getBestselling(limit: number) {
   const products = await prisma.product.findMany({
     where: { isActive: true },
@@ -458,7 +509,8 @@ export async function getPublicCartPlans(planIds: string[]) {
   ]);
   return plans.map((plan) => {
     const supplier = suppliers.get(plan.id);
-    const localStock = plan.source === "SUPPLIER" ? 0 : (stock.get(plan.productId)?.get(plan.id) ?? 0);
+    const localStock =
+      plan.source === "SUPPLIER" ? 0 : (stock.get(plan.productId)?.get(plan.id) ?? 0);
     return {
       planId: plan.id,
       product: plan.product.name,

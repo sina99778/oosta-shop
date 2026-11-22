@@ -1,88 +1,165 @@
 "use client";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Locale } from "@/lib/i18n";
-import styles from "./storefront.module.css";
-// Adapted from the study prompt in the owner's exported channel post 164.
-const prompts = {
-  fa: "متن مقاله را که در ادامه می‌فرستم، خلاصه کن. پرسش پژوهش، روش و یافته‌های اصلی را جدا بنویس. سپس ۱۰ سؤال مفهومی با پاسخ پیشنهادی بساز. هرجا اطلاعات کافی نیست، مشخص کن و چیزی از خودت اضافه نکن.",
-  en: "Summarize the article I will provide. Separate the research question, method and main findings. Then create 10 conceptual questions with suggested answers. Flag missing information and do not invent details.",
-};
+import styles from "./home.module.css";
+
+// The lab never calls a model: it shows, in the browser, how naming a role, a goal,
+// a tone and an output format turns a vague request into a clearer prompt.
+const copy = {
+  fa: {
+    eyebrow: "تمرین، نه فقط تئوری",
+    title: ["پرامپتت را بنویس،", "نسخهٔ بهترش را ببین"],
+    body: "آزمایشگاه پرامپت اوستا نشان می‌دهد چطور با مشخص‌کردن نقش، هدف، لحن و قالب خروجی، جواب دقیق‌تری از هر دستیار هوش مصنوعی بگیری.",
+    bar: "آزمایشگاه پرامپت",
+    yours: "پرامپت تو",
+    better: "↓ نسخهٔ بهتر",
+    example: "یه ایمیل بنویس که جلسه رو عقب بندازم",
+    role: "نقش:",
+    goal: "هدف:",
+    tone: "لحن:",
+    output: "خروجی:",
+    roleText: "دستیار باتجربه و دقیق برای همین کار",
+    toneText: "روشن، مؤدبانه و کوتاه",
+    outputText:
+      "پاسخ ساختارمند، حداکثر ۱۵۰ کلمه؛ اگر اطلاعات کافی نیست، اول سؤال‌های لازم را بپرس.",
+    hint: "خروجی را با نیاز واقعی‌ات بسنج.",
+    copy: "کپی نسخهٔ بهتر",
+    copied: "کپی شد ✓",
+    copiedStatus: "پرامپت بهتر در کلیپ‌بورد کپی شد.",
+    manual: "متن انتخاب شد؛ آن را به‌صورت دستی کپی کن.",
+    empty: "اول درخواستت را بنویس.",
+  },
+  en: {
+    eyebrow: "Practice, not just theory",
+    title: ["Write your prompt,", "see a sharper version"],
+    body: "Oosta’s prompt lab shows how naming a role, a goal, a tone and an output format gets a more precise answer from any AI assistant.",
+    bar: "Prompt lab",
+    yours: "Your prompt",
+    better: "↓ Sharper version",
+    example: "Write an email to postpone a meeting",
+    role: "Role:",
+    goal: "Goal:",
+    tone: "Tone:",
+    output: "Output:",
+    roleText: "An experienced, careful assistant for this exact task",
+    toneText: "Clear, polite and brief",
+    outputText:
+      "A structured answer under 150 words; ask the questions you need first if details are missing.",
+    hint: "Check the output against what you really need.",
+    copy: "Copy sharper prompt",
+    copied: "Copied ✓",
+    copiedStatus: "Sharper prompt copied to clipboard.",
+    manual: "Text selected. Copy it manually.",
+    empty: "Write your request first.",
+  },
+} as const;
+
 export function PromptLab({ locale }: { locale: Locale }) {
-  const fa = locale === "fa";
-  const [status, setStatus] = useState<"idle" | "copied" | "manual">("idle");
-  const textRef = useRef<HTMLTextAreaElement>(null);
-  async function copy() {
+  const t = copy[locale];
+  const [request, setRequest] = useState<string>(t.example);
+  const [status, setStatus] = useState<"idle" | "copied" | "manual" | "empty">("idle");
+  const outputRef = useRef<HTMLDListElement>(null);
+  const goal = request.trim().replace(/\s+/g, " ").slice(0, 400);
+  const lines = useMemo(
+    () =>
+      [
+        [t.role, t.roleText],
+        [t.goal, goal],
+        [t.tone, t.toneText],
+        [t.output, t.outputText],
+      ] as const,
+    [goal, t],
+  );
+
+  async function copyPrompt() {
+    if (!goal) {
+      setStatus("empty");
+      return;
+    }
+    const text = lines.map(([label, value]) => `${label} ${value}`).join("\n");
     try {
-      await navigator.clipboard.writeText(prompts[locale]);
+      await navigator.clipboard.writeText(text);
       setStatus("copied");
     } catch {
-      textRef.current?.focus();
-      textRef.current?.select();
+      const selection = window.getSelection();
+      if (outputRef.current && selection) {
+        const range = document.createRange();
+        range.selectNodeContents(outputRef.current);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
       setStatus("manual");
     }
   }
+
   return (
-    <section className={styles.promptLab} id="prompt-lab" aria-labelledby="prompt-title">
-      <div className={styles.promptIntro}>
-        <span className={styles.eyebrow}>
-          {fa ? "یک پرامپت، یک شروع" : "One prompt. One starting point."}
-        </span>
-        <h2 id="prompt-title">
-          {fa ? (
-            <>
-              فقط نخوان.
-              <br />
-              امتحانش کن.
-            </>
-          ) : (
-            <>
-              Don’t just read.
-              <br />
-              Try it.
-            </>
-          )}
-        </h2>
-        <p>
-          {fa
-            ? "این بار یک مقاله را با سؤال‌های بهتر بخوان. پرامپت را کپی کن و همراه متن مقاله به ابزار دلخواهت بده."
-            : "Read a paper with better questions. Copy this prompt and use it with your article in the tool of your choice."}
-        </p>
-      </div>
-      <div className={styles.promptPaper}>
-        <div className={styles.promptTop}>
-          <span>{fa ? "پژوهش و یادگیری" : "Research & learning"}</span>
-          <span dir="ltr">PROMPT / 001</span>
+    <section
+      className={`${styles.wrap} ${styles.lab}`}
+      id="prompt-lab"
+      aria-labelledby="prompt-title"
+    >
+      <div className={styles.labMock}>
+        <div className={styles.labBar}>
+          <span>{t.bar}</span>
+          <i aria-hidden="true">
+            <b />
+          </i>
         </div>
-        <label htmlFor="study-prompt" className={styles.promptLabel}>
-          {fa ? "یک مقاله، چند زاویهٔ تازه" : "One paper, a few new perspectives"}
-        </label>
-        <textarea id="study-prompt" ref={textRef} readOnly value={prompts[locale]} rows={5} />
-        <div className={styles.promptBottom}>
-          <small>
-            {fa ? "خروجی را با متن اصلی بررسی کن." : "Check the output against the original."}
-          </small>
-          <Button type="button" onClick={copy}>
-            {status === "copied"
-              ? fa
-                ? "کپی شد ✓"
-                : "Copied ✓"
-              : fa
-                ? "کپی پرامپت ⧉"
-                : "Copy prompt ⧉"}
+        <label htmlFor="lab-request">{t.yours}</label>
+        <textarea
+          id="lab-request"
+          rows={2}
+          maxLength={400}
+          dir="auto"
+          value={request}
+          onChange={(event) => {
+            setRequest(event.target.value);
+            setStatus("idle");
+          }}
+        />
+        <span className={styles.labArrow} aria-hidden="true">
+          {t.better}
+        </span>
+        <dl ref={outputRef} className={styles.labOut} aria-live="polite">
+          {lines.map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd dir="auto">{value || "…"}</dd>
+            </div>
+          ))}
+        </dl>
+        <div className={styles.labActions}>
+          <small>{t.hint}</small>
+          <Button type="button" onClick={copyPrompt}>
+            {status === "copied" ? t.copied : t.copy}
           </Button>
         </div>
-        <p role="status" className={styles.copyStatus}>
+        <p role="status" className="sr-only">
           {status === "copied"
-            ? fa
-              ? "پرامپت در کلیپ‌بورد کپی شد."
-              : "Prompt copied to clipboard."
+            ? t.copiedStatus
             : status === "manual"
-              ? fa
-                ? "متن انتخاب شد؛ آن را به‌صورت دستی کپی کن."
-                : "Text selected. Copy it manually."
-              : ""}
+              ? t.manual
+              : status === "empty"
+                ? t.empty
+                : ""}
         </p>
+      </div>
+      <div className={styles.labCopy}>
+        <span className={styles.eyebrow}>{t.eyebrow}</span>
+        <h2 id="prompt-title">
+          {t.title[0]}
+          <br />
+          {t.title[1]}
+        </h2>
+        <p>{t.body}</p>
+        <Button
+          type="button"
+          size="lg"
+          onClick={() => document.getElementById("lab-request")?.focus()}
+        >
+          {locale === "fa" ? "امتحان کن" : "Try it"}
+        </Button>
       </div>
     </section>
   );

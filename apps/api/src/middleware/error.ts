@@ -36,12 +36,17 @@ export function errorHandler(
       path: issue.path.join("."),
       message: issue.message,
     }));
-  } else if (err instanceof MulterError) {
+  } else if (
+    err instanceof MulterError ||
+    // Multer forwards busboy parse failures (malformed part headers, truncated forms)
+    // with a storageErrors list; they are client mistakes, not server faults.
+    (err instanceof Error && Array.isArray((err as { storageErrors?: unknown }).storageErrors))
+  ) {
     statusCode = 400;
     code = "UPLOAD_ERROR";
     message =
-      err.code === "LIMIT_FILE_SIZE"
-        ? "Receipt file is too large (max 5 MB)"
+      err instanceof MulterError && err.code === "LIMIT_FILE_SIZE"
+        ? "File is too large (max 5 MB)"
         : "File upload failed";
   } else if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === "P2002") {

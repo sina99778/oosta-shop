@@ -807,11 +807,11 @@ async function checkCartActions() {
       }
     }
     const storefront = require("node:fs").readFileSync(
-      path.resolve(__dirname, "../apps/web/components/storefront.module.css"),
+      path.resolve(__dirname, "../apps/web/components/home.module.css"),
       "utf8",
     );
-    const promptShadows = [...storefront.matchAll(/\.promptPaper\s*\{([^}]+)\}/g)].filter(
-      ([, rules]) => rules.includes("box-shadow:"),
+    const promptShadows = [...storefront.matchAll(/\.labMock\s*\{([^}]+)\}/g)].filter(([, rules]) =>
+      rules.includes("box-shadow:"),
     );
     assert.equal(promptShadows.length, 1, "The prompt card shares its shadow across breakpoints");
   } finally {

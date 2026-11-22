@@ -103,13 +103,15 @@ async function main() {
             ? "supplier-fulfillment-regressions"
             : process.argv.includes("--stock-alerts-only")
               ? "stock-alert-regressions"
-            : process.argv.includes("--stock-mail-only")
-              ? "stock-mail-regressions"
-              : process.argv.includes("--renewal-only")
-                ? "renewal-regressions"
-                : process.argv.includes("--catalog-search-only")
-                  ? "catalog-search-regressions"
-                  : null;
+              : process.argv.includes("--stock-mail-only")
+                ? "stock-mail-regressions"
+                : process.argv.includes("--renewal-only")
+                  ? "renewal-regressions"
+                  : process.argv.includes("--catalog-search-only")
+                    ? "catalog-search-regressions"
+                    : process.argv.includes("--design-features-only")
+                      ? "design-feature-regressions"
+                      : null;
     if (focusedScript) {
       console.log(
         run(
@@ -159,6 +161,16 @@ async function main() {
         [
           path.join(root, "node_modules/tsx/dist/cli.mjs"),
           "apps/api/scripts/auth-session-regressions.ts",
+        ],
+        env,
+      ),
+    );
+    console.log(
+      run(
+        process.execPath,
+        [
+          path.join(root, "node_modules/tsx/dist/cli.mjs"),
+          "apps/api/scripts/design-feature-regressions.ts",
         ],
         env,
       ),

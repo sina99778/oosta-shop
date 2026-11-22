@@ -45,6 +45,20 @@
   --c-accent: #36b9c6;
   --c-danger-text: #b91c1c;
   --shadow-card: 0 2px 8px -5px rgba(18, 59, 66, 0.12);
+  /* Design-system tokens (Figma "Oosta / Color"): status surfaces and product tints. */
+  --c-deep: #123b42;
+  --c-success-bg: #e7f6ec;
+  --c-warning: #b45309;
+  --c-warning-bg: #fef3e2;
+  --c-danger-bg: #fdecec;
+  --c-info-bg: #e6f3f6;
+  --c-primary-soft: rgb(23 108 128 / 10%);
+  --c-tint-ai: #e1ede5;
+  --c-on-tint-ai: #29463a;
+  --c-tint-license: #dfeaf0;
+  --c-on-tint-license: #254a60;
+  --c-tint-gift: #eee5d9;
+  --c-on-tint-gift: #5d4834;
 }
 
 /* ---- Dark theme ---- */
@@ -61,6 +75,18 @@
   --c-accent: #36b9c6;
   --c-danger-text: #fca5a5;
   --shadow-card: 0 22px 60px -35px rgba(0, 0, 0, 0.9);
+  --c-success-bg: #16341f;
+  --c-warning: #fbbf24;
+  --c-warning-bg: #3a2a12;
+  --c-danger-bg: #3b1a1c;
+  --c-info-bg: #163034;
+  --c-primary-soft: rgb(85 206 189 / 14%);
+  --c-tint-ai: #22392e;
+  --c-on-tint-ai: #bfe3cf;
+  --c-tint-license: #1e3442;
+  --c-on-tint-license: #bcd8e8;
+  --c-tint-gift: #3a2f22;
+  --c-on-tint-gift: #e8d6c0;
 }
 
 html,

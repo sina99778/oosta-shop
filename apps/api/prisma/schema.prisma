@@ -100,6 +100,7 @@ model User {
   passwordReset PasswordReset?
   stockAlerts StockAlert[]
   notifications UserNotification[]
+  sessions       UserSession[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
@@ -215,12 +216,16 @@ model Ticket {
   user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   subject   String
   status    TicketStatus    @default(OPEN)
+  // Optional order the customer is asking about; must belong to the ticket owner.
+  orderId   String?
+  order     Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
   messages  TicketMessage[]
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([orderId])
   @@map("tickets")
 }
 
@@ -232,6 +237,11 @@ model TicketMessage {
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   body      String
   isStaff   Boolean  @default(false)
+  // Optional private screenshot. Served only to the ticket owner and admins.
+  attachmentData Bytes?
+  attachmentMime String?
+  attachmentName String?
+  attachmentSize Int?
   createdAt DateTime @default(now())
 
   @@index([ticketId])
@@ -265,12 +275,14 @@ model BlogPost {
   coverData   Bytes?
   coverMime   String?
   coverAlt    String? // Alt text for the cover image (empty = decorative)
+  tag         String? // One editorial topic used for journal filters and related posts
   status      PostStatus @default(DRAFT)
   publishedAt DateTime?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
   @@index([status, publishedAt])
+  @@index([tag])
   @@map("blog_posts")
 }
 
@@ -445,6 +457,7 @@ model Order {
   welcomeGift      Boolean          @default(false)
 
   receipts  Receipt[]
+  tickets   Ticket[]
   supplierQaAttempt SupplierQaAttempt?
   supplierFulfillment SupplierFulfillment?
   supplierCheckoutQuote SupplierCheckoutQuote?
@@ -648,4 +661,21 @@ model BluBankObservation {
 
   @@index([invoiceKey])
   @@map("blu_bank_observations")
+}
+
+// One row per browser login. Tokens carry its id (`sid`) so a customer can see the
+// devices signed in to their account and revoke one or all of the others.
+model UserSession {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent  String?
+  ipPrefix   String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+
+  @@index([userId, revokedAt])
+  @@map("user_sessions")
 }

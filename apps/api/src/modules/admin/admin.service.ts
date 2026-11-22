@@ -15,7 +15,12 @@ import { queueOrderEmail } from "../../lib/mailer";
 import { addOrderNotification } from "../orders/order-notifications";
 import { requireManualAdmin } from "../suppliers/manual-admin";
 import { notifyAdmin, notifyPaidSupplierOrder } from "../../bot";
-import { ticketWriteError } from "../tickets/tickets.service";
+import {
+  messageOmit,
+  serializeMessage,
+  serializeOrderSummary,
+  ticketWriteError,
+} from "../tickets/tickets.service";
 import { lockOrder } from "../../lib/orderLock";
 import { readBluInvoice } from "../orders/blu-invoice";
 import { matchesBluReceipt } from "../orders/blu-events";
@@ -777,13 +782,14 @@ export async function approveReceipt(
             (items.length !== 1 &&
               (privatePilot ||
                 (receipt.order.paymentMetadata as Prisma.JsonObject).cartStockHeld !== true)) ||
-            items.some(({ quantity, plan, planId, productId, fulfilledItems }) =>
-              quantity !== 1 ||
-              plan.source !== "INTERNAL" ||
-              fulfilledItems.length !== 1 ||
-              fulfilledItems[0].status !== "RESERVED" ||
-              fulfilledItems[0].planId !== planId ||
-              fulfilledItems[0].productId !== productId
+            items.some(
+              ({ quantity, plan, planId, productId, fulfilledItems }) =>
+                quantity !== 1 ||
+                plan.source !== "INTERNAL" ||
+                fulfilledItems.length !== 1 ||
+                fulfilledItems[0].status !== "RESERVED" ||
+                fulfilledItems[0].planId !== planId ||
+                fulfilledItems[0].productId !== productId,
             )
           )
             throw new AppError(409, "BLU_AUTO_NOT_ELIGIBLE", "This receipt requires manual review");
@@ -978,6 +984,7 @@ export async function listTickets(query: TicketsQuery) {
       id: t.id,
       subject: t.subject,
       status: t.status,
+      orderId: t.orderId,
       messageCount: t._count.messages,
       user: t.user,
       updatedAt: t.updatedAt,
@@ -993,8 +1000,19 @@ export async function listTickets(query: TicketsQuery) {
 }
 
 const ticketDetailInclude = {
-  user: { select: ticketUserSelect },
-  messages: { orderBy: { createdAt: "asc" } },
+  user: {
+    select: { ...ticketUserSelect, createdAt: true, _count: { select: { orders: true } } },
+  },
+  order: {
+    select: {
+      id: true,
+      createdAt: true,
+      totalAmount: true,
+      currency: true,
+      paymentStatus: true,
+    },
+  },
+  messages: { orderBy: { createdAt: "asc" }, omit: messageOmit },
 } satisfies Prisma.TicketInclude;
 
 export async function getTicket(id: string) {
@@ -1009,19 +1027,17 @@ export async function getTicket(id: string) {
 function serializeAdminTicket(
   ticket: Prisma.TicketGetPayload<{ include: typeof ticketDetailInclude }>,
 ) {
+  const { _count, createdAt: memberSince, ...user } = ticket.user;
   return {
     id: ticket.id,
     subject: ticket.subject,
     status: ticket.status,
-    user: ticket.user,
+    user,
+    customer: { memberSince, orderCount: _count.orders },
+    order: serializeOrderSummary(ticket.order),
     createdAt: ticket.createdAt,
     updatedAt: ticket.updatedAt,
-    messages: ticket.messages.map((m) => ({
-      id: m.id,
-      body: m.body,
-      isStaff: m.isStaff,
-      createdAt: m.createdAt,
-    })),
+    messages: ticket.messages.map(serializeMessage),
   };
 }
 

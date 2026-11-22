@@ -15,8 +15,11 @@ import { getWelcomeGift } from "../orders/welcome-gift";
 import {
   clearSessionCookie,
   isTrustedCookieWrite,
+  readSessionCookie,
   setSessionCookie,
 } from "../../lib/sessionCookie";
+import { verifyAccessToken } from "../../lib/jwt";
+import { listActiveSessions, revokeSessions, type SessionMeta } from "../../lib/userSessions";
 import {
   changePassword as changeUserPassword,
   getUserById,
@@ -41,6 +44,11 @@ function requireUserSession(req: Request): string {
   return req.user!.id;
 }
 
+const sessionMeta = (req: Request): SessionMeta => ({
+  userAgent: req.get("user-agent") ?? null,
+  ip: req.ip ?? null,
+});
+
 function requireTrustedBrowserSource(req: Request): void {
   if (
     (req.headers.origin !== undefined || req.headers.referer !== undefined) &&
@@ -52,7 +60,7 @@ function requireTrustedBrowserSource(req: Request): void {
 
 export async function signup(req: Request, res: Response): Promise<void> {
   requireTrustedBrowserSource(req);
-  const result = await registerUser(req.body);
+  const result = await registerUser(req.body, sessionMeta(req));
   setSessionCookie(res, result.token);
   res.status(201).json(result);
   void notifyNewSignup(result.user);
@@ -60,7 +68,7 @@ export async function signup(req: Request, res: Response): Promise<void> {
 
 export async function login(req: Request, res: Response): Promise<void> {
   requireTrustedBrowserSource(req);
-  const result = await loginUser(req.body);
+  const result = await loginUser(req.body, sessionMeta(req));
   setSessionCookie(res, result.token);
   res.status(200).json(result);
 }
@@ -150,16 +158,51 @@ export async function inbox(req: Request, res: Response): Promise<void> {
 }
 
 export async function changePassword(req: Request, res: Response): Promise<void> {
-  const result = await changeUserPassword(requireUserSession(req), req.body);
+  const result = await changeUserPassword(requireUserSession(req), req.body, sessionMeta(req));
   setSessionCookie(res, result.token);
   res.json(result);
 }
 
-// Clears this browser's cookie. Needs no valid session, so a stale cookie can always be removed.
-export function logout(_req: Request, res: Response): void {
-  requireTrustedBrowserSource(_req);
+// Clears this browser's cookie. Needs no valid session, so a stale cookie can always be
+// removed; a still-valid cookie also ends its device session row.
+export async function logout(req: Request, res: Response): Promise<void> {
+  requireTrustedBrowserSource(req);
+  const token = readSessionCookie(req);
+  if (token) {
+    let payload: ReturnType<typeof verifyAccessToken> | null = null;
+    try {
+      payload = verifyAccessToken(token);
+    } catch {
+      // An expired or tampered cookie has no session to end.
+    }
+    if (payload?.sid) await revokeSessions(payload.sub, { only: payload.sid });
+  }
   clearSessionCookie(res);
   res.status(204).end();
+}
+
+// Signed-in devices for the account security page.
+export async function sessions(req: Request, res: Response): Promise<void> {
+  const userId = requireUserSession(req);
+  res.json({
+    sessions: await listActiveSessions(userId, req.sessionId),
+    currentTracked: Boolean(req.sessionId),
+  });
+}
+
+export async function revokeSession(req: Request, res: Response): Promise<void> {
+  const userId = requireUserSession(req);
+  const id = String(req.params.id);
+  const count = await revokeSessions(userId, { only: id });
+  if (!count) throw new AppError(404, "NOT_FOUND", "Session not found");
+  if (id === req.sessionId) clearSessionCookie(res);
+  res.status(204).end();
+}
+
+export async function revokeOtherSessions(req: Request, res: Response): Promise<void> {
+  const userId = requireUserSession(req);
+  const revoked = await revokeSessions(userId, { except: req.sessionId });
+  res.json({ revoked });
 }
 
 export async function logoutAll(req: Request, res: Response): Promise<void> {

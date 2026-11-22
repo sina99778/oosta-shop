@@ -2,6 +2,7 @@
 
 import type { Request, Response } from "express";
 import * as admin from "./admin.service";
+import { getAttachment, sendAttachment } from "../tickets/tickets.service";
 import type {
   BulkInventoryInput,
   CreateApiKeyInput,
@@ -91,6 +92,14 @@ export async function listTickets(_req: Request, res: Response): Promise<void> {
 }
 export async function getTicket(req: Request, res: Response): Promise<void> {
   res.json({ ticket: await admin.getTicket(String(req.params.id)) });
+}
+export async function getTicketAttachment(req: Request, res: Response): Promise<void> {
+  const file = await getAttachment(
+    { admin: true },
+    String(req.params.id),
+    String(req.params.messageId),
+  );
+  sendAttachment(res, file);
 }
 export async function replyTicket(req: Request, res: Response): Promise<void> {
   res.json({

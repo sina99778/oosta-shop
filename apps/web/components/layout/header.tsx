@@ -225,6 +225,8 @@ export function Header({
   return (
     <header
       className={`oosta-header ${styles.header}`}
+      // The home page opens on the navy brand stage; inner pages use the light bar.
+      data-tone={pathname === base || pathname === `${base}/` ? "stage" : "light"}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || !menuOpen) return;
         setOpenPath(null);

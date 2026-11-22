@@ -64,9 +64,10 @@ export default async function BlogPostPage({
   const dict = await getDictionary(locale);
   const post = await load(slug);
   if (!post) notFound();
-  const productSlugs = Object.hasOwn(ARTICLE_PRODUCTS, post.slug)
-    ? ARTICLE_PRODUCTS[post.slug]
-    : [];
+  const editorial = Object.hasOwn(ARTICLE_PRODUCTS, post.slug) ? ARTICLE_PRODUCTS[post.slug] : [];
+  // Products linked from the article body (resolved by the API) join the editorial list.
+  const linked = (post.products ?? []).map((product) => product.slug);
+  const productSlugs = [...new Set([...editorial, ...linked])].slice(0, 6);
   const products = await Promise.all(
     productSlugs.map((productSlug) =>
       fetchJson<{ product: Pick<ProductDetail, "slug" | "name"> }>(

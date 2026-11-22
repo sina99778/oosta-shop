@@ -24,6 +24,10 @@ export const listProductsQuery = z.object({
     ])
     .default("recommended"),
   featured: boolFlag,
+  // Storefront filters: purchasable now, access type and delivery of at least one plan.
+  inStock: boolFlag,
+  access: z.enum(["PERSONAL", "SHARED", "TEAM"]).optional(),
+  delivery: z.enum(["AUTOMATIC", "MANUAL"]).optional(),
 });
 
 export const bestsellingQuery = z.object({

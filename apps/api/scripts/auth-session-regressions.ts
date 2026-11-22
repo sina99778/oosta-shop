@@ -373,18 +373,33 @@ async function main() {
   const cleared = sessionCookie(logout.headers["set-cookie"]);
   assert.match(cleared, /^oosta_session=;/);
   assert.match(cleared, /Max-Age=0|Expires=Thu, 01 Jan 1970/i);
+  // Logout also ends this device's server session, so a copied cookie stops working.
+  const afterLogout = await inject(app, {
+    method: "GET",
+    url: "/auth/me",
+    headers: { cookie: newCookie },
+  });
+  assert.equal(afterLogout.statusCode, 401, "logout revokes this device's session");
+  const bearerMe = await inject(app, {
+    method: "GET",
+    url: "/auth/me",
+    headers: { authorization: `Bearer ${bearer}` },
+  });
+  assert.equal(bearerMe.statusCode, 200, "logout leaves other devices signed in");
   const logoutAll = await inject(app, {
     method: "POST",
     url: "/auth/logout-all",
     remoteAddress: nextIp(),
-    headers: { cookie: newCookie, origin: ORIGIN },
+    headers: { authorization: `Bearer ${bearer}` },
   });
   assert.equal(logoutAll.statusCode, 204, logoutAll.body);
   for (const headers of [{ cookie: newCookie }, { authorization: `Bearer ${bearer}` }]) {
     const revoked = await inject(app, { method: "GET", url: "/auth/me", headers });
     assert.equal(revoked.statusCode, 401, "logout-all revokes every existing session");
   }
-  console.log("PASS: logout clears the cookie and logout-all revokes every device");
+  console.log(
+    "PASS: logout clears the cookie and ends its session; logout-all revokes every device",
+  );
 
   await prisma.apiKey.deleteMany({ where: { userId: user.id } });
   await prisma.user.delete({ where: { id: user.id } });
