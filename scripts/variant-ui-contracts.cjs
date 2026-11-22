@@ -214,9 +214,102 @@ assert(html.includes("انتخاب نوع اشتراک"));
 assert(html.includes("اینوایتی"));
 assert(html.includes("Canva Pro تیمی دعوت ۳ ماهه"), "Translate the supplier's plan title");
 assert(!html.includes("Invite Slot"));
+assert(html.includes("<dl"), "Trust summary list must be rendered beside buy action");
 assert(html.includes("۳۰ روز ضمانت · پوشش کامل"));
+assert(html.includes('href="/fa/p/return-policy"'));
+assert(html.includes('href="/fa/p/contact"'));
+assert(!html.includes("تلگرام پیش از خرید"), "Omit Telegram link when supportHref is absent");
+assert(
+  renderToStaticMarkup(
+    React.createElement(ProductDetailView, {
+      locale: "fa",
+      product: viewedProduct,
+      payment: paymentOptions,
+      supportHref: "https://t.me/oostaAiSupport",
+      dict,
+    }),
+  ).includes('href="https://t.me/oostaAiSupport"'),
+);
 assert(html.includes('value="fixture-manual"'), "Preserve the original plan ID");
-const { planDisplayLabel, planOptionValue } = require("../apps/web/lib/product-variant.ts");
+const {
+  planDisplayLabel,
+  planOptionValue,
+  planTrustSummary,
+} = require("../apps/web/lib/product-variant.ts");
+assert.deepEqual(
+  planTrustSummary(
+    {
+      durationDays: 30,
+      quoteRequired: false,
+      variant: {
+        plan: "Plus",
+        access: "PERSONAL",
+        fulfillment: "ACCOUNT",
+        delivery: "AUTOMATIC",
+        warranty: { kind: "WARRANTED", days: 30, coverage: "FULL" },
+        region: "GLOBAL",
+        quota: "UNSPECIFIED",
+      },
+    },
+    "fa",
+  ),
+  {
+    warranty: "۳۰ روز ضمانت · پوشش کامل",
+    delivery: "اکانت آماده · تحویل خودکار",
+    access: "اختصاصی · ۳۰ روز · جهانی",
+  },
+);
+assert.deepEqual(
+  planTrustSummary(
+    {
+      durationDays: 30,
+      quoteRequired: true,
+      variant: {
+        plan: "Plus",
+        access: "SHARED",
+        fulfillment: "INVITE",
+        delivery: "MANUAL",
+        warranty: { kind: "WARRANTED", days: 7, coverage: "LOGIN" },
+        region: "UNSPECIFIED",
+        quota: "UNSPECIFIED",
+      },
+    },
+    "fa",
+    { cardToCard: true },
+  ),
+  {
+    warranty: "۷ روز ضمانت · فقط مشکل ورود",
+    delivery: "اینوایتی · تحویل دستی (کارت‌به‌کارت پس از تأیید رسید)",
+    access: "اشتراکی · ۳۰ روز",
+  },
+);
+assert.equal(
+  planTrustSummary(
+    {
+      durationDays: null,
+      quoteRequired: false,
+      variant: {
+        plan: "Starter",
+        access: "PERSONAL",
+        fulfillment: "CODE",
+        delivery: "AUTOMATIC",
+        warranty: { kind: "NONE", days: 0, coverage: "NONE" },
+        region: "UNSPECIFIED",
+        quota: "UNSPECIFIED",
+      },
+    },
+    "en",
+  ).warranty,
+  "No warranty",
+);
+assert.deepEqual(
+  planTrustSummary({ durationDays: 90, quoteRequired: false, variant: null }, "fa"),
+  {
+    warranty: "ضمانت مشخص نشده",
+    delivery: "تحویل طبق مشخصات پلن",
+    access: "۹۰ روز · نوع دسترسی مشخص نشده",
+  },
+);
 assert.equal(
   planDisplayLabel("Gemini Pro 1 Month Personal Account", true),
   "Gemini Pro ۱ ماهه اکانت اختصاصی",

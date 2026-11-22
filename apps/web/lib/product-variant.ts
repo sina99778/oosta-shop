@@ -105,37 +105,108 @@ export function planOptionValue(value: string, fa: boolean): string {
   if (fa && value === "GLOBAL") return "جهانی";
   return planDisplayLabel(value, fa);
 }
+export type PlanTrustSummary = {
+  warranty: string;
+  delivery: string;
+  access: string;
+};
+
+const accessLabels = {
+  PERSONAL: { fa: "اختصاصی", en: "Individual" },
+  SHARED: { fa: "اشتراکی", en: "Shared" },
+  TEAM: { fa: "تیمی", en: "Team" },
+} as const;
+
+const fulfillmentLabels = {
+  ACCOUNT: { fa: "اکانت آماده", en: "Ready account" },
+  INVITE: { fa: "اینوایتی", en: "Invitation" },
+  CODE: { fa: "کد فعال‌سازی", en: "Redeem code" },
+  UPGRADE: { fa: "فعال‌سازی روی حساب", en: "Account upgrade" },
+} as const;
+
+function deliveryLabel(delivery: ProductVariant["delivery"], fa: boolean): string {
+  return delivery === "AUTOMATIC"
+    ? fa
+      ? "تحویل خودکار"
+      : "Automatic delivery"
+    : fa
+      ? "تحویل دستی"
+      : "Manual delivery";
+}
+
+function warrantyLabel(
+  warranty: ProductVariant["warranty"],
+  fa: boolean,
+  loginText: { fa: string; en: string },
+): string {
+  if (warranty.kind === "NONE") return fa ? "بدون ضمانت" : "No warranty";
+  const days = `${warranty.days.toLocaleString(fa ? "fa-IR" : "en-US")} ${fa ? "روز ضمانت" : "days warranty"}`;
+  if (warranty.coverage === "FULL") return `${days} · ${fa ? "پوشش کامل" : "Full coverage"}`;
+  if (warranty.coverage === "LOGIN") return `${days} · ${fa ? loginText.fa : loginText.en}`;
+  return days;
+}
+
+/** Build scannable warranty, delivery, and access rows for the buy box. */
+export function planTrustSummary(
+  plan: {
+    durationDays?: number | null;
+    quoteRequired?: boolean;
+    variant?: ProductVariant | null;
+  },
+  locale: "fa" | "en",
+  options?: { cardToCard?: boolean },
+): PlanTrustSummary {
+  const fa = locale === "fa";
+  const lang = fa ? "fa" : "en";
+  const variant = plan.variant ?? null;
+
+  const warranty = variant
+    ? warrantyLabel(variant.warranty, fa, { fa: "فقط مشکل ورود", en: "Login issues only" })
+    : fa
+      ? "ضمانت مشخص نشده"
+      : "Warranty unspecified";
+
+  const baseDelivery = variant
+    ? `${fulfillmentLabels[variant.fulfillment][lang]} · ${deliveryLabel(variant.delivery, fa)}`
+    : fa
+      ? "تحویل طبق مشخصات پلن"
+      : "Delivery per plan details";
+  const delivery = options?.cardToCard
+    ? `${baseDelivery}${fa ? " (کارت‌به‌کارت پس از تأیید رسید)" : " (card transfer after receipt approval)"}`
+    : baseDelivery;
+
+  const duration =
+    plan.durationDays == null
+      ? plan.quoteRequired
+        ? fa
+          ? "مدت طبق عنوان پلن"
+          : "Duration per plan title"
+        : fa
+          ? "بدون انقضا"
+          : "Perpetual"
+      : `${plan.durationDays.toLocaleString(fa ? "fa-IR" : "en-US")} ${fa ? "روز" : "days"}`;
+
+  const access = variant
+    ? [
+        accessLabels[variant.access][lang],
+        duration,
+        variant.region === "UNSPECIFIED" ? null : planOptionValue(variant.region, fa),
+        variant.quota === "UNSPECIFIED" ? null : planOptionValue(variant.quota, fa),
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : `${duration} · ${fa ? "نوع دسترسی مشخص نشده" : "Access type unspecified"}`;
+
+  return { warranty, delivery, access };
+}
+
 export function variantDescription(v: ProductVariant, fa: boolean): string {
-  const access = {
-    PERSONAL: fa ? "اختصاصی" : "Individual",
-    SHARED: fa ? "اشتراکی" : "Shared",
-    TEAM: fa ? "تیمی" : "Team",
-  };
-  const kind = {
-    ACCOUNT: fa ? "اکانت آماده" : "Ready account",
-    INVITE: fa ? "اینوایتی" : "Invitation",
-    CODE: fa ? "کد فعال‌سازی" : "Redeem code",
-    UPGRADE: fa ? "فعال‌سازی روی حساب" : "Account upgrade",
-  };
-  const delivery =
-    v.delivery === "AUTOMATIC"
-      ? fa
-        ? "تحویل خودکار"
-        : "Automatic delivery"
-      : fa
-        ? "تحویل دستی"
-        : "Manual delivery";
-  const warranty =
-    v.warranty.kind === "NONE"
-      ? fa
-        ? "بدون ضمانت"
-        : "No warranty"
-      : `${v.warranty.days.toLocaleString(fa ? "fa-IR" : "en-US")} ${fa ? "روز ضمانت" : "days warranty"} · ${v.warranty.coverage === "FULL" ? (fa ? "پوشش کامل" : "Full coverage") : fa ? "مشکل ورود" : "Login only"}`;
+  const lang = fa ? "fa" : "en";
   return [
-    access[v.access],
-    kind[v.fulfillment],
-    warranty,
-    delivery,
+    accessLabels[v.access][lang],
+    fulfillmentLabels[v.fulfillment][lang],
+    warrantyLabel(v.warranty, fa, { fa: "مشکل ورود", en: "Login only" }),
+    deliveryLabel(v.delivery, fa),
     v.region === "UNSPECIFIED" ? null : planOptionValue(v.region, fa),
     v.quota === "UNSPECIFIED" ? null : planOptionValue(v.quota, fa),
   ]

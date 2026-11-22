@@ -26,7 +26,7 @@ import { consumePlanReturn, trackStorefrontStep } from "@/lib/storefront-metrics
 import styles from "./shop.module.css";
 import { cn } from "@/lib/cn";
 import { formatPrice, formatDate } from "@/lib/format";
-import { planDisplayLabel, variantDescription } from "@/lib/product-variant";
+import { planDisplayLabel, planTrustSummary } from "@/lib/product-variant";
 import { availabilityLabel, availabilityOf, canBuyPlan } from "@/lib/product-availability";
 import type { Locale } from "@/lib/i18n";
 import type { CheckoutMethods } from "@/lib/product-availability";
@@ -97,6 +97,9 @@ export function ProductDetailView({
   const canBuy = !!plan && canBuyPlan(plan, payment);
   const supplierCart = plan?.source === "SUPPLIER" && availabilityOf(plan) === "SUPPLIER_STOCK";
   const localeFa = locale === "fa";
+  const trustSummary = plan
+    ? planTrustSummary(plan, locale, { cardToCard: Boolean(payment?.cardToCard) })
+    : null;
   const purchaseSummary = plan
     ? {
         label: planDisplayLabel(plan.label, localeFa),
@@ -376,23 +379,6 @@ export function ProductDetailView({
               <p className="font-semibold">
                 <bdi>{planDisplayLabel(plan.label, localeFa)}</bdi>
               </p>
-              <p>
-                {plan.durationDays == null
-                  ? plan.quoteRequired
-                    ? localeFa
-                      ? "مدت طبق عنوان پلن"
-                      : "See plan title for duration"
-                    : localeFa
-                      ? "بدون انقضا"
-                      : "Perpetual"
-                  : `${plan.durationDays.toLocaleString(locale)} ${localeFa ? "روز" : "days"}`}
-                {" · "}
-                {plan.variant
-                  ? variantDescription(plan.variant, localeFa)
-                  : localeFa
-                    ? "دسترسی و ضمانت مشخص نشده"
-                    : "Access and warranty unspecified"}
-              </p>
             </div>
           )}
           {/* Price */}
@@ -480,23 +466,53 @@ export function ProductDetailView({
             </p>
           )}
 
-          {plan && !plan.quoteRequired && availabilityOf(plan) === "LOCAL_STOCK" && (
-            <>
-              {!canBuy && (
-                <p role="status" className="mt-3 text-sm text-muted">
-                  {localeFa
-                    ? "خرید این پلن فعلاً فعال نیست."
-                    : "Checkout is currently unavailable for this plan."}
-                </p>
-              )}
-              {canBuy && payment?.cardToCard && (
-                <p className="mt-2 text-center text-xs text-muted">
-                  {locale === "fa"
-                    ? "تحویل کارت‌به‌کارت پس از تأیید رسید توسط پشتیبانی انجام می‌شود."
-                    : "Card transfers are delivered after receipt approval."}
-                </p>
-              )}
-            </>
+          {plan && !plan.quoteRequired && availabilityOf(plan) === "LOCAL_STOCK" && !canBuy && (
+            <p role="status" className="mt-3 text-sm text-muted">
+              {localeFa
+                ? "خرید این پلن فعلاً فعال نیست."
+                : "Checkout is currently unavailable for this plan."}
+            </p>
+          )}
+          {trustSummary && (
+            <dl
+              className={layout.trustSummary}
+              aria-label={localeFa ? "خلاصهٔ ضمانت و تحویل پلن" : "Plan warranty and delivery summary"}
+            >
+              <div className={layout.trustSummaryRow}>
+                <dt>{localeFa ? "ضمانت" : "Warranty"}</dt>
+                <dd>
+                  <span>{trustSummary.warranty}</span>
+                  {" · "}
+                  <Link href={`/${locale}/p/return-policy`}>
+                    {localeFa ? "شرایط ضمانت" : "Warranty terms"}
+                  </Link>
+                </dd>
+              </div>
+              <div className={layout.trustSummaryRow}>
+                <dt>{localeFa ? "روش تحویل" : "Delivery"}</dt>
+                <dd>{trustSummary.delivery}</dd>
+              </div>
+              <div className={layout.trustSummaryRow}>
+                <dt>{localeFa ? "دسترسی و مدت" : "Access & term"}</dt>
+                <dd>{trustSummary.access}</dd>
+              </div>
+              <div className={layout.trustSummaryRow}>
+                <dt>{localeFa ? "پشتیبانی" : "Support"}</dt>
+                <dd>
+                  <Link href={`/${locale}/p/contact`}>
+                    {localeFa ? "راه‌های تماس و پیگیری سفارش" : "Contact & order support"}
+                  </Link>
+                  {supportHref && (
+                    <>
+                      {" · "}
+                      <a href={supportHref} target="_blank" rel="noopener noreferrer">
+                        {localeFa ? "تلگرام پیش از خرید" : "Pre-sale Telegram"}
+                      </a>
+                    </>
+                  )}
+                </dd>
+              </div>
+            </dl>
           )}
           {plan && (
             <div className={layout.change}>
