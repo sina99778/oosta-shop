@@ -117,7 +117,13 @@ for (const product of withSpecs) {
 }
 assert(chatgpt.description.includes("زمان ضمانت از تحویل اکانت شروع می‌شود."));
 assert(chatgpt.description.includes("موارد خارج از ضمانت"));
-assert(products.find((product) => product.slug === "gemini").metaTitle.includes("Pro"));
+const gemini = products.find((product) => product.slug === "gemini");
+assert.match(gemini.metaTitle, /Plus.*Pro/);
+assert.match(gemini.description, /## Google AI Plus/);
+assert.match(gemini.description, /۴۰۰ گیگابایت/);
+assert.match(gemini.description, /شش‌ماهه/);
+assert.match(gemini.description, /سهمیه/);
+assert(gemini.sources.some(({ url }) => url.includes("/answer/16882689")));
 console.log(
   "PASS: 24 distinct reviewed product descriptions, metadata, headings, official references and existing ChatGPT warranty",
 );
