@@ -7,6 +7,7 @@ import { signAccessToken } from "../src/lib/jwt";
 import { CART_LIFETIME, releaseExpiredCart } from "../src/modules/orders/cart-state";
 import { reconcileOnlineCartPayments } from "../src/modules/orders/cart-payment-recovery";
 import { deliverOrder, uploadReceipt } from "../src/modules/orders/orders.service";
+import { getVisitStats } from "../src/modules/analytics/analytics.service";
 
 async function main() {
   assert.equal(process.env.ISOLATED_REGRESSION_DB, "1");
@@ -64,7 +65,10 @@ async function main() {
       url,
       method,
       payload,
-      headers: { authorization: "Bearer " + signAccessToken({ sub: who.id, role: who.role }) },
+      headers: {
+        authorization: "Bearer " + signAccessToken({ sub: who.id, role: who.role }),
+        "user-agent": "SyntheticBrowser",
+      },
     });
   const add = (planId: string, who = buyer) => call("POST", "/cart/items", { planId }, who);
   const getId = (response: Awaited<ReturnType<typeof add>>) => {
@@ -669,6 +673,68 @@ async function main() {
   );
   console.log(
     "PASS: unique signup welcome gifts, 15 percent, owner-only use, concurrent checkout and single redemption",
+  );
+
+  const stepCount = async (name: string) => {
+    const stats = await getVisitStats();
+    return stats.stepsWeek.find(({ step }) => step === name)?.count ?? 0;
+  };
+  const beforeReview = await stepCount("cart_invoice_reviewed");
+  const beforePay = await stepCount("cart_payment_started");
+  const metricBuyer = await prisma.user.create({
+    data: { name: "Cart metrics test", passwordHash: "unused" },
+  });
+  await prisma.inventoryItem.create({
+    data: {
+      productId: product.id,
+      planId: plans[0].id,
+      type: "LICENSE",
+      licenseKey: "CART-METRIC-STOCK",
+    },
+  });
+  const metricLine = getId(await add(plans[0].id, metricBuyer));
+  const metricPath = "/cart/items/" + metricLine.id;
+  const firstMetricReview = await call("POST", metricPath + "/review", {}, metricBuyer);
+  assert.equal(firstMetricReview.statusCode, 200, firstMetricReview.body);
+  const secondMetricReview = await call("POST", metricPath + "/review", {}, metricBuyer);
+  assert.equal(secondMetricReview.statusCode, 200, secondMetricReview.body);
+  assert.equal(await stepCount("cart_invoice_reviewed"), beforeReview + 2);
+
+  const failedMetricReview = await call("POST", metricPath + "/review", { code: "WRONG" }, metricBuyer);
+  assert.notEqual(failedMetricReview.statusCode, 200);
+  assert.equal(await stepCount("cart_invoice_reviewed"), beforeReview + 2);
+
+  const metricInvoice = secondMetricReview.json().invoice;
+  const metricPayment = {
+    method: "card_to_card",
+    subtotal: metricInvoice.subtotal,
+    total: metricInvoice.total,
+    revision: metricInvoice.revision,
+  };
+  const failedMetricPay = await call(
+    "POST",
+    metricPath + "/pay",
+    { ...metricPayment, total: "1" },
+    metricBuyer,
+  );
+  assert.equal(failedMetricPay.statusCode, 409);
+  assert.equal(await stepCount("cart_payment_started"), beforePay);
+
+  const starts = await Promise.all(
+    Array.from({ length: 5 }, () => call("POST", metricPath + "/pay", metricPayment, metricBuyer)),
+  );
+  for (const start of starts) assert.equal(start.statusCode, 201, start.body);
+  const [startedPay] = starts;
+  assert.equal(new Set(starts.map((start) => start.json().order.id)).size, 1);
+  assert.deepEqual(Object.keys(startedPay.json()), ["order"]);
+  assert.equal(await stepCount("cart_payment_started"), beforePay + 1);
+
+  const retryPay = await call("POST", metricPath + "/pay", metricPayment, metricBuyer);
+  assert.equal(retryPay.statusCode, 201, retryPay.body);
+  assert.equal(retryPay.json().order.id, startedPay.json().order.id);
+  assert.equal(await stepCount("cart_payment_started"), beforePay + 1);
+  console.log(
+    "PASS: cart_invoice_reviewed counts repeated successful reviews and cart_payment_started counts new order starts without double-counting retries",
   );
 }
 

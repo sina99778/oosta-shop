@@ -33,10 +33,21 @@ export const storefrontSteps = [
   "plan_restored",
 ] as const;
 
-export async function recordStorefrontStep(
-  step: (typeof storefrontSteps)[number],
-  userAgent: string,
-) {
+export const checkoutSteps = ["cart_invoice_reviewed", "cart_payment_started"] as const;
+
+export type FunnelStep = (typeof storefrontSteps)[number] | (typeof checkoutSteps)[number];
+
+export const funnelStepLabels: Record<FunnelStep, string> = {
+  product_viewed: "مشاهدهٔ محصول",
+  plan_selected: "انتخاب دستی پلن",
+  quote_received: "دریافت استعلام",
+  plan_login_started: "رفتن به ورود از پلن",
+  plan_restored: "بازگشت به همان پلن پس از ورود",
+  cart_invoice_reviewed: "بازبینی موفق فاکتور",
+  cart_payment_started: "شروع موفق پرداخت",
+};
+
+export async function recordStorefrontStep(step: FunnelStep, userAgent: string) {
   if (BOT_UA.test(userAgent)) return;
   const day = tehranDayStart(0);
   await prisma.$executeRaw`

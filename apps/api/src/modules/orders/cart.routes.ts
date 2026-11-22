@@ -9,6 +9,7 @@ import { getPublicCartPlans } from "../catalog/catalog.service";
 import { quote } from "../suppliers/suppliers.service";
 import type { SupplierCheckout } from "../suppliers/checkout";
 import { getPaymentConfig } from "./orders.service";
+import { recordStorefrontStep } from "../analytics/analytics.service";
 import { cartPlanPrice, createInternalCartOrder } from "./cart-checkout";
 import { assertRenewalCartPlan } from "./renewals";
 import {
@@ -272,6 +273,10 @@ cartRouter.post(
       throw new AppError(409, "INVOICE_LIMIT", "Split the invoice into smaller orders");
     const discount = discountFor(subtotal, discountPercent);
     const methods = firm?.methods ?? (await getPaymentConfig());
+    await recordStorefrontStep(
+      "cart_invoice_reviewed",
+      String(req.headers["user-agent"] ?? ""),
+    ).catch(() => {});
     res.json({
       invoice: {
         id: line.id,
@@ -336,15 +341,23 @@ cartRouter.post(
       total: req.body.total,
       code: req.body.code,
     };
-    if (line.plan.source === "SUPPLIER") {
-      if (!req.body.quoteId || extras.length || payment.revision) throw cartChanged();
-      const checkout = req.app.locals.supplierCheckout as SupplierCheckout;
-      res
-        .status(201)
-        .json(await checkout.create(userId, req.body.quoteId, req.body.method, payment));
-    } else {
-      if (req.body.quoteId || !payment.revision) throw cartChanged();
-      res.status(201).json(await createInternalCartOrder(userId, payment, req.body.method));
+    const { started, body } =
+      line.plan.source === "SUPPLIER"
+        ? await (() => {
+            if (!req.body.quoteId || extras.length || payment.revision) throw cartChanged();
+            const checkout = req.app.locals.supplierCheckout as SupplierCheckout;
+            return checkout.createWithStatus(userId, req.body.quoteId, req.body.method, payment);
+          })()
+        : await (() => {
+            if (req.body.quoteId || !payment.revision) throw cartChanged();
+            return createInternalCartOrder(userId, payment, req.body.method);
+          })();
+    if (started) {
+      await recordStorefrontStep(
+        "cart_payment_started",
+        String(req.headers["user-agent"] ?? ""),
+      ).catch(() => {});
     }
+    res.status(201).json(body);
   },
 );

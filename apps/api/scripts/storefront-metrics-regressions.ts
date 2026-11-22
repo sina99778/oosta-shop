@@ -3,10 +3,19 @@ import { inject } from "light-my-request";
 import { createApp } from "../src/app";
 import { prisma } from "../src/lib/prisma";
 import { signAccessToken } from "../src/lib/jwt";
-import { getVisitStats, visitorHashFor } from "../src/modules/analytics/analytics.service";
+import {
+  checkoutSteps,
+  funnelStepLabels,
+  getVisitStats,
+  storefrontSteps,
+  visitorHashFor,
+} from "../src/modules/analytics/analytics.service";
 
 async function main() {
   assert.equal(process.env.ISOLATED_REGRESSION_DB, "1");
+  for (const step of [...storefrontSteps, ...checkoutSteps]) {
+    assert(funnelStepLabels[step]?.trim().length > 0, `Missing Persian label for ${step}`);
+  }
   const app = createApp();
   const submit = (payload: object, userAgent = "SyntheticBrowser") =>
     inject(app, { method: "POST", url: "/track", headers: { "user-agent": userAgent }, payload });
@@ -14,6 +23,8 @@ async function main() {
   await submit({ step: "quote_received" }, "synthetic crawler");
   await submit({ step: "unknown" });
   await submit({ step: "plan_restored", email: "sample@example.invalid" });
+  await submit({ step: "cart_invoice_reviewed" });
+  await submit({ step: "cart_payment_started" });
   const report = await getVisitStats();
   assert.deepEqual(report.stepsWeek, [{ step: "plan_selected", count: 2 }]);
   assert.equal(report.week.views, 0);

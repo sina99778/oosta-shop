@@ -179,17 +179,17 @@ export async function createInternalCartOrder(
     currency: row.currency,
     paymentStatus: row.paymentStatus,
   };
-  if (!provider) return { order };
+  if (!provider) return { started: created.start, body: { order } };
   const metadata = row.paymentMetadata as Prisma.JsonObject;
   if (!created.start) {
-    if (row.paymentStatus === "PAID") return { order };
+    if (row.paymentStatus === "PAID") return { started: false, body: { order } };
     if (
       row.paymentAuthority &&
       typeof metadata.redirectUrl === "string" &&
       typeof metadata.cartExpiresAt === "string" &&
       Date.parse(metadata.cartExpiresAt) > Date.now()
     )
-      return { order, payment: { redirectUrl: metadata.redirectUrl } };
+      return { started: false, body: { order, payment: { redirectUrl: metadata.redirectUrl } } };
     if (row.paymentAuthority)
       throw new AppError(
         409,
@@ -225,5 +225,5 @@ export async function createInternalCartOrder(
   });
   if (saved.count !== 1)
     throw new AppError(409, "PAYMENT_WINDOW_CLOSED", "The payment session has expired");
-  return { order, payment: { redirectUrl: paymentSession.redirectUrl } };
+  return { started: true, body: { order, payment: { redirectUrl: paymentSession.redirectUrl } } };
 }

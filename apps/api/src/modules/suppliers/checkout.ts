@@ -190,7 +190,7 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
       payment: { authority: order.paymentAuthority, redirectUrl: metadata.redirectUrl },
     };
   }
-  async function create(
+  async function createWithStatus(
     userId: string,
     quoteId: string,
     method: "online" | "card_to_card" = "online",
@@ -434,7 +434,8 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
           ),
         )
         .catch(() => {});
-    if (!reserved.created || method === "card_to_card") return response(reserved.id);
+    if (!reserved.created || method === "card_to_card")
+      return { started: reserved.created, body: await response(reserved.id) };
     if (!provider) throw unavailable();
     const order = await prisma.order.findUniqueOrThrow({ where: { id: reserved.id } });
     try {
@@ -476,7 +477,16 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
         "Payment could not be initialized; no supplier purchase was sent",
       );
     }
-    return response(order.id);
+    return { started: true, body: await response(order.id) };
+  }
+
+  async function create(
+    userId: string,
+    quoteId: string,
+    method?: "online" | "card_to_card",
+    cart?: CartPayment,
+  ) {
+    return (await createWithStatus(userId, quoteId, method, cart)).body;
   }
   async function recover(orderId: string) {
     const job = await prisma.supplierFulfillment.findUnique({ where: { orderId } });
@@ -691,6 +701,7 @@ export function createSupplierCheckout(registry: SupplierRegistry = new Map()) {
     available,
     quote,
     create,
+    createWithStatus,
     verify,
     sweep,
     start,

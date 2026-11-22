@@ -18,7 +18,7 @@ import {
   type PendingImage,
 } from "./lib/agent";
 import { isOpenRouterEnabled } from "./lib/openrouter";
-import { getVisitStats } from "./modules/analytics/analytics.service";
+import { getVisitStats, funnelStepLabels } from "./modules/analytics/analytics.service";
 import {
   IMAGE_MODELS,
   TEXT_MODELS,
@@ -196,15 +196,9 @@ async function visitsMessage(): Promise<string> {
     }
   }
   if (s.stepsWeek.length) {
-    lines.push("", "مراحل انتخاب و استعلام در ۷ روز اخیر (تعداد رخداد)");
+    lines.push("", "مراحل انتخاب تا شروع پرداخت در ۷ روز اخیر (تعداد رخداد)");
     const counts = new Map(s.stepsWeek.map(({ step, count }) => [step, count]));
-    for (const [step, label] of Object.entries({
-      product_viewed: "مشاهدهٔ محصول",
-      plan_selected: "انتخاب دستی پلن",
-      quote_received: "دریافت استعلام",
-      plan_login_started: "رفتن به ورود از پلن",
-      plan_restored: "بازگشت به همان پلن پس از ورود",
-    }))
+    for (const [step, label] of Object.entries(funnelStepLabels))
       lines.push(`${label}: ${counts.get(step) ?? 0}`);
   }
   if (s.month.views === 0) {

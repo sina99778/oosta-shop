@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
 import { cartChangedEvent, isGuestCartChange, notifyCartChanged } from "@/lib/cart-events";
+import { cartReviewRecovery, isInvoiceExpired } from "@/lib/cart-review";
 import { useGuestCart } from "@/lib/guest-cart";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
@@ -81,6 +82,10 @@ function failure(error: unknown, fa: boolean) {
     return fa
       ? "یک صورتحساب در انتظار پرداخت داری. آن را در داشبورد بررسی کن."
       : "An invoice is awaiting payment. Check your dashboard.";
+  if (error instanceof ApiError && error.code === "NOT_FOUND")
+    return fa
+      ? "این کالا دیگر در سبد نیست یا مهلتش تمام شده است."
+      : "This item is no longer in your cart or has expired.";
   if (error instanceof ApiError && error.code === "OUT_OF_STOCK")
     return fa
       ? "موجودی یکی از کالاها تغییر کرده است. به سبد برگرد و گزینه‌های موجود را بررسی کن."
@@ -261,6 +266,11 @@ export function ShoppingCart({ locale }: { locale: Locale }) {
                 {fa ? "بازبینی فاکتور" : "Review invoice"}
               </Link>
             )}
+            {line.notice === "UNAVAILABLE" && (
+              <Link className={secondary} href={`/${locale}/products/${line.slug}`}>
+                {fa ? "انتخاب پلن دیگر" : "Choose another plan"}
+              </Link>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -299,27 +309,63 @@ function CartReviewForm({ locale, id, extraIds, token }: CartReviewProps & { tok
   const [applied, setApplied] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [expiredAt, setExpiredAt] = useState<string | null>(null);
   const running = useRef(false);
   const path = "/cart/items/" + encodeURIComponent(id);
+  const expired = Boolean(invoice && expiredAt === invoice.expiresAt);
+  const recovery = message ? cartReviewRecovery(errorCode, Boolean(invoice)) : null;
+
   useEffect(() => {
     let current = true;
     api
       .post<{ invoice: Invoice }>(path + "/review", { extraIds }, token)
       .then((data) => {
-        if (current) setInvoice(data.invoice);
+        if (current) {
+          setInvoice(data.invoice);
+          setErrorCode(null);
+          setExpiredAt(null);
+        }
       })
       .catch((error) => {
-        if (current) setMessage(failure(error, fa));
+        if (current) {
+          setErrorCode(error instanceof ApiError ? (error.code ?? null) : null);
+          setMessage(failure(error, fa));
+        }
       });
     return () => {
       current = false;
     };
   }, [path, token, fa, extraIds]);
+
+  useEffect(() => {
+    if (!invoice) return;
+    const expiresAt = invoice.expiresAt;
+    const delay = Math.max(0, Date.parse(expiresAt) - Date.now());
+    const timer = setTimeout(
+      () => setExpiredAt(expiresAt),
+      Number.isFinite(delay) ? Math.min(delay, 2147483647) : 0,
+    );
+    return () => clearTimeout(timer);
+  }, [invoice]);
+
+  function handleError(error: unknown) {
+    const code = error instanceof ApiError ? (error.code ?? null) : null;
+    if (
+      code &&
+      ["CART_CHANGED", "SUPPLIER_QUOTE_EXPIRED", "OUT_OF_STOCK", "NOT_FOUND"].includes(code)
+    )
+      setInvoice(undefined);
+    setErrorCode(code);
+    setMessage(failure(error, fa));
+  }
+
   async function refresh(value: string) {
     if (running.current) return;
     running.current = true;
     setBusy(true);
     setMessage("");
+    setErrorCode(null);
     try {
       const data = await api.post<{ invoice: Invoice }>(
         path + "/review",
@@ -327,10 +373,11 @@ function CartReviewForm({ locale, id, extraIds, token }: CartReviewProps & { tok
         token,
       );
       setInvoice(data.invoice);
+      setExpiredAt(null);
       setApplied(value);
       setEntered(value);
     } catch (error) {
-      setMessage(failure(error, fa));
+      handleError(error);
     } finally {
       running.current = false;
       setBusy(false);
@@ -338,16 +385,20 @@ function CartReviewForm({ locale, id, extraIds, token }: CartReviewProps & { tok
   }
   async function pay(method: PaymentMethod) {
     if (!invoice || running.current) return;
-    if (Date.parse(invoice.expiresAt) <= Date.now()) {
-      setInvoice(undefined);
+    if (isInvoiceExpired(invoice.expiresAt)) {
+      setExpiredAt(invoice.expiresAt);
+      setErrorCode("INVOICE_EXPIRED");
       setMessage(
-        fa ? "مهلت فاکتور تمام شد. دوباره بررسی کن." : "This invoice expired. Review it again.",
+        fa
+          ? "مهلت این فاکتور تمام شد. برای ادامه، فاکتور تازه بگیر."
+          : "This invoice expired. Request a fresh invoice to continue.",
       );
       return;
     }
     running.current = true;
     setBusy(true);
     setMessage("");
+    setErrorCode(null);
     try {
       const result = await api.post<CreateOrderResponse>(
         path + "/pay",
@@ -377,12 +428,7 @@ function CartReviewForm({ locale, id, extraIds, token }: CartReviewProps & { tok
         window.location.assign(url.href);
       }
     } catch (error) {
-      if (
-        error instanceof ApiError &&
-        ["CART_CHANGED", "SUPPLIER_QUOTE_EXPIRED", "OUT_OF_STOCK"].includes(error.code ?? "")
-      )
-        setInvoice(undefined);
-      setMessage(failure(error, fa));
+      handleError(error);
     } finally {
       running.current = false;
       setBusy(false);
@@ -396,17 +442,48 @@ function CartReviewForm({ locale, id, extraIds, token }: CartReviewProps & { tok
       </Link>
       <h1 className="text-3xl font-semibold sm:text-4xl">{fa ? "تأیید سفارش" : "Confirm order"}</h1>
       {message && (
-        <p role="alert" className="rounded-xl border border-border p-4 text-sm">
-          {message}
-        </p>
+        <div role="alert" className="space-y-3 rounded-xl border border-border p-4 text-sm">
+          <p>{message}</p>
+          {recovery === "refresh" && (
+            <Button type="button" disabled={busy} onClick={() => void refresh(applied)}>
+              {fa ? "دریافت فاکتور تازه" : "Get fresh invoice"}
+            </Button>
+          )}
+          {recovery === "cart_or_products" && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href={`/${locale}/cart`}
+                className="oosta-button inline-flex min-h-11 items-center px-5"
+              >
+                {fa ? "بازگشت به سبد خرید" : "Back to cart"}
+              </Link>
+              <Link href={`/${locale}/products`} className={secondary}>
+                {fa ? "انتخاب پلن دیگر" : "Choose another plan"}
+              </Link>
+            </div>
+          )}
+          {recovery === "orders" && (
+            <Link
+              href={`/${locale}/dashboard#account-orders`}
+              className="oosta-button inline-flex min-h-11 items-center px-5"
+            >
+              {fa ? "مشاهدهٔ سفارش‌ها" : "View orders"}
+            </Link>
+          )}
+          {recovery === "retry" && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void refresh(applied)}
+            >
+              {fa ? "بازبینی دوباره" : "Review again"}
+            </Button>
+          )}
+        </div>
       )}
       {!invoice && !message && (
         <p role="status">{fa ? "در حال آماده‌سازی فاکتور…" : "Preparing invoice…"}</p>
-      )}
-      {!invoice && message && (
-        <Button variant="outline" disabled={busy} onClick={() => void refresh(applied)}>
-          {fa ? "بازبینی دوباره" : "Review again"}
-        </Button>
       )}
       {invoice && (
         <section className={panel}>
@@ -491,14 +568,34 @@ function CartReviewForm({ locale, id, extraIds, token }: CartReviewProps & { tok
               <dd>{price(invoice.total)}</dd>
             </div>
           </dl>
+          <p className="mt-4 text-sm text-muted">
+            {fa ? "اعتبار فاکتور تا" : "Invoice valid until"}{" "}
+            <time dateTime={invoice.expiresAt}>{formatDate(invoice.expiresAt, locale)}</time> ·{" "}
+            {new Date(invoice.expiresAt).toLocaleTimeString(fa ? "fa-IR" : "en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </p>
+          {expired && !message && (
+            <div role="alert" className="mt-4 space-y-3 rounded-xl border border-border p-4 text-sm">
+              <p>
+                {fa
+                  ? "مهلت این فاکتور تمام شد. برای ادامه، فاکتور تازه بگیر."
+                  : "This invoice expired. Request a fresh invoice to continue."}
+              </p>
+              <Button type="button" disabled={busy} onClick={() => void refresh(applied)}>
+                {fa ? "دریافت فاکتور تازه" : "Get fresh invoice"}
+              </Button>
+            </div>
+          )}
           <div className="mt-6 grid gap-3">
             {invoice.methods.cardToCard && (
-              <Button disabled={busy} onClick={() => void pay("card_to_card")}>
+              <Button disabled={busy || expired} onClick={() => void pay("card_to_card")}>
                 {fa ? "تأیید و کارت‌به‌کارت" : "Confirm and pay by card transfer"}
               </Button>
             )}
             {invoice.methods.online && (
-              <Button disabled={busy} onClick={() => void pay("online")}>
+              <Button disabled={busy || expired} onClick={() => void pay("online")}>
                 {fa ? "تأیید و پرداخت آنلاین" : "Confirm and pay online"}
               </Button>
             )}
