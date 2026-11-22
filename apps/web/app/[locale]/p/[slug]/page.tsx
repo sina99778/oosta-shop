@@ -68,7 +68,7 @@ export default async function CmsPage({
     <Container className="max-w-3xl py-10">
       <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{page.title}</h1>
       <article className="mt-6 text-foreground/90">
-        <Markdown text={page.content} />
+        <Markdown text={page.content} headingOffset={0} />
       </article>
       {slug === "about" && (
         <Link

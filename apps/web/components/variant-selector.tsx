@@ -36,6 +36,28 @@ const facets: Facet[] = [
   "region",
   "quota",
 ];
+
+function quickChoices(plans: PlanDetail[]) {
+  const choices = new Map<string, PlanDetail>();
+  const price = (plan: PlanDetail) =>
+    plan.quoteRequired || plan.source === "SUPPLIER"
+      ? (plan.indicativePrice?.amount ?? Infinity)
+      : plan.effectivePrice * (plan.currency === "IRT" ? 10 : 1);
+  for (const plan of plans) {
+    if (!isStockedPlan(plan)) continue;
+    const key = plan.variant
+      ? JSON.stringify([planDisplayLabel(plan.label, true).toLowerCase(), values(plan)])
+      : plan.id;
+    const existing = choices.get(key);
+    if (
+      !existing ||
+      ((existing.sortOrder ?? 0) === (plan.sortOrder ?? 0) && price(plan) < price(existing))
+    ) {
+      choices.set(key, plan);
+    }
+  }
+  return [...choices.values()].slice(0, 4);
+}
 function values(p: PlanDetail): Record<Facet, string> {
   const v = p.variant;
   return {
@@ -64,7 +86,7 @@ export function VariantSelector({
   const fa = locale === "fa";
   const [filters, setFilters] = useState<Partial<Record<Facet, string>>>({});
   const sorted = plansByAvailability(plans);
-  const quick = plans.length > 1 ? sorted.filter(isStockedPlan).slice(0, 4) : [];
+  const quick = plans.length > 1 ? quickChoices(sorted) : [];
   const hasVariants = plans.some((plan) => plan.variant);
   const names: Record<Facet, string> = {
     plan: fa ? "پلن" : "Plan",
@@ -169,6 +191,11 @@ export function VariantSelector({
                   <span className="block text-xs leading-5 text-muted wrap-anywhere">
                     {summary.warranty}
                   </span>
+                  {plan.variant && (
+                    <span className="block text-xs leading-5 text-muted wrap-anywhere">
+                      {summary.delivery}
+                    </span>
+                  )}
                   <span className="mt-2 block text-sm">{price(plan)}</span>
                 </button>
               );

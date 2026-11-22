@@ -107,6 +107,12 @@ Module._load = function (request, ...args) {
       },
     };
   if (request === "@/components/ui/container") return { Container: ({ children }) => children };
+  if (request === "@/components/markdown")
+    return originalLoad.call(
+      this,
+      path.resolve(__dirname, "../apps/web/components/markdown.tsx"),
+      ...args,
+    );
   if (request.startsWith("@/components/") && request !== "@/components/related-content-links")
     return new Proxy({}, { get: (_target, key) => (key === "__esModule" ? false : stubComponent) });
   return originalLoad.call(this, request, ...args);
@@ -280,6 +286,10 @@ async function main() {
   assert(urls.includes(`${SITE}/fa/p/about`));
   const cmsAbout = await cms.generateMetadata(params("fa", { slug: "about" }));
   assert.equal(cmsAbout.title, cmsPage.title);
+  assert.match(
+    renderToStaticMarkup(await cms.default(params("fa", { slug: "about" }))),
+    /<h2[^>]*>About<\/h2>/,
+  );
   cmsAvailable = false;
   for (const [locale, titles] of [
     ["fa", ["درباره ما", "تماس با ما"]],
@@ -297,7 +307,8 @@ async function main() {
           "mailto:support@example.test",
           "tel:+982112345678",
           "https://instagram.com/fixture.official",
-        ]) assert(rendered.includes(`href="${href}"`), href);
+        ])
+          assert(rendered.includes(`href="${href}"`), href);
       }
     }
   }

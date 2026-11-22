@@ -10,6 +10,7 @@ import { cartChangedEvent, isGuestCartChange, notifyCartChanged } from "@/lib/ca
 import { cartReviewRecovery, isInvoiceExpired } from "@/lib/cart-review";
 import { useGuestCart } from "@/lib/guest-cart";
 import { formatDate, formatPrice } from "@/lib/format";
+import { planDisplayLabel } from "@/lib/product-variant";
 import type { Locale } from "@/lib/i18n";
 import type { CreateOrderResponse, PaymentMethod } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -232,7 +233,7 @@ export function ShoppingCart({ locale }: { locale: Locale }) {
                 <bdi>{line.product}</bdi>
               </Link>
               <p className="mt-1 break-words text-sm text-muted">
-                <bdi>{line.label}</bdi>
+                <bdi>{planDisplayLabel(line.label, fa)}</bdi>
               </p>
             </div>
             {line.amount !== null && (
@@ -243,11 +244,7 @@ export function ShoppingCart({ locale }: { locale: Locale }) {
           </div>
           <p className="mt-3 text-sm text-muted">
             {fa ? "مهلت سبد" : "Cart expires"} ·{" "}
-            <time dateTime={line.expiresAt}>{formatDate(line.expiresAt, locale)}</time> ·{" "}
-            {new Date(line.expiresAt).toLocaleTimeString(locale === "fa" ? "fa-IR" : "en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            <time dateTime={line.expiresAt}>{formatDate(line.expiresAt, locale)}</time>
           </p>
           {line.notice && (
             <p
@@ -496,7 +493,7 @@ function CartReviewForm({ locale, id, extraIds, token }: CartReviewProps & { tok
                       <bdi>{item.product}</bdi>
                     </h2>
                     <p className="mt-1 text-sm text-muted">
-                      <bdi>{item.label}</bdi>
+                      <bdi>{planDisplayLabel(item.label, fa)}</bdi>
                     </p>
                   </div>
                   <p className="tabular-nums">{price(item.amount)}</p>
@@ -570,11 +567,7 @@ function CartReviewForm({ locale, id, extraIds, token }: CartReviewProps & { tok
           </dl>
           <p className="mt-4 text-sm text-muted">
             {fa ? "اعتبار فاکتور تا" : "Invoice valid until"}{" "}
-            <time dateTime={invoice.expiresAt}>{formatDate(invoice.expiresAt, locale)}</time> ·{" "}
-            {new Date(invoice.expiresAt).toLocaleTimeString(fa ? "fa-IR" : "en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            <time dateTime={invoice.expiresAt}>{formatDate(invoice.expiresAt, locale)}</time>
           </p>
           {expired && !message && (
             <div role="alert" className="mt-4 space-y-3 rounded-xl border border-border p-4 text-sm">

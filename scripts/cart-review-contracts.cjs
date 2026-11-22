@@ -3,6 +3,12 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 require("tsx/cjs");
+const { planDisplayLabel } = require("../apps/web/lib/product-variant.ts");
+const rawLabel = "Chatgpt plus 1M (Apple pay)Gmail 24h warranty";
+assert.equal(planDisplayLabel(rawLabel, true), "Chatgpt plus ۱ ماهه (Apple pay) Gmail");
+assert.equal(planDisplayLabel(rawLabel, false), "Chatgpt plus 1M (Apple pay) Gmail");
+assert.equal(planDisplayLabel("ChatGPT Plus 1 month (W25D)", true), "ChatGPT Plus ۱ ماهه");
+assert.equal(planDisplayLabel("ChatGPT Plus 1 month 7 days full warranty", true), "ChatGPT Plus ۱ ماهه");
 
 const { cartReviewRecovery, isInvoiceExpired } = require("../apps/web/lib/cart-review.ts");
 
@@ -33,6 +39,17 @@ const component = fs.readFileSync(
   path.resolve(__dirname, "../apps/web/components/shopping-cart.tsx"),
   "utf8",
 );
+const guestCart = fs.readFileSync(
+  path.resolve(__dirname, "../apps/web/components/guest-cart-items.tsx"),
+  "utf8",
+);
+for (const [source, labels] of [
+  [component, ["line.label", "item.label"]],
+  [guestCart, ["plan.label"]],
+]) {
+  for (const label of labels) assert(source.includes(`planDisplayLabel(${label}, fa)`));
+  assert.doesNotMatch(source, /toLocaleTimeString/);
+}
 for (const snippet of [
   "invoice.expiresAt",
   "اعتبار فاکتور تا",

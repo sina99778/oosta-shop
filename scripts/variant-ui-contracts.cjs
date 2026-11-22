@@ -231,6 +231,7 @@ assert(
   ).includes('href="https://t.me/oostaAiSupport"'),
 );
 assert(html.includes('value="fixture-manual"'), "Preserve the original plan ID");
+assert(html.includes("شمارهٔ سفارش و شرح مشکل را در تیکت بنویسید"));
 const termsHtml = renderToStaticMarkup(
   React.createElement(ProductDetailView, {
     locale: "fa",
@@ -241,7 +242,7 @@ const termsHtml = renderToStaticMarkup(
           ...viewedProduct.plans[0],
           variant: null,
           activationTerms:
-            "## نکات فعال‌سازی\n- فقط یک دستگاه\n\n[Unsafe](javascript:alert(1)) · [تماس](/fa/p/contact)",
+            "## نکات فعال‌سازی\n- فقط یک دستگاه\n\nپیش‌نیاز اختصاصی دیگری برای این گزینه از متن عرضه قابل تأیید نبود. اگر شرط خاصی برای حساب، منطقه یا دستگاه داری، قبل از خرید از پشتیبانی بپرس.\n\nشمارهٔ سفارش را در تیکت بنویسید.\n\n[Unsafe](javascript:alert(1)) · [تماس](/fa/p/contact)",
         },
       ],
     },
@@ -258,6 +259,14 @@ assert(
 );
 assert(termsHtml.includes("نکات فعال‌سازی"));
 assert(termsHtml.includes("فقط یک دستگاه"));
+assert(
+  termsHtml.includes(
+    "اگر دربارهٔ شرایط حساب، منطقه یا دستگاه سؤال دارید، پیش از خرید از پشتیبانی بپرسید.",
+  ),
+);
+assert(!termsHtml.includes("از متن عرضه قابل تأیید نبود"));
+assert(termsHtml.includes("شمارهٔ سفارش را در تیکت بنویسید"));
+assert(!termsHtml.includes("شمارهٔ سفارش و شرح مشکل را در تیکت بنویسید"));
 assert(!/<a\b[^>]*href=["']?javascript:/i.test(termsHtml));
 assert(!termsHtml.includes(">Unsafe</a>"));
 assert(termsHtml.includes('href="/fa/p/contact"'));
@@ -462,7 +471,12 @@ const selectorPlans = [
     source: "INTERNAL",
     quoteRequired: false,
   },
-  ...[100, 70, 50].map((sortOrder) => ({ ...p.plans[0], id: `stock-${sortOrder}`, sortOrder })),
+  ...[100, 70, 50].map((sortOrder) => ({
+    ...p.plans[0],
+    id: `stock-${sortOrder}`,
+    label: `Fixture ${sortOrder}`,
+    sortOrder,
+  })),
   {
     ...p.plans[0],
     id: "unavailable",
@@ -498,6 +512,28 @@ assert.deepEqual(
 );
 assert.match(complete, /Estimated price/);
 assert.match(complete, /2,600,000 IRR/);
+const identicalPlans = [
+  {
+    ...selectorPlans[0],
+    id: "expensive",
+    label: "CHATGPT PRO 200 1 MONTH (3D warranty)",
+    indicativePrice: { ...indicativePrice, amount: 5000000 },
+  },
+  { ...selectorPlans[0], id: "cheap", label: "ChatGPT Pro 200 1 month (no warranty)" },
+  {
+    ...selectorPlans[0],
+    id: "manual",
+    label: "ChatGPT Pro 200 1 month (no warranty)",
+    variant: { ...selectorPlans[0].variant, delivery: "MANUAL" },
+  },
+];
+const [similarCards, similarList] = renderSelector(identicalPlans).split("<details");
+assert.deepEqual(
+  [...similarCards.matchAll(/data-plan-id="([^"]+)"/g)].map((m) => m[1]),
+  ["cheap", "manual"],
+);
+assert.match(similarCards, /Manual delivery/);
+assert.match(similarList, /value="expensive"/);
 assert.match(quick, /(?:Individual|Team|Shared)/);
 assert.match(quick, /(?:No warranty|days warranty)/);
 assert.doesNotMatch(complete, /text-3xl/);

@@ -15,15 +15,19 @@ export type SupplierMapping = {
   variantKey?: string;
 };
 
-const planTerms: [RegExp, string][] = [
-  [/\b(?:with\s+)?(?:full\s+warrant(?:y|naty)|fw)\b/gi, ""],
-  [/\b(?:no\s+warranty|without\s+warranty|nw)\b/gi, ""],
-  [/\b(?:\(?w\d+d\)?|bh\d+h)\b/gi, ""],
+const warrantyTerms: [RegExp, string][] = [
+  [/\bwarr(?:anty|naty)\s+\d+\s*(?:days?|months?|years?|hours?|d|m|y|h)\b/gi, ""],
   [
-    /\b(?:with\s+)?\d+(?:\s*(?:to|[-–])\s*\d+)?\s*[- ]?\s*(?:days?|months?|hours?|d|m|h)\s+warr(?:anty|naty)\b/gi,
+    /\b(?:with\s+)?\d+(?:\s*(?:to|[-–])\s*\d+)?\s*[- ]?\s*(?:days?|months?|years?|hours?|d|m|y|h)\s+(?:full\s+)?warr(?:anty|naty)\b/gi,
     "",
   ],
+  [/\b(?:with\s+)?(?:full\s+warrant(?:y|naty)|fw)\b/gi, ""],
+  [/\b(?:no\s+warranty|without\s+warranty|nw)\b/gi, ""],
+  [/\b(?:w\d+d|bh\d+h)\b/gi, ""],
   [/\bwarr(?:anty|naty)\s*(?:\d+\s*(?:days?|months?|years?|hours?|d|m|y|h))?/gi, ""],
+];
+
+const planTerms: [RegExp, string][] = [
   [/\b(\d+(?:\s*[-–]\s*\d+)?)\s*[- ]?\s*(?:years?|yrs?|y)\b/gi, "$1 ساله"],
   [
     /\b(\d+(?:\s*[-–]\s*\d+)?)\s*[- ]?\s*(?:months?|mos?|m)\b(?!\s*(?:tokens?|credits?))/gi,
@@ -80,23 +84,27 @@ const planTerms: [RegExp, string][] = [
 ];
 
 export function planDisplayLabel(label: string, fa: boolean): string {
-  if (!fa) return label;
+  label = label.replace(/([)\]])(?=[\p{L}\p{N}])/gu, "$1 ");
+  const clean = (title: string) =>
+    title
+      .replace(/\(\s*\)|\[\s*\]/g, "")
+      .replace(/\s+/g, " ")
+      .replace(/^[\s·,–-]+|[\s·,–-]+$/g, "");
+  const neutral = warrantyTerms.reduce(
+    (text, [pattern, value]) => text.replace(pattern, value),
+    label,
+  );
+  if (!fa) return clean(neutral) || "Subscription";
   const title = /\bcanva\b/i.test(label)
-    ? label
+    ? neutral
         .replace(/\b(?:education|edu|student) accounts?\b/gi, "اکانت دانشجویی")
         .replace(/\b(?:education|edu|student)\b/gi, "دانشجویی")
-    : label;
+    : neutral;
   const translated = planTerms.reduce(
     (value, [pattern, replacement]) => value.replace(pattern, replacement),
     title,
   );
-  return (
-    translated
-      .replace(/\(\s*\)|\[\s*\]/g, "")
-      .replace(/\s+/g, " ")
-      .replace(/^[\s·,–-]+|[\s·,–-]+$/g, "")
-      .replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]) || label
-  );
+  return clean(translated).replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]) || "اشتراک";
 }
 
 export function planOptionValue(value: string, fa: boolean): string {

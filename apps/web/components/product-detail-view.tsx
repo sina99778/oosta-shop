@@ -489,12 +489,20 @@ export function ProductDetailView({
                     : "Selected subscription terms"}
               </summary>
               <div className="space-y-3 border-t border-border p-4 text-sm leading-7">
-                {plan.activationTerms && <Markdown text={plan.activationTerms} />}
-                <p className="text-muted">
-                  {locale === "fa"
-                    ? "برای پیگیری مشکل، شمارهٔ سفارش و شرح خطا را در تیکت ثبت کن. رمز حساب و کد تأیید را در تیکت ننویس."
-                    : "For support, include the order number and error description in a ticket. Keep passwords and verification codes out of tickets."}
-                </p>
+                {plan.activationTerms ? (
+                  <Markdown
+                    text={plan.activationTerms.replace(
+                      "پیش‌نیاز اختصاصی دیگری برای این گزینه از متن عرضه قابل تأیید نبود. اگر شرط خاصی برای حساب، منطقه یا دستگاه داری، قبل از خرید از پشتیبانی بپرس.",
+                      "اگر دربارهٔ شرایط حساب، منطقه یا دستگاه سؤال دارید، پیش از خرید از پشتیبانی بپرسید.",
+                    )}
+                  />
+                ) : (
+                  <p className="text-muted">
+                    {locale === "fa"
+                      ? "اگر برای فعال‌سازی به کمک نیاز دارید، شمارهٔ سفارش و شرح مشکل را در تیکت بنویسید. رمز عبور یا کد تأیید را ارسال نکنید."
+                      : "For support, include the order number and error description in a ticket. Keep passwords and verification codes out of tickets."}
+                  </p>
+                )}
                 <button
                   type="button"
                   className="min-h-11 text-primary underline underline-offset-4"

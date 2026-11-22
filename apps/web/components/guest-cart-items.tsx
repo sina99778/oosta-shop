@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { guestCartLifetime, removeGuestCartItem, useGuestCart } from "@/lib/guest-cart";
 import { formatDate, formatPrice } from "@/lib/format";
+import { planDisplayLabel } from "@/lib/product-variant";
 import type { Locale } from "@/lib/i18n";
 import type { IndicativePrice } from "@/lib/types";
 import { useApi } from "@/lib/use-api";
@@ -91,7 +92,7 @@ export function GuestCartItems({ locale, signedIn }: { locale: Locale; signedIn:
                     <bdi>{plan.product}</bdi>
                   </Link>
                   <p className="mt-1 break-words text-sm text-muted">
-                    <bdi>{plan.label}</bdi>
+                    <bdi>{planDisplayLabel(plan.label, fa)}</bdi>
                   </p>
                 </div>
               ) : (
@@ -125,11 +126,7 @@ export function GuestCartItems({ locale, signedIn }: { locale: Locale; signedIn:
               <p className="text-sm text-muted">
                 {fa ? "مهلت سبد" : "Cart expires"} ·{" "}
                 <time dateTime={expiry}>
-                  {formatDate(expiry, locale)} ·{" "}
-                  {new Date(expiry).toLocaleTimeString(fa ? "fa-IR" : "en-US", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  {formatDate(expiry, locale)}
                 </time>
               </p>
               <Button
