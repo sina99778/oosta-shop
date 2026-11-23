@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Oosta encrypted backup
+
+[Timer]
+OnCalendar=*-*-* 04:15:00 Europe/Berlin
+RandomizedDelaySec=15m
+Persistent=true
+Unit=oosta-backup.service
+
+[Install]
+WantedBy=timers.target

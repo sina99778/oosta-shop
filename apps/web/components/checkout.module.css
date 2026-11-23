@@ -1,0 +1,1090 @@
+/* Cart, invoice review and payment result pages (Figma page "03 — سبد و پرداخت"). */
+.page {
+  --c-good-text: #15803d;
+  max-width: 1248px;
+  padding-block: 2rem 4rem;
+}
+
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin: 0 0 1.75rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  color: var(--c-muted);
+}
+
+.steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.steps li + li::before {
+  content: "";
+  width: 3rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--c-border);
+  margin-inline-end: 0.25rem;
+}
+
+.stepDot {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--c-surface);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--c-muted);
+}
+
+.steps [data-state="done"] .stepDot,
+.steps [aria-current="step"] .stepDot {
+  background: var(--c-navy);
+  color: #f3f6f8;
+}
+
+.steps [data-state="done"] .stepDot {
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+}
+
+.steps [aria-current="step"] {
+  color: var(--c-fg);
+  font-weight: 750;
+}
+
+:global(.dark) .steps [aria-current="step"] .stepDot {
+  background: var(--c-mint);
+  color: #102b28;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.headTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.headTitle h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  font-weight: 850;
+  line-height: 1.3;
+}
+
+.count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 999px;
+  background: var(--c-surface);
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: var(--c-muted);
+}
+
+.count::before {
+  content: "";
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.textLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--c-primary);
+  text-underline-offset: 4px;
+}
+
+.textLink:hover {
+  text-decoration: underline;
+}
+
+.meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: var(--c-card);
+  padding: 0.5rem 0.875rem;
+  font-size: 0.8125rem;
+  color: var(--c-muted);
+}
+
+.meta svg {
+  color: var(--c-primary);
+}
+
+.notices {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--c-primary) 35%, var(--c-border));
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--c-primary) 7%, var(--c-card));
+  padding: 0.875rem 1.125rem;
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+
+.notice[data-tone="danger"] {
+  border-color: color-mix(in srgb, var(--color-danger) 40%, var(--c-border));
+  background: color-mix(in srgb, var(--color-danger) 7%, var(--c-card));
+}
+
+.notice[data-tone="warn"] {
+  border-color: #f0b46b;
+  background: color-mix(in srgb, #f59e0b 10%, var(--c-card));
+}
+
+.notice > p {
+  flex: 1 1 16rem;
+  margin: 0;
+}
+
+.layout {
+  display: grid;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (min-width: 60rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 26rem);
+    column-gap: 2rem;
+  }
+
+  .aside {
+    position: sticky;
+    top: 5.5rem;
+  }
+}
+
+.card {
+  min-width: 0;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card, 1.25rem);
+  background: var(--c-card);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-card, none);
+}
+
+.cardHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--c-border);
+  padding-bottom: 0.875rem;
+  font-size: 0.8125rem;
+  color: var(--c-muted);
+}
+
+.cardHead h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--c-fg);
+}
+
+.invoiceNo {
+  display: grid;
+  text-align: end;
+}
+
+.invoiceNo strong {
+  font-size: 0.9375rem;
+  color: var(--c-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  border-bottom: 1px solid var(--c-border);
+  padding-block: 1.125rem;
+}
+
+.tile {
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--c-mint) 45%, var(--c-card));
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--c-navy);
+}
+
+:global(.dark) .tile {
+  background: #1d3b3a;
+  color: #c9f3e2;
+}
+
+.lineInfo {
+  min-width: 0;
+}
+
+.lineInfo h3,
+.lineInfo > a {
+  display: block;
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 800;
+  line-height: 1.6;
+  color: var(--c-fg);
+  overflow-wrap: anywhere;
+}
+
+.lineInfo > a:hover {
+  color: var(--c-primary);
+}
+
+.lineInfo p {
+  margin: 0.125rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  color: var(--c-muted);
+  overflow-wrap: anywhere;
+}
+
+.lineAlert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  margin-top: 0.375rem;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  color: #b45309;
+}
+
+:global(.dark) .lineAlert {
+  color: #fbbf24;
+}
+
+.lineAlert svg {
+  flex: none;
+  margin-top: 0.2rem;
+}
+
+.lineEnd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem 0.75rem;
+}
+
+.linePrice {
+  font-size: 1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lineActions {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1rem;
+  font-size: 0.8125rem;
+  color: var(--c-muted);
+}
+
+.iconButton {
+  display: inline-grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--c-border);
+  border-radius: 0.75rem;
+  background: var(--c-card);
+  color: var(--c-danger-text);
+  transition: background 0.15s ease;
+}
+
+.iconButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 8%, var(--c-card));
+}
+
+.iconButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.iconButton:focus-visible,
+.textLink:focus-visible,
+.method:focus-within {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+
+.summary h2 {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.rows {
+  display: grid;
+  gap: 0.875rem;
+  margin: 0;
+  border-top: 1px solid var(--c-border);
+  padding-top: 1rem;
+  font-size: 0.875rem;
+}
+
+.rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.rows dt {
+  color: var(--c-muted);
+}
+
+.rows dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rows [data-tone="good"] dd {
+  color: var(--c-good-text);
+}
+
+.total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-top: 1rem;
+  border-top: 1px solid var(--c-border);
+  padding-top: 1rem;
+}
+
+.total dt {
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.total dd {
+  margin: 0;
+  font-size: clamp(1.5rem, 3vw, 1.875rem);
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+
+.cta {
+  display: grid;
+  gap: 0.625rem;
+  margin-top: 1.25rem;
+}
+
+.cta :is(a, button) {
+  width: 100%;
+  justify-content: center;
+}
+
+.secure {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  margin-top: 0.875rem;
+  font-size: 0.75rem;
+  color: var(--c-muted);
+  text-align: center;
+}
+
+.discount {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.discount label {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.discountRow {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.discountRow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.applied {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--c-good-text);
+}
+
+.applied button {
+  color: var(--c-danger-text);
+  font-weight: 650;
+  min-height: 2rem;
+}
+
+.methods {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+  border: 0;
+  padding: 0;
+}
+
+.methods legend {
+  margin-bottom: 0.75rem;
+  font-size: 1.125rem;
+  font-weight: 800;
+}
+
+.method {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.875rem;
+  border: 1px solid var(--c-border);
+  border-radius: 1rem;
+  background: var(--c-card);
+  padding: 1rem;
+  cursor: pointer;
+}
+
+.method:has(input:checked) {
+  border-color: var(--c-primary);
+  background: color-mix(in srgb, var(--c-primary) 7%, var(--c-card));
+}
+
+.method input {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: var(--c-primary);
+}
+
+.methodIcon {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  background: var(--c-surface);
+  color: var(--c-primary);
+}
+
+.method:has(input:checked) .methodIcon {
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+}
+
+.method strong {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+}
+
+.method small {
+  display: block;
+  margin-top: 0.125rem;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  color: var(--c-muted);
+}
+
+.fast {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-mint) 45%, transparent);
+  padding: 0 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--c-primary);
+}
+
+.empty {
+  display: grid;
+  justify-items: center;
+  gap: 0.625rem;
+  max-width: 34rem;
+  margin: 2rem auto;
+  border: 1.5px dashed var(--c-border);
+  border-radius: var(--radius-card, 1.25rem);
+  background: var(--c-card);
+  padding: 2.25rem 1.5rem;
+  text-align: center;
+}
+
+.empty h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.empty p {
+  margin: 0;
+  max-width: 26rem;
+  font-size: 0.875rem;
+  line-height: 1.9;
+  color: var(--c-muted);
+}
+
+.emptyIcon {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: var(--c-surface);
+  color: var(--c-muted);
+}
+
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.625rem;
+  margin-top: 0.75rem;
+}
+
+/* Payment result pages */
+.result {
+  display: grid;
+  justify-items: center;
+  gap: 0.75rem;
+  max-width: 35rem;
+  margin: 3rem auto;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card, 1.25rem);
+  background: var(--c-card);
+  padding: 2.5rem 2rem;
+  text-align: center;
+  box-shadow: var(--shadow-card, none);
+}
+
+.result h1 {
+  margin: 0.25rem 0 0;
+  font-size: clamp(1.625rem, 3.6vw, 2.125rem);
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.result p {
+  margin: 0;
+  max-width: 29rem;
+  line-height: 1.9;
+  color: var(--c-muted);
+}
+
+.resultIcon {
+  display: grid;
+  place-items: center;
+  width: 4.75rem;
+  height: 4.75rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--c-mint) 45%, var(--c-card));
+  color: var(--c-primary);
+}
+
+.result[data-tone="danger"] .resultIcon {
+  background: color-mix(in srgb, var(--color-danger) 12%, var(--c-card));
+  color: var(--c-danger-text);
+}
+
+.result[data-tone="pending"] .resultIcon {
+  background: color-mix(in srgb, #f59e0b 16%, var(--c-card));
+  color: #b45309;
+}
+
+.resultActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.625rem;
+  margin-top: 0.5rem;
+}
+
+.progress {
+  width: min(20rem, 100%);
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--c-surface);
+}
+
+.progress::after {
+  content: "";
+  display: block;
+  width: 60%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--c-primary);
+  animation: progress 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes progress {
+  from {
+    transform: translateX(40%);
+  }
+  to {
+    transform: translateX(-80%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress::after {
+    animation: none;
+  }
+}
+
+@media (max-width: 40rem) {
+  .page {
+    padding-block: 1.25rem 3rem;
+  }
+
+  .steps {
+    gap: 0.375rem;
+    font-size: 0.75rem;
+  }
+
+  .steps li + li::before {
+    width: 1rem;
+  }
+
+  .steps li:not([aria-current="step"]) .stepLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .card {
+    padding: 1.125rem;
+  }
+
+  .line {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .lineEnd {
+    grid-column: 2;
+    justify-content: space-between;
+  }
+
+  .tile {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  .result {
+    margin-block: 1.5rem;
+    padding: 2rem 1.25rem;
+  }
+}
+
+/* Card-to-card payment desk (Figma page "03 — سبد و پرداخت") */
+.deskStage {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+  padding: clamp(1.25rem, 3.5vw, 2rem);
+  margin-bottom: 1.5rem;
+  border-radius: 1.25rem;
+  border-block-end: 3px solid var(--c-mint);
+  background:
+    radial-gradient(
+      75% 130% at 10% 0%,
+      color-mix(in srgb, var(--c-mint) 17%, transparent),
+      transparent 65%
+    ),
+    var(--c-navy);
+  color: #edf5f8;
+  box-shadow: 0 26px 60px -46px color-mix(in srgb, var(--c-navy) 90%, transparent);
+}
+
+.deskStage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--c-mint) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--c-mint) 7%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(to bottom, #000, transparent 80%);
+}
+
+.deskStageCopy {
+  min-width: 0;
+}
+
+.deskBack {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.5rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: var(--c-mint);
+  text-underline-offset: 4px;
+}
+
+.deskBack:hover {
+  text-decoration: underline;
+}
+
+.deskEyebrow {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--c-mint);
+}
+
+.deskStage h1 {
+  margin: 0.25rem 0 0;
+  font-size: clamp(1.45rem, 3vw, 2.05rem);
+  font-weight: 850;
+  line-height: 1.4;
+  color: #f6fafb;
+}
+
+.deskStageSub {
+  margin: 0.45rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.75;
+  color: #c3d1da;
+}
+
+.deskMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.deskDeadline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 11%);
+  border: 1px solid rgb(183 236 216 / 28%);
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8125rem;
+  color: #f0f8fa;
+}
+
+.deskGrid {
+  display: grid;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.deskMain,
+.deskAside {
+  display: grid;
+  gap: 1.15rem;
+  min-width: 0;
+}
+
+@media (min-width: 60rem) {
+  .deskGrid {
+    grid-template-columns: minmax(19rem, 23.5rem) minmax(0, 1fr);
+    column-gap: 1.75rem;
+  }
+
+  .deskAside {
+    order: 1;
+    position: sticky;
+    top: 5.5rem;
+  }
+
+  .deskMain {
+    order: 2;
+  }
+}
+
+.deskStepHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1.15rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.deskStepTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.deskStepBadge {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--c-mint) 48%, var(--c-card));
+  color: var(--c-navy);
+  font-size: 0.875rem;
+  font-weight: 850;
+}
+
+:global(.dark) .deskStepBadge {
+  background: #1b3d3c;
+  color: var(--c-mint);
+}
+
+.deskStepTitle h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 800;
+}
+
+.deskStepTitle p {
+  margin: 0.125rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--c-muted);
+}
+
+.bankCard {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+  background:
+    radial-gradient(
+      90% 80% at 85% 0%,
+      color-mix(in srgb, var(--c-mint) 18%, transparent),
+      transparent 60%
+    ),
+    var(--c-navy);
+  color: #eff8f5;
+}
+
+.bankCardGlow {
+  pointer-events: none;
+  position: absolute;
+  inset-inline-end: -5rem;
+  top: -4rem;
+  z-index: -1;
+  width: 17rem;
+  height: 17rem;
+  border-radius: 50%;
+  border: 1px solid rgb(255 255 255 / 10%);
+}
+
+.bankCardGlow::after {
+  content: "";
+  position: absolute;
+  inset: 1.25rem;
+  border-radius: inherit;
+  border: 1px solid rgb(255 255 255 / 10%);
+}
+
+.bankCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.bankCardChip {
+  width: 2.5rem;
+  height: 1.7rem;
+  margin-block: 1.25rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgb(183 236 216 / 55%);
+  background: rgb(183 236 216 / 12%);
+}
+
+.bankCardLabel {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  color: #c5d9d9;
+}
+
+.bankCardNumber {
+  margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: clamp(1.1rem, 4vw, 1.65rem);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  user-select: all;
+  white-space: nowrap;
+}
+
+.bankCardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.85rem 1.25rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgb(255 255 255 / 14%);
+}
+
+.bankCardCopy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 3rem;
+  margin-top: 1.25rem;
+  padding-inline: 1rem;
+  border-radius: 0.85rem;
+  background: var(--c-mint);
+  color: var(--c-navy);
+  font-size: 0.875rem;
+  font-weight: 800;
+  transition: background-color 0.15s ease;
+}
+
+.bankCardCopy:hover:not(:disabled) {
+  background: #cdf4e5;
+}
+
+.bankCardCopy:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+}
+
+.amountCard {
+  border: 1px solid color-mix(in srgb, var(--c-primary) 28%, var(--c-border));
+  border-radius: var(--radius-card, 1.25rem);
+  background: color-mix(in srgb, var(--c-mint) 55%, var(--c-card));
+  padding: 1.25rem 1.35rem;
+  color: var(--c-navy);
+}
+
+:global(.dark) .amountCard {
+  background: #143332;
+  border-color: color-mix(in srgb, var(--c-mint) 30%, var(--c-border));
+  color: #e9f7f2;
+}
+
+.amountCardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.amountLabel {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 750;
+}
+
+.amountValue {
+  margin: 0.5rem 0 0;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.amountNote {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.7;
+  opacity: 0.85;
+}
+
+.amountBreakdown {
+  display: grid;
+  gap: 0.55rem;
+  margin: 1rem 0 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid color-mix(in srgb, var(--c-navy) 15%, transparent);
+  font-size: 0.8125rem;
+}
+
+:global(.dark) .amountBreakdown {
+  border-top-color: rgb(255 255 255 / 14%);
+}
+
+.amountBreakdown > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.amountBreakdown dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+:global(.dark) .page {
+  --c-good-text: #4ade80;
+}

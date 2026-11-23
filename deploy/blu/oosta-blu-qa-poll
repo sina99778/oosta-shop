@@ -1,0 +1,42 @@
+#!/bin/sh
+set -eu
+umask 077
+
+state=unavailable
+record_status() {
+  directory=${STATE_DIRECTORY:?}
+  report=$(mktemp "$directory/.last-run.XXXXXX")
+  printf '%s %s\n' "$(date +%s)" "$state" > "$report"
+  chmod 644 "$report"
+  mv -f "$report" "$directory/last-run"
+}
+trap record_status EXIT
+
+jobs=$(/usr/bin/timeout 15 /usr/bin/docker exec oosta-api-1 node /app/apps/api/dist/scripts/blu-qa-pending.js 2>/dev/null) || {
+  echo BLU_QA_QUEUE_UNAVAILABLE >&2
+  exit 1
+}
+if [ "$jobs" = '[]' ]; then
+  state=idle
+  echo 'BLU_QA_POLL {"idle":1}'
+  exit 0
+fi
+if [ "${#jobs}" -gt 4096 ] || [ -z "$jobs" ]; then
+  echo BLU_QA_QUEUE_INVALID >&2
+  exit 1
+fi
+result=0
+output=$(printf '%s\n' "$jobs" | /usr/bin/ssh -F /dev/null -T -p 42292 \
+  -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=5 \
+  -o StrictHostKeyChecking=yes -o GlobalKnownHostsFile=/dev/null \
+  -o UserKnownHostsFile=/etc/oosta-blu-qa-poll/known_hosts \
+  -o ServerAliveInterval=10 -o ServerAliveCountMax=2 \
+  -i /etc/oosta-blu-qa-poll/id_ed25519 root@127.0.0.1) || result=$?
+case "$result:$output" in
+  1:'BLU_QA_POLL {'*'"enrollmentRequired":1}' ) state=enrollmentRequired ;;
+  0:'BLU_QA_POLL {'*'"review":'[1-5]* ) state=review ;;
+  0:'BLU_QA_POLL {'*'"matched":'[1-5]* ) state=matched ;;
+  0:'BLU_QA_POLL {'*'"pending":'[1-5]'}' ) state=pending ;;
+esac
+printf 'BLU_QA_POLL_STATUS %s\n' "$state"
+if [ "$state" = unavailable ] || [ "$state" = enrollmentRequired ]; then exit 1; fi

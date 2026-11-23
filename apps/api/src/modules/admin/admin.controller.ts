@@ -2,6 +2,8 @@
 
 import type { Request, Response } from "express";
 import * as admin from "./admin.service";
+import { AppError } from "../../utils/httpError";
+import { getAttachment, sendAttachment } from "../tickets/tickets.service";
 import type {
   BulkInventoryInput,
   CreateApiKeyInput,
@@ -92,6 +94,14 @@ export async function listTickets(_req: Request, res: Response): Promise<void> {
 export async function getTicket(req: Request, res: Response): Promise<void> {
   res.json({ ticket: await admin.getTicket(String(req.params.id)) });
 }
+export async function getTicketAttachment(req: Request, res: Response): Promise<void> {
+  const file = await getAttachment(
+    { admin: true },
+    String(req.params.id),
+    String(req.params.messageId),
+  );
+  sendAttachment(res, file);
+}
 export async function replyTicket(req: Request, res: Response): Promise<void> {
   res.json({
     ticket: await admin.replyTicket(
@@ -161,6 +171,12 @@ export async function listOrders(_req: Request, res: Response): Promise<void> {
 export async function getOrder(req: Request, res: Response): Promise<void> {
   res.json({ order: await admin.getOrder(String(req.params.id)) });
 }
+export async function getOrderDeliveryCodes(req: Request, res: Response): Promise<void> {
+  if (req.authMethod === "api-key") {
+    throw new AppError(403, "FORBIDDEN", "An administrator session is required");
+  }
+  res.json({ items: await admin.getOrderDeliveryCodes(String(req.params.id)) });
+}
 
 // Card-to-card receipts
 export async function listReceipts(_req: Request, res: Response): Promise<void> {
@@ -170,15 +186,28 @@ export async function getReceiptImage(req: Request, res: Response): Promise<void
   const { data, mimeType } = await admin.getReceiptImage(String(req.params.id));
   res.setHeader("Content-Type", mimeType);
   res.setHeader("Cache-Control", "private, no-store");
+  if (mimeType === "application/pdf") {
+    res.setHeader("Content-Disposition", 'attachment; filename="receipt.pdf"');
+    res.setHeader("Content-Security-Policy", "sandbox");
+  }
   res.send(data);
 }
 export async function approveReceipt(req: Request, res: Response): Promise<void> {
   res.json({
-    receipt: await admin.approveReceipt(String(req.params.id), req.body as ReviewReceiptInput),
+    receipt: await admin.approveReceipt(
+      String(req.params.id),
+      req.body as ReviewReceiptInput,
+      false,
+      req.authMethod === "api-key" ? undefined : req.user?.id,
+    ),
   });
 }
 export async function rejectReceipt(req: Request, res: Response): Promise<void> {
   res.json({
-    receipt: await admin.rejectReceipt(String(req.params.id), req.body as ReviewReceiptInput),
+    receipt: await admin.rejectReceipt(
+      String(req.params.id),
+      req.body as ReviewReceiptInput,
+      req.authMethod === "api-key" ? undefined : req.user?.id,
+    ),
   });
 }

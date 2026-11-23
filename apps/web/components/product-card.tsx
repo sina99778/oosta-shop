@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
-import { ProductMark } from "@/components/product-mark";
 import { formatPrice } from "@/lib/format";
 import { productImageUrl } from "@/lib/api";
+import { availabilityOf, availabilityLabel } from "@/lib/product-availability";
 import type { Locale } from "@/lib/i18n";
 import type { ProductSummary } from "@/lib/types";
-
+import { IndicativePriceLabel } from "./indicative-price";
+import styles from "./shop.module.css";
 export type ProductCardLabels = {
   from: string;
   inStock: string;
@@ -14,127 +14,137 @@ export type ProductCardLabels = {
   off: string;
   left: string;
 };
-
-function stars(n: number): string {
-  const r = Math.round(n);
-  return "★★★★★☆☆☆☆☆".slice(5 - r, 10 - r);
-}
-
-function categoryName(product: ProductSummary, locale: Locale): string {
-  if (locale !== "fa") return product.category.name;
-  const names: Record<string, string> = {
-    "ai-accounts": "اکانت‌های هوش مصنوعی",
-    "software-licenses": "لایسنس نرم‌افزار",
-    "gift-cards": "گیفت‌کارت",
-  };
-  return names[product.category.slug] ?? product.category.name;
+// Two-letter tile text when a product has no image, e.g. "Claude Pro" → "CP".
+export function monogram(name: string): string {
+  const words = name
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const letters = words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? "").slice(0, 2);
+  return letters.toUpperCase();
 }
 
 export function ProductCard({
   product,
   locale,
   labels,
+  priority = false,
 }: {
   product: ProductSummary;
   locale: Locale;
   labels: ProductCardLabels;
+  priority?: boolean;
 }) {
   const image = productImageUrl(product);
+  const fa = locale === "fa";
+  const availability = availabilityOf(product);
+  const categoryNames: Record<string, string> = fa
+    ? {
+        "ai-accounts": "هوش مصنوعی",
+        "software-licenses": "نرم‌افزار و لایسنس",
+        "gift-cards": "گیفت‌کارت",
+      }
+    : {};
   return (
-    <Link href={`/${locale}/products/${product.slug}`} className="group block">
-      <article className="relative flex h-full min-h-[300px] flex-col overflow-hidden border border-border bg-card p-4 transition-all duration-200 hover:-translate-y-1 hover:border-primary hover:shadow-glow">
-        <div className="mb-5 flex items-start justify-between gap-3">
-          <div className="relative size-20 overflow-hidden">
+    <Link
+      href={{
+        pathname: `/${locale}/products/${product.slug}`,
+        query: product.pricePlanId ? { plan: product.pricePlanId } : undefined,
+      }}
+      prefetch={false}
+      className={styles.cardLink}
+      aria-label={`${fa ? "مشاهدهٔ محصول" : "View product"} ${product.name}`}
+    >
+      <article className={styles.productCard} data-stock={availability}>
+        <div className={styles.cardTop}>
+          <span className={styles.cardTile} data-kind={product.type}>
             {image ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={image}
-                alt={product.name}
-                loading="lazy"
+                alt=""
+                loading={priority ? "eager" : "lazy"}
                 decoding="async"
-                className="h-full w-full rounded-md object-cover transition-transform duration-300 group-hover:scale-105"
+                fetchPriority={priority ? "high" : "low"}
               />
             ) : (
-              <ProductMark
-                name={product.name}
-                slug={product.slug}
-                type={product.type}
-                className="size-20"
-              />
+              <span aria-hidden="true">{monogram(product.name)}</span>
             )}
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <span
-              className={`inline-flex items-center gap-1.5 text-xs font-medium ${
-                product.inStock ? "text-success" : "text-danger"
-              }`}
-            >
-              <span
-                className={`size-2 rounded-full ${product.inStock ? "bg-success" : "bg-danger"}`}
-              />
-              {product.inStock ? labels.inStock : labels.outOfStock}
+          </span>
+          <span className={styles.cardBadges}>
+            <span className={styles.stockBadge} data-stock={availability}>
+              {availabilityLabel(product, locale)}
             </span>
-            {product.isFeatured && (
-              <Badge tone="sale" className="rounded-sm">
-                {labels.featured}
-              </Badge>
+            {product.isFeatured && <span className={styles.featured}>{labels.featured}</span>}
+            {availability === "LOCAL_STOCK" && product.discountPercent > 0 && (
+              <span className={styles.sale}>
+                {product.discountPercent.toLocaleString(fa ? "fa" : "en")}% {labels.off}
+              </span>
             )}
-            {product.discountPercent > 0 && (
-              <Badge tone="sale" className="rounded-sm">
-                {product.discountPercent}% {labels.off}
-              </Badge>
-            )}
-          </div>
+          </span>
         </div>
-
-        <h3 className="text-lg font-black leading-snug group-hover:text-primary">{product.name}</h3>
-        <p className="mt-1 text-sm text-muted">{categoryName(product, locale)}</p>
-
+        <h3>
+          <bdi>{product.name}</bdi>
+        </h3>
+        <p className={styles.cardMeta}>
+          {categoryNames[product.category.slug] ?? product.category.name}
+          {product.pricePlanId && product.priceDurationDays != null
+            ? fa
+              ? ` · ${product.priceDurationDays.toLocaleString("fa")} روز`
+              : ` · ${product.priceDurationDays} ${product.priceDurationDays === 1 ? "day" : "days"}`
+            : product.pricePlanId && availability === "LOCAL_STOCK"
+              ? fa
+                ? " · بدون انقضا"
+                : " · No expiry"
+              : ""}
+        </p>
         {product.ratingCount > 0 && (
-          <p className="mt-3 text-xs text-accent">
-            {stars(product.ratingAverage)}{" "}
-            <span className="text-muted">({product.ratingCount})</span>
+          <p className={styles.rating} aria-label={`${product.ratingAverage} / 5`}>
+            ★ {product.ratingAverage.toLocaleString(fa ? "fa" : "en")}{" "}
+            <span>({product.ratingCount.toLocaleString(fa ? "fa" : "en")})</span>
           </p>
         )}
-
-        {product.priceFrom !== null && (
-          <div className="mt-auto pt-5">
-            <div>
-              {product.lowStock && (
-                <p className="mb-1 text-xs text-danger">
-                  {product.availableStock} {labels.left}
-                </p>
-              )}
-              <p className="text-xs text-muted">
-                {labels.from}{" "}
-                {product.originalPriceFrom !== null && (
-                  <span className="line-through">
-                    {formatPrice(product.originalPriceFrom, product.currency, locale)}
-                  </span>
-                )}
-              </p>
-              <p className="text-xl font-black text-foreground">
-                {formatPrice(product.priceFrom, product.currency, locale)}
-              </p>
-            </div>
-            <span className="mt-4 flex h-10 items-center justify-between border border-border px-3 text-sm font-bold transition-all group-hover:border-primary group-hover:text-primary">
-              <span>{product.inStock ? labels.inStock : labels.outOfStock}</span>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="rtl:-scale-x-100"
-              >
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
-            </span>
-          </div>
+        {product.lowStock && (
+          <p className={styles.lowStock}>
+            {product.availableStock.toLocaleString(fa ? "fa" : "en")} {labels.left}
+          </p>
         )}
+        <div className={styles.cardFoot}>
+          <div className={styles.cardPrice}>
+            {availability === "SUPPLIER_STOCK" && (
+              <IndicativePriceLabel price={product.indicativePriceFrom} locale={locale} from />
+            )}
+            {(availability === "ON_REQUEST" ||
+              (availability === "OUT_OF_STOCK" && product.supplierStockUnconfirmed)) && (
+              <small>{fa ? "قیمت با استعلام" : "Price on request"}</small>
+            )}
+            {availability === "LOCAL_STOCK" && product.priceFrom !== null && (
+              <>
+                <small>
+                  {labels.from}{" "}
+                  {product.originalPriceFrom !== null && (
+                    <del>
+                      <bdi>{formatPrice(product.originalPriceFrom, product.currency, locale)}</bdi>
+                    </del>
+                  )}
+                </small>
+                <strong>
+                  <bdi>{formatPrice(product.priceFrom, product.currency, locale)}</bdi>
+                </strong>
+              </>
+            )}
+          </div>
+          <span className={styles.cardAction}>
+            {availability === "OUT_OF_STOCK"
+              ? fa
+                ? "مشاهدهٔ پلن‌ها"
+                : "View plans"
+              : fa
+                ? "انتخاب پلن"
+                : "Choose a plan"}
+          </span>
+        </div>
       </article>
     </Link>
   );

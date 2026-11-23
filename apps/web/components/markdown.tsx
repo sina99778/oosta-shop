@@ -7,13 +7,32 @@
 // http(s)/root-relative URLs are accepted, so no HTML injection is possible.
 
 import type { ReactNode } from "react";
+import Link from "next/link";
+import { safeReturnPath } from "@/lib/navigation";
 
-const safe = (url: string) => /^https?:\/\//i.test(url) || url.startsWith("/");
+function safeUrl(url: string): string | null {
+  if (/^https?:\/\//i.test(url)) return URL.canParse(url) ? url : null;
+  const path = safeReturnPath(url, "");
+  return path && !path.startsWith("//") ? path : null;
+}
+
+function markdownLink(href: string, label: string, key: string) {
+  const className = "text-primary hover:underline";
+  return href.startsWith("/") ? (
+    <Link href={href} key={key} prefetch={false} className={className}>
+      {label}
+    </Link>
+  ) : (
+    <a href={href} key={key} target="_blank" rel="noopener noreferrer" className={className}>
+      {label}
+    </a>
+  );
+}
 
 const INLINE_SPLIT =
   /(!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|\*[^*\n]+\*|`[^`\n]+`)/g;
 
-function inline(text: string, keyPrefix: string): ReactNode[] {
+function inline(text: string, keyPrefix: string, preview: boolean): ReactNode[] {
   // Split on ![image](url), [link](url), **bold**, *italic*, `code`
   return text.split(INLINE_SPLIT).map((part, i) => {
     const key = `${keyPrefix}-${i}`;
@@ -31,11 +50,15 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
       );
     }
     const img = part.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
-    if (img && safe(img[2])) {
+    const imageUrl = img && safeUrl(img[2]);
+    if (img && imageUrl) {
+      if (preview && !/^\/(?:api\/)?blog-media\/[a-z0-9-]+$/i.test(imageUrl)) {
+        return <span key={key}>{img[1] || img[2]}</span>;
+      }
       return (
         <img
           key={key}
-          src={img[2]}
+          src={imageUrl}
           alt={img[1]}
           loading="lazy"
           decoding="async"
@@ -44,18 +67,15 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
       );
     }
     const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-    if (link && safe(link[2])) {
-      return (
-        <a
-          key={key}
-          href={link[2]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary hover:underline"
-        >
-          {link[1]}
-        </a>
-      );
+    const href = link && safeUrl(link[2]);
+    if (link && href) {
+      if (preview)
+        return (
+          <span key={key} className="text-primary">
+            {link[1]}
+          </span>
+        );
+      return markdownLink(href, link[1], key);
     }
     return part;
   });
@@ -70,8 +90,9 @@ function aparatHash(url: string): string | null {
   return m ? m[1] : null;
 }
 
-function videoEmbed(url: string, key: string): ReactNode {
-  if (!safe(url)) return null;
+function videoEmbed(value: string, key: string): ReactNode {
+  const url = safeUrl(value);
+  if (!url) return null;
   const yt = youtubeId(url);
   const ap = aparatHash(url);
   if (yt || ap) {
@@ -97,17 +118,7 @@ function videoEmbed(url: string, key: string): ReactNode {
       </video>
     );
   }
-  return (
-    <a
-      key={key}
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-primary hover:underline"
-    >
-      {url}
-    </a>
-  );
+  return markdownLink(url, value, key);
 }
 
 // Longest prefix first so "### " is not swallowed by "## ".
@@ -118,11 +129,43 @@ const HEADINGS: Array<{ prefix: string; cls: string; tag: "h3" | "h4" | "h5" | "
   { prefix: "# ", cls: "mt-4 mb-1 text-xl font-bold", tag: "h3" },
 ];
 
-export function Markdown({ text, className }: { text: string; className?: string }) {
+/** Anchor id for the n-th (1-based) top-level "## " section of an article. */
+export const sectionId = (n: number) => `section-${n}`;
+
+/** Table of contents for an article: its "## " sections, in order, as plain text. */
+export function markdownOutline(text: string): { id: string; title: string }[] {
+  return text
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("## ") && !line.startsWith("### "))
+    .map((line, index) => ({
+      id: sectionId(index + 1),
+      title: line
+        .slice(3)
+        .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+        .replace(/[*_`]/g, "")
+        .trim(),
+    }))
+    .filter((item) => item.title);
+}
+
+export function Markdown({
+  text,
+  className,
+  preview = false,
+  headingOffset = 2,
+}: {
+  text: string;
+  className?: string;
+  preview?: boolean;
+  headingOffset?: 0 | 2;
+}) {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   const blocks: ReactNode[] = [];
   let list: string[] = [];
   let listType: "ul" | "ol" = "ul";
+  let sections = 0;
 
   const flushList = () => {
     if (list.length === 0) return;
@@ -134,7 +177,7 @@ export function Markdown({ text, className }: { text: string; className?: string
         className={`my-2 space-y-1 ps-5 ${listType === "ul" ? "list-disc" : "list-decimal"}`}
       >
         {items.map((it, i) => (
-          <li key={i}>{inline(it, `li-${blocks.length}-${i}`)}</li>
+          <li key={i}>{inline(it, `li-${blocks.length}-${i}`, preview)}</li>
         ))}
       </Tag>,
     );
@@ -147,7 +190,15 @@ export function Markdown({ text, className }: { text: string; className?: string
     const video = line.match(/^!video\s+(\S+)$/i);
     if (video) {
       flushList();
-      blocks.push(videoEmbed(video[1], `v-${idx}`));
+      blocks.push(
+        preview ? (
+          <p key={`v-${idx}`} dir="ltr">
+            {video[1]}
+          </p>
+        ) : (
+          videoEmbed(video[1], `v-${idx}`)
+        ),
+      );
       return;
     }
 
@@ -174,17 +225,25 @@ export function Markdown({ text, className }: { text: string; className?: string
     if (line.startsWith("> ")) {
       blocks.push(
         <blockquote key={`q-${idx}`} className="my-3 border-s-2 border-primary/60 ps-4 text-muted">
-          {inline(line.slice(2), `q-${idx}`)}
+          {inline(line.slice(2), `q-${idx}`, preview)}
         </blockquote>,
       );
       return;
     }
     const heading = HEADINGS.find((h) => line.startsWith(h.prefix));
     if (heading) {
-      const Tag = heading.tag;
+      const Tag =
+        headingOffset === 0
+          ? (`h${Math.max(2, heading.prefix.trim().length)}` as "h2" | "h3" | "h4" | "h5" | "h6")
+          : heading.tag;
+      // Article sections get ids so the table of contents can link to them.
+      const id =
+        headingOffset === 0 && heading.prefix === "## " && !preview
+          ? sectionId(++sections)
+          : undefined;
       blocks.push(
-        <Tag key={`h-${idx}`} className={heading.cls}>
-          {inline(line.slice(heading.prefix.length), `h-${idx}`)}
+        <Tag key={`h-${idx}`} id={id} className={heading.cls}>
+          {inline(line.slice(heading.prefix.length), `h-${idx}`, preview)}
         </Tag>,
       );
       return;
@@ -193,7 +252,7 @@ export function Markdown({ text, className }: { text: string; className?: string
 
     blocks.push(
       <p key={`p-${idx}`} className="my-2 leading-relaxed">
-        {inline(line, `p-${idx}`)}
+        {inline(line, `p-${idx}`, preview)}
       </p>,
     );
   });

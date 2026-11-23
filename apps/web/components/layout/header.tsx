@@ -1,14 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { useApi } from "@/lib/use-api";
+import { cartChangedEvent, isGuestCartChange } from "@/lib/cart-events";
+import { useGuestCart } from "@/lib/guest-cart";
+import { notificationsChangedEvent } from "@/lib/notification-events";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
-import { cn } from "@/lib/cn";
 import { LocaleSwitcher } from "./locale-switcher";
 import { ThemeToggle } from "./theme-toggle";
+import { Wordmark } from "@/components/wordmark";
 import type { Locale } from "@/lib/i18n";
+import styles from "./site-chrome.module.css";
 
 type NavDict = {
   home: string;
@@ -32,98 +38,349 @@ export function Header({
   dict: NavDict;
   themeLabel: string;
 }) {
-  const { user, logout, loading } = useAuth();
+  const { user, token, logout, loading } = useAuth();
+  const cartSession = user?.role === "USER" ? token : null;
+  const guestCart = useGuestCart();
+  const { data: cart, refetch } = useApi<{ count: number }>(
+    cartSession ? "/cart/count" : null,
+    cartSession ?? undefined,
+  );
+  const { data: notifications, refetch: refetchNotifications } = useApi<{ count: number }>(
+    cartSession ? "/auth/notifications/count" : null,
+    cartSession ?? undefined,
+  );
   const pathname = usePathname();
+  const [openPath, setOpenPath] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const menuOpen = openPath === pathname;
+  const fa = locale === "fa";
   const base = `/${locale}`;
+  const menuLabel = fa ? "منوی اصلی" : "Main menu";
+  const cartLabel = fa ? "سبد خرید" : "Cart";
+  const cartHref = `${base}/cart`;
+  const inboxHref = `${base}/dashboard/inbox`;
+  const itemCount = cartSession ? (cart?.count ?? 0) : !loading && !user ? guestCart.length : 0;
+  const count = itemCount > 0 ? itemCount.toLocaleString(fa ? "fa-IR" : "en-US") : null;
+  const unread = notifications?.count ?? 0;
+  const unreadCount =
+    unread > 0 ? Math.min(unread, 99).toLocaleString(fa ? "fa-IR" : "en-US") : null;
+  const unreadLabel = fa
+    ? `${unread.toLocaleString("fa-IR")} اعلان خوانده‌نشده`
+    : `${unread} unread notifications`;
 
-  const link = (href: string, label: string) => {
-    const active = pathname === href || (href !== base && pathname.startsWith(href));
+  useEffect(() => {
+    if (!cartSession) return;
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible") {
+        refetch();
+        refetchNotifications();
+      }
+    };
+    const timer = setInterval(refreshVisible, 60000);
+    const refreshCart = (event: Event) => {
+      if (!isGuestCartChange(event)) refetch();
+    };
+    document.addEventListener("visibilitychange", refreshVisible);
+    window.addEventListener(cartChangedEvent, refreshCart);
+    window.addEventListener(notificationsChangedEvent, refetchNotifications);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshVisible);
+      window.removeEventListener(cartChangedEvent, refreshCart);
+      window.removeEventListener(notificationsChangedEvent, refetchNotifications);
+    };
+  }, [cartSession, refetch, refetchNotifications]);
+
+  const routes = [
+    { href: base, label: dict.home },
+    { href: `${base}/products`, label: dict.products },
+    { href: `${base}/blog`, label: dict.blog },
+    { href: `${base}/support`, label: dict.support },
+    ...(user?.role === "ADMIN" ? [{ href: `${base}/admin`, label: dict.admin }] : []),
+  ];
+  // The phone menu has no toolbar room, so it lists the account pages as links.
+  const mobileRoutes = [
+    ...routes,
+    ...(user ? [{ href: `${base}/dashboard`, label: dict.dashboard }] : []),
+    ...(user?.role === "USER" ? [{ href: inboxHref, label: fa ? "صندوق پیام" : "Inbox" }] : []),
+  ];
+
+  function inboxLink() {
+    if (user?.role !== "USER") return null;
     return (
       <Link
-        href={href}
-        className={cn(
-          "text-sm transition-colors",
-          active ? "font-medium text-foreground" : "text-muted hover:text-foreground",
-        )}
+        prefetch={false}
+        href={inboxHref}
+        className={`oosta-button ${styles.tool} ${styles.cartTool} ${styles.desktopOnly}`}
+        data-button-variant="outline"
+        aria-current={pathname === inboxHref ? "page" : undefined}
+        aria-label={
+          unreadCount
+            ? `${fa ? "صندوق پیام" : "Inbox"}، ${unreadLabel}`
+            : fa
+              ? "صندوق پیام"
+              : "Inbox"
+        }
       >
-        {label}
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="m3.5 6.5 8.5 6 8.5-6" />
+        </svg>
+        {unreadCount && (
+          <span aria-hidden="true" className={styles.cartCount}>
+            {unreadCount}
+            {unread > 99 ? "+" : ""}
+          </span>
+        )}
       </Link>
     );
-  };
+  }
+
+  function cartLink() {
+    return (
+      <Link
+        prefetch={false}
+        href={cartHref}
+        className={`oosta-button ${styles.tool} ${styles.cartTool}`}
+        data-button-variant="outline"
+        onClick={() => setOpenPath(null)}
+        aria-current={
+          pathname === cartHref || pathname.startsWith(`${cartHref}/`) ? "page" : undefined
+        }
+        aria-label={count ? `${cartLabel} (${count})` : cartLabel}
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M3 4h2l2.4 10.5h11.8L21 7H5.7" />
+          <circle cx="8.5" cy="19" r="1.2" />
+          <circle cx="18" cy="19" r="1.2" />
+        </svg>
+        {count && (
+          <span aria-hidden="true" className={styles.cartCount}>
+            {count}
+          </span>
+        )}
+      </Link>
+    );
+  }
+
+  function navigation(list = routes) {
+    return list.map(({ href, label }) => {
+      const active =
+        pathname === href ||
+        (href !== base &&
+          pathname.startsWith(`${href}/`) &&
+          !(href === `${base}/dashboard` && pathname === inboxHref));
+      const showUnread = href === inboxHref && unreadCount;
+      return (
+        <Link
+          prefetch={false}
+          key={href}
+          href={href}
+          className={styles.navLink}
+          onClick={() => setOpenPath(null)}
+          aria-current={active ? "page" : undefined}
+          aria-label={showUnread ? `${label}، ${unreadLabel}` : undefined}
+        >
+          {label}
+          {showUnread && (
+            <span aria-hidden="true" className={styles.unreadPill}>
+              {unreadCount}
+              {unread > 99 ? "+" : ""}
+            </span>
+          )}
+        </Link>
+      );
+    });
+  }
+
+  function accountButton() {
+    if (loading || !user) return accountActions();
+    const accountHref = `${base}/dashboard`;
+    return (
+      <Link
+        prefetch={false}
+        href={accountHref}
+        className={`oosta-button ${styles.accountAction}`}
+        data-button-variant="outline"
+        aria-current={
+          pathname === accountHref || pathname.startsWith(`${accountHref}/`) ? "page" : undefined
+        }
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" />
+        </svg>
+        {dict.dashboard}
+      </Link>
+    );
+  }
+
+  function accountActions() {
+    if (loading) return null;
+    if (user)
+      return (
+        <Button
+          variant="outline"
+          type="button"
+          size="sm"
+          disabled={loggingOut}
+          onClick={async () => {
+            setLogoutError(null);
+            setLoggingOut(true);
+            try {
+              await logout();
+              setOpenPath(null);
+            } catch {
+              setLogoutError(
+                fa ? "خروج انجام نشد؛ دوباره تلاش کن." : "Sign-out failed. Please try again.",
+              );
+            } finally {
+              setLoggingOut(false);
+            }
+          }}
+        >
+          {loggingOut ? (fa ? "در حال خروج…" : "Signing out…") : dict.logout}
+        </Button>
+      );
+    return (
+      <>
+        <Link
+          prefetch={false}
+          href={`${base}/login`}
+          onClick={() => setOpenPath(null)}
+          className={`oosta-button ${styles.accountAction}`}
+          data-button-variant="outline"
+        >
+          {dict.login}
+        </Link>
+        <Link
+          prefetch={false}
+          href={`${base}/signup`}
+          onClick={() => setOpenPath(null)}
+          className={`oosta-button ${styles.accountAction}`}
+          data-button-variant="primary"
+        >
+          {dict.signup}
+        </Link>
+      </>
+    );
+  }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-xl">
-      <Container className="flex h-[70px] items-center justify-between gap-4">
-        <div className="flex items-center gap-8">
-          <Link
-            href={base}
-            className="flex items-center gap-2 text-2xl font-black tracking-[-0.06em]"
-          >
-            <span>
-              oosta<span className="text-primary">AI</span>
-            </span>
-            <span className="size-2 rounded-full bg-primary" />
-          </Link>
-          <nav className="hidden items-center gap-7 md:flex">
-            {link(base, dict.home)}
-            {link(`${base}/products`, dict.products)}
-            {link(`${base}/blog`, dict.blog)}
-            {user && link(`${base}/dashboard`, dict.dashboard)}
-            {user && link(`${base}/support`, dict.support)}
-            {user?.role === "ADMIN" && link(`${base}/admin`, dict.admin)}
-          </nav>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Link
-            href={`${base}/products`}
-            aria-label={dict.products}
-            className="relative hidden size-10 items-center justify-center border border-border text-foreground transition-colors hover:border-primary hover:text-primary sm:inline-flex"
+    <header
+      className={`oosta-header ${styles.header}`}
+      // The home page opens on the navy brand stage; inner pages use the light bar.
+      data-tone={pathname === base || pathname === `${base}/` ? "stage" : "light"}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || !menuOpen) return;
+        setOpenPath(null);
+        menuButton.current?.focus();
+      }}
+    >
+      <Container className={styles.headerRow}>
+        <Link
+          prefetch={false}
+          href={base}
+          aria-label={fa ? "اوستا، صفحهٔ اصلی" : "Oosta home"}
+          className={styles.brand}
+          onClick={() => setOpenPath(null)}
+        >
+          <Wordmark />
+        </Link>
+        <nav className={styles.desktopNav} aria-label={menuLabel}>
+          {navigation()}
+        </nav>
+        <div className={styles.toolbar}>
+          {cartLink()}
+          {inboxLink()}
+          <ThemeToggle label={themeLabel} />
+          <LocaleSwitcher current={locale} />
+          <div className={styles.desktopAccount}>{accountButton()}</div>
+          <button
+            type="button"
+            ref={menuButton}
+            className={`oosta-button ${styles.menuButton}`}
+            data-button-variant="outline"
+            aria-label={
+              menuOpen
+                ? fa
+                  ? "بستن منو"
+                  : "Close menu"
+                : unreadCount
+                  ? `${menuLabel}، ${unreadLabel}`
+                  : menuLabel
+            }
+            aria-expanded={menuOpen}
+            aria-controls="mobile-navigation"
+            onClick={() => setOpenPath(menuOpen ? null : pathname)}
           >
             <svg
-              width="20"
-              height="20"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              strokeWidth="1.8"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              aria-hidden="true"
+              width="21"
+              height="21"
             >
-              <path d="M3 3h2l2.4 11.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.6L21 7H6" />
-              <circle cx="10" cy="20" r="1" />
-              <circle cx="18" cy="20" r="1" />
+              <path d={menuOpen ? "M6 6l12 12M18 6 6 18" : "M4 6h16M4 12h16M4 18h16"} />
             </svg>
-            <span className="absolute -end-1 -top-1 grid size-4 place-items-center rounded-full bg-primary text-[9px] font-bold text-white">
-              0
-            </span>
-          </Link>
-          <ThemeToggle label={themeLabel} />
-          <LocaleSwitcher current={locale} />
-          {!loading &&
-            (user ? (
-              <>
-                <span className="hidden text-sm text-muted lg:inline">{user.name}</span>
-                <Button variant="outline" size="sm" className="rounded-none" onClick={logout}>
-                  {dict.logout}
-                </Button>
-              </>
-            ) : (
-              <>
-                <Link
-                  href={`${base}/login`}
-                  className="hidden h-10 items-center border border-border px-4 text-sm text-foreground transition-colors hover:border-primary hover:text-primary sm:inline-flex"
-                >
-                  {dict.login}
-                </Link>
-                <Link
-                  href={`${base}/signup`}
-                  className="inline-flex h-10 items-center bg-primary px-4 text-sm font-bold text-white transition-colors hover:bg-primary-hover active:scale-[0.98]"
-                >
-                  {dict.signup}
-                </Link>
-              </>
-            ))}
+            {!menuOpen && unreadCount && <span className={styles.unreadDot} aria-hidden="true" />}
+          </button>
         </div>
       </Container>
+      <nav
+        id="mobile-navigation"
+        aria-label={menuLabel}
+        hidden={!menuOpen}
+        className={styles.mobileNav}
+      >
+        <Container className={styles.mobileInner}>
+          <div className={styles.mobileLinks}>{navigation(mobileRoutes)}</div>
+          {!loading && <div className={styles.mobileAccount}>{accountActions()}</div>}
+        </Container>
+      </nav>
+      {logoutError && (
+        <p role="alert" className="px-4 pb-3 text-center text-sm text-danger">
+          {logoutError}
+        </p>
+      )}
     </header>
   );
 }

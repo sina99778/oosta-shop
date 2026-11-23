@@ -25,6 +25,36 @@ export function visitorHashFor(ip: string, userAgent: string): string {
 
 const BOT_UA = /bot|crawl|spider|preview|fetch|monitor|curl|wget|lighthouse|headless/i;
 
+export const storefrontSteps = [
+  "product_viewed",
+  "plan_selected",
+  "quote_received",
+  "plan_login_started",
+  "plan_restored",
+] as const;
+
+export const checkoutSteps = ["cart_invoice_reviewed", "cart_payment_started"] as const;
+
+export type FunnelStep = (typeof storefrontSteps)[number] | (typeof checkoutSteps)[number];
+
+export const funnelStepLabels: Record<FunnelStep, string> = {
+  product_viewed: "مشاهدهٔ محصول",
+  plan_selected: "انتخاب دستی پلن",
+  quote_received: "دریافت استعلام",
+  plan_login_started: "رفتن به ورود از پلن",
+  plan_restored: "بازگشت به همان پلن پس از ورود",
+  cart_invoice_reviewed: "بازبینی موفق فاکتور",
+  cart_payment_started: "شروع موفق پرداخت",
+};
+
+export async function recordStorefrontStep(step: FunnelStep, userAgent: string) {
+  if (BOT_UA.test(userAgent)) return;
+  const day = tehranDayStart(0);
+  await prisma.$executeRaw`
+    INSERT INTO storefront_step_counts ("day", step, count) VALUES (${day}, ${step}, 1)
+    ON CONFLICT ("day", step) DO UPDATE SET count = storefront_step_counts.count + 1`;
+}
+
 // Retention: rows older than this are pruned (piggybacked on inserts, ~1/1000).
 const RETENTION_DAYS = 90;
 let insertsSincePrune = 0;
@@ -64,6 +94,7 @@ async function rangeStats(since: Date): Promise<RangeStats> {
 }
 
 export type VisitStats = {
+  stepsWeek: Array<{ step: string; count: number }>;
   today: RangeStats;
   week: RangeStats;
   month: RangeStats;
@@ -72,7 +103,7 @@ export type VisitStats = {
 };
 
 export async function getVisitStats(): Promise<VisitStats> {
-  const [today, week, month, countries, daily] = await Promise.all([
+  const [today, week, month, countries, daily, steps] = await Promise.all([
     rangeStats(tehranDayStart(0)),
     rangeStats(tehranDayStart(6)),
     rangeStats(tehranDayStart(29)),
@@ -91,9 +122,15 @@ export async function getVisitStats(): Promise<VisitStats> {
       WHERE "createdAt" >= ${tehranDayStart(6)}
       GROUP BY 1
       ORDER BY 1 DESC`,
+    prisma.storefrontStepCount.groupBy({
+      by: ["step"],
+      where: { day: { gte: tehranDayStart(6) } },
+      _sum: { count: true },
+    }),
   ]);
 
   return {
+    stepsWeek: steps.map(({ step, _sum }) => ({ step, count: _sum.count ?? 0 })),
     today,
     week,
     month,

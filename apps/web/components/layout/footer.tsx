@@ -1,40 +1,27 @@
 import Link from "next/link";
 import { Container } from "@/components/ui/container";
 import { assetUrl } from "@/lib/api";
-import { localizedSetting, type SiteConfig } from "@/lib/settings";
+import {
+  localizedSetting,
+  publicContactLinks,
+  telegramSupportHref,
+  type SiteConfig,
+} from "@/lib/settings";
+import { sitePolicies, sitePolicy } from "@/lib/site-policies";
 import type { Locale } from "@/lib/i18n";
+import { Wordmark } from "@/components/wordmark";
+import styles from "./site-chrome.module.css";
 
 type FooterDict = {
-  tagline: string;
   rights: string;
-  aboutTitle: string;
   aboutDefault: string;
   shopTitle: string;
   supportTitle: string;
   contactTitle: string;
   trustTitle: string;
 };
-type NavDict = {
-  home: string;
-  products: string;
-  blog: string;
-  support: string;
-  dashboard: string;
-};
 
-// "@handle" -> platform URL; full URLs pass through.
-function socialHref(value: string, base: string): string {
-  if (/^https?:\/\//i.test(value)) return value;
-  return `${base}/${value.replace(/^@/, "")}`;
-}
-
-function FooterLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link href={href} className="text-sm text-muted transition-colors hover:text-primary">
-      {label}
-    </Link>
-  );
-}
+type NavDict = { home: string; products: string; blog: string; support: string; dashboard: string };
 
 export function Footer({
   locale,
@@ -47,124 +34,113 @@ export function Footer({
   nav: NavDict;
   config: SiteConfig;
 }) {
-  const year = new Date().getFullYear();
+  const fa = locale === "fa";
   const base = `/${locale}`;
   const { settings, enamadBadge } = config;
   const about = localizedSetting(settings, "footerAbout", locale) ?? dict.aboutDefault;
-
-  const contact: Array<{ label: string; href: string }> = [];
-  if (settings.contactEmail) {
-    contact.push({ label: settings.contactEmail, href: `mailto:${settings.contactEmail}` });
-  }
-  if (settings.contactPhone) {
-    contact.push({ label: settings.contactPhone, href: `tel:${settings.contactPhone}` });
-  }
-  if (settings.contactTelegram) {
-    contact.push({
-      label: `Telegram — ${settings.contactTelegram.replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "@")}`,
-      href: socialHref(settings.contactTelegram, "https://t.me"),
-    });
-  }
-  if (settings.contactInstagram) {
-    contact.push({
-      label: `Instagram — ${settings.contactInstagram.replace(/^https?:\/\/(www\.)?instagram\.com\//i, "@")}`,
-      href: socialHref(settings.contactInstagram, "https://instagram.com"),
-    });
-  }
-
+  const telegramHref = telegramSupportHref(settings);
+  const contact = publicContactLinks(settings);
   const badge = enamadBadge ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={assetUrl("/site-assets/enamad")}
-      alt="نماد اعتماد الکترونیکی"
-      className="h-24 w-24 rounded-xl border border-border bg-white object-contain p-1"
+      alt={fa ? "نماد اعتماد الکترونیکی" : "Electronic trust mark"}
+      className={styles.trustMark}
+      width={76}
+      height={76}
+      loading="lazy"
     />
   ) : null;
 
   return (
-    <footer className="mt-20 border-t-2 border-primary bg-[#0d0d0d] text-[#f7f3ea]">
-      <Container className="grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="space-y-4">
-          <Link
-            href={base}
-            className="flex items-center gap-2 text-2xl font-black tracking-[-0.06em]"
-          >
-            <span>
-              oosta<span className="text-primary">AI</span>
-            </span>
-            <span className="size-2 rounded-full bg-primary" />
+    <footer className={`oosta-footer ${styles.footer}`}>
+      <Container className={styles.footerGrid}>
+        <div className={styles.footerBrand}>
+          <Link prefetch={false} href={base} aria-label={fa ? "اوستا، صفحهٔ اصلی" : "Oosta home"}>
+            <Wordmark />
           </Link>
-          <p className="text-sm font-medium text-muted">{dict.tagline}</p>
-          <p className="text-sm leading-relaxed text-muted">{about}</p>
+          <p>{about}</p>
         </div>
-
-        <div className="space-y-3">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">
-            {dict.shopTitle}
-          </h3>
-          <div className="flex flex-col gap-2.5">
-            <FooterLink href={base} label={nav.home} />
-            <FooterLink href={`${base}/products`} label={nav.products} />
-            <FooterLink href={`${base}/blog`} label={nav.blog} />
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">
-            {dict.supportTitle}
-          </h3>
-          <div className="flex flex-col gap-2.5">
-            <FooterLink href={`${base}/support`} label={nav.support} />
-            <FooterLink href={`${base}/dashboard`} label={nav.dashboard} />
-          </div>
-          {contact.length > 0 && (
-            <>
-              <h3 className="pt-3 text-sm font-bold uppercase tracking-wider text-foreground/80">
-                {dict.contactTitle}
-              </h3>
-              <div className="flex flex-col gap-2.5">
-                {contact.map((c) => (
-                  <a
-                    key={c.href}
-                    href={c.href}
-                    target={c.href.startsWith("http") ? "_blank" : undefined}
-                    rel="noopener noreferrer"
-                    className="text-sm text-muted transition-colors hover:text-foreground"
-                    dir="ltr"
-                  >
-                    {c.label}
-                  </a>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="space-y-3">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-foreground/80">
-            {dict.trustTitle}
-          </h3>
-          {badge &&
-            (settings.enamadLink ? (
-              <a
-                href={settings.enamadLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block transition-transform hover:scale-105"
-              >
-                {badge}
-              </a>
-            ) : (
-              badge
+        <nav className={styles.footerColumn} aria-label={dict.shopTitle}>
+          <h2>{dict.shopTitle}</h2>
+          <Link prefetch={false} href={`${base}/products`}>
+            {nav.products}
+          </Link>
+          <Link prefetch={false} href={`${base}/blog`}>
+            {nav.blog}
+          </Link>
+          <Link prefetch={false} href={`${base}/p/about`}>
+            {sitePolicy("about", locale)?.title}
+          </Link>
+          <a href="https://t.me/oostaAi" target="_blank" rel="noopener noreferrer">
+            {fa ? "کانال اوستا" : "Oosta Telegram channel"}
+          </a>
+        </nav>
+        <section className={styles.footerColumn} aria-labelledby="footer-support">
+          <h2 id="footer-support">{dict.supportTitle}</h2>
+          <Link prefetch={false} href={`${base}/dashboard`}>
+            {fa ? "پیگیری سفارش‌ها" : "Track orders"}
+          </Link>
+          <Link prefetch={false} href={`${base}/support`}>
+            {fa ? "ثبت و پیگیری تیکت" : "Open or track a ticket"}
+          </Link>
+          {sitePolicies
+            .filter(({ slug }) => slug !== "about" && slug !== "contact")
+            .map(({ slug, ...translations }) => (
+              <Link prefetch={false} href={`${base}/p/${slug}`} key={slug}>
+                {translations[locale].title}
+              </Link>
             ))}
-          {!badge && <p className="text-sm text-muted">—</p>}
-        </div>
+        </section>
+        <section className={styles.footerColumn} aria-labelledby="footer-contact">
+          <h2 id="footer-contact">{dict.contactTitle}</h2>
+          <Link prefetch={false} href={`${base}/p/contact`}>
+            {sitePolicy("contact", locale)?.title}
+          </Link>
+          <a
+            href={telegramHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`oosta-button ${styles.contactAction}`}
+            data-button-variant="outline"
+          >
+            {fa ? "پشتیبانی تلگرام" : "Telegram support"}
+            <span aria-hidden="true">↗</span>
+          </a>
+          {contact.map(({ href, label }) => (
+            <a
+              key={href}
+              href={href}
+              dir="ltr"
+              target={href.startsWith("http") ? "_blank" : undefined}
+              rel={href.startsWith("http") ? "noopener noreferrer" : undefined}
+            >
+              {label}
+            </a>
+          ))}
+          {badge && (
+            <div className={styles.badge}>
+              <span>{dict.trustTitle}</span>
+              {settings.enamadLink && /^https?:\/\//i.test(settings.enamadLink) ? (
+                <a href={settings.enamadLink} target="_blank" rel="noopener noreferrer">
+                  {badge}
+                </a>
+              ) : (
+                badge
+              )}
+            </div>
+          )}
+        </section>
       </Container>
-
-      <div className="border-t border-[#393939]">
-        <Container className="flex flex-col items-center justify-between gap-2 py-5 text-sm text-muted sm:flex-row">
-          <p>© {year} oostaAI</p>
-          <p>{dict.rights}</p>
+      <div className={styles.footerBase}>
+        <Container className={styles.footerBaseRow}>
+          <p>
+            <bdi>© {new Date().getFullYear()} oostaAI</bdi>{" "}
+            <span className={styles.rights}>{dict.rights}</span>
+          </p>
+          <a href="#oosta-page-top" className={styles.backToTop}>
+            {fa ? "بازگشت به بالا" : "Back to top"} <span aria-hidden="true">↑</span>
+          </a>
         </Container>
       </div>
     </footer>

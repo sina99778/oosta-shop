@@ -1,0 +1,778 @@
+[
+  {
+    "category": "ai",
+    "slug": "chatgpt",
+    "name": "ChatGPT",
+    "domain": "openai.com",
+    "pattern": "chat\\s*gpt|\\bgpt (?:plus|pro|business)\\b",
+    "copy": "دستیار OpenAI برای نوشتن، تحلیل فایل و کمک به برنامه‌نویسی."
+  },
+  {
+    "category": "ai",
+    "slug": "gemini",
+    "name": "Gemini Pro",
+    "domain": "gemini.google.com",
+    "pattern": "gemini\\s*pro|google ai pro",
+    "copy": "دستیار هوش مصنوعی گوگل برای گفت‌وگو، خلاصه‌سازی و کار با تصویر و فایل."
+  },
+  {
+    "category": "ai",
+    "slug": "claude",
+    "name": "Claude",
+    "domain": "claude.ai",
+    "pattern": "\\bclaude\\b",
+    "copy": "دستیار Anthropic برای خواندن متن‌های بلند، نگارش و کار با کد."
+  },
+  {
+    "category": "ai",
+    "slug": "grok",
+    "name": "Grok",
+    "domain": "grok.com",
+    "pattern": "\\bgrok\\b",
+    "copy": "دستیار xAI برای گفت‌وگو، جست‌وجو و تحلیل محتوا."
+  },
+  {
+    "category": "ai",
+    "slug": "perplexity",
+    "name": "Perplexity",
+    "domain": "perplexity.ai",
+    "pattern": "perplexity",
+    "copy": "جست‌وجوی مبتنی بر هوش مصنوعی با ارجاع به منابع پاسخ."
+  },
+  {
+    "category": "ai",
+    "slug": "minimax",
+    "name": "MiniMax",
+    "domain": "minimax.io",
+    "pattern": "minimax",
+    "copy": "ابزارهای هوش مصنوعی MiniMax برای تولید و پردازش محتوا."
+  },
+  {
+    "category": "ai",
+    "slug": "deepseek",
+    "name": "DeepSeek",
+    "domain": "deepseek.com",
+    "pattern": "deepseek",
+    "copy": "مدل‌های هوش مصنوعی برای تحلیل، استدلال و کمک به کدنویسی."
+  },
+  {
+    "category": "ai",
+    "slug": "qwen",
+    "name": "Qwen",
+    "domain": "qwen.ai",
+    "pattern": "\\bqwen\\b",
+    "copy": "خانوادهٔ مدل‌های هوش مصنوعی علی‌بابا برای متن و کد."
+  },
+  {
+    "category": "ai",
+    "slug": "muse-ai",
+    "name": "Muse AI",
+    "domain": "usemuse.ai",
+    "pattern": "\\bmuse\\b",
+    "copy": "اعتبار ابزار Muse AI برای تولید محتوای خدمات همان پلتفرم."
+  },
+  {
+    "category": "ai",
+    "slug": "fin",
+    "name": "Fin",
+    "domain": "fin.ai",
+    "pattern": "\\bfin (?:ia|ai|advanced)\\b",
+    "copy": "دستیار هوش مصنوعی برای پاسخ به پرسش‌های مشتری در پشتیبانی."
+  },
+  {
+    "category": "creative",
+    "slug": "capcut",
+    "name": "CapCut",
+    "domain": "capcut.com",
+    "pattern": "cap\\s*cut",
+    "copy": "ویرایش ویدیو برای برش کلیپ، ساخت زیرنویس و تولید محتوای شبکه‌های اجتماعی."
+  },
+  {
+    "category": "creative",
+    "slug": "canva",
+    "name": "Canva",
+    "domain": "canva.com",
+    "pattern": "\\bcanva\\b",
+    "copy": "طراحی ارائه، پست و پوستر با قالب‌های آماده و ویرایشگر آنلاین."
+  },
+  {
+    "category": "creative",
+    "slug": "adobe-express",
+    "name": "Adobe Express",
+    "domain": "adobe.com",
+    "pattern": "adobe express",
+    "copy": "ساخت سریع پوستر، محتوای شبکه‌های اجتماعی و ویدیوهای کوتاه."
+  },
+  {
+    "category": "creative",
+    "slug": "adobe-creative-cloud",
+    "name": "Adobe Creative Cloud",
+    "domain": "adobe.com",
+    "pattern": "adobe (?:all apps?|full apps?|creative cloud)",
+    "copy": "مجموعهٔ برنامه‌های ادوبی برای طراحی، عکاسی و تدوین."
+  },
+  {
+    "category": "creative",
+    "slug": "figma",
+    "name": "Figma",
+    "domain": "figma.com",
+    "pattern": "figma",
+    "copy": "طراحی رابط، ساخت نمونهٔ تعاملی و همکاری روی فایل‌های طراحی."
+  },
+  {
+    "category": "creative",
+    "slug": "elevenlabs",
+    "name": "ElevenLabs",
+    "domain": "elevenlabs.io",
+    "pattern": "eleven\\s*(?:s\\s*)?labs",
+    "copy": "تولید و تبدیل صدا برای گویندگی، دوبله و محتوای صوتی."
+  },
+  {
+    "category": "creative",
+    "slug": "kling",
+    "name": "Kling AI",
+    "domain": "klingai.com",
+    "pattern": "kling|king stand",
+    "copy": "ساخت ویدیو از متن یا تصویر با هوش مصنوعی."
+  },
+  {
+    "category": "creative",
+    "slug": "veo",
+    "name": "Veo",
+    "domain": "labs.google",
+    "pattern": "\\bveo\\s*[34]\\b|\\bveo[34]\\b|pre - slot ultra",
+    "copy": "مدل تولید ویدیوی گوگل برای ساخت کلیپ از دستور متنی و تصویر."
+  },
+  {
+    "category": "creative",
+    "slug": "runway",
+    "name": "Runway",
+    "domain": "runwayml.com",
+    "pattern": "runway",
+    "copy": "تولید و ویرایش ویدیو با ابزارهای هوش مصنوعی."
+  },
+  {
+    "category": "creative",
+    "slug": "freepik",
+    "name": "Freepik",
+    "domain": "freepik.com",
+    "pattern": "freepik|magnific",
+    "copy": "دسترسی به منابع گرافیکی و ابزارهای ساخت و ویرایش تصویر."
+  },
+  {
+    "category": "creative",
+    "slug": "openart",
+    "name": "OpenArt",
+    "domain": "openart.ai",
+    "pattern": "open\\s*art",
+    "copy": "تولید و ویرایش تصویر با مدل‌ها و گردش‌کارهای هوش مصنوعی."
+  },
+  {
+    "category": "creative",
+    "slug": "dreamina",
+    "name": "Dreamina",
+    "domain": "dreamina.capcut.com",
+    "pattern": "dreamina",
+    "copy": "ساخت تصویر و ویدیو از متن یا تصویر مرجع."
+  },
+  {
+    "category": "creative",
+    "slug": "meitu",
+    "name": "Meitu",
+    "domain": "meitu.com",
+    "pattern": "meitu",
+    "copy": "ویرایش عکس و پرتره با فیلترها و ابزارهای روتوش."
+  },
+  {
+    "category": "creative",
+    "slug": "xingtu",
+    "name": "Xingtu",
+    "domain": "xingtu.com",
+    "pattern": "xingtu",
+    "copy": "ویرایش عکس و پرتره با ابزارهای موبایل."
+  },
+  {
+    "category": "creative",
+    "slug": "picsart",
+    "name": "Picsart",
+    "domain": "picsart.com",
+    "pattern": "picsart",
+    "copy": "ویرایش عکس و ساخت طرح برای شبکه‌های اجتماعی."
+  },
+  {
+    "category": "creative",
+    "slug": "higgsfield",
+    "name": "Higgsfield",
+    "domain": "higgsfield.ai",
+    "pattern": "higgsfield",
+    "copy": "ابزار تولید ویدیوی هوش مصنوعی برای ساخت کلیپ‌های کوتاه."
+  },
+  {
+    "category": "creative",
+    "slug": "heygen",
+    "name": "HeyGen",
+    "domain": "heygen.com",
+    "pattern": "heygen",
+    "copy": "ساخت ویدیو با آواتار و ابزارهای ترجمه و دوبله."
+  },
+  {
+    "category": "creative",
+    "slug": "suno",
+    "name": "Suno",
+    "domain": "suno.com",
+    "pattern": "\\bsuno\\b",
+    "copy": "ساخت قطعهٔ موسیقی و آواز از توضیح متنی."
+  },
+  {
+    "category": "creative",
+    "slug": "autodesk",
+    "name": "Autodesk",
+    "domain": "autodesk.com",
+    "pattern": "autodesk",
+    "copy": "نرم‌افزارهای طراحی فنی، مدل‌سازی سه‌بعدی و مهندسی."
+  },
+  {
+    "category": "creative",
+    "slug": "framer",
+    "name": "Framer",
+    "domain": "framer.com",
+    "pattern": "\\bframer\\b",
+    "copy": "طراحی و انتشار وب‌سایت با ویرایشگر بصری."
+  },
+  {
+    "category": "creative",
+    "slug": "mobbin",
+    "name": "Mobbin",
+    "domain": "mobbin.com",
+    "pattern": "\\bmobbin\\b",
+    "copy": "جست‌وجوی نمونه‌های رابط و الگوهای طراحی محصول."
+  },
+  {
+    "category": "creative",
+    "slug": "supercut",
+    "name": "Supercut",
+    "domain": "supercut.ai",
+    "pattern": "supercut",
+    "copy": "ضبط و اشتراک صفحه و ویدیو برای بازخورد و آموزش."
+  },
+  {
+    "category": "creative",
+    "slug": "magic-patterns",
+    "name": "Magic Patterns",
+    "domain": "magicpatterns.com",
+    "pattern": "magic patterns",
+    "copy": "ساخت نمونهٔ رابط و ایده‌پردازی برای طراحی محصول."
+  },
+  {
+    "category": "creative",
+    "slug": "gamma",
+    "name": "Gamma",
+    "domain": "gamma.app",
+    "pattern": "\\bgamma\\b",
+    "copy": "ساخت ارائه و سند از یک طرح اولیه یا متن."
+  },
+  {
+    "category": "learning",
+    "slug": "duolingo",
+    "name": "Duolingo",
+    "domain": "duolingo.com",
+    "pattern": "duolingo",
+    "copy": "یادگیری زبان با تمرین‌های کوتاه واژگان، شنیدن و مرور."
+  },
+  {
+    "category": "learning",
+    "slug": "coursera",
+    "name": "Coursera",
+    "domain": "coursera.org",
+    "pattern": "coursera",
+    "copy": "دسترسی به دوره‌های آنلاین دانشگاه‌ها و مؤسسات آموزشی."
+  },
+  {
+    "category": "learning",
+    "slug": "udemy",
+    "name": "Udemy",
+    "domain": "udemy.com",
+    "pattern": "udemy",
+    "copy": "دوره‌های ویدیویی برای یادگیری مهارت‌های کاری و شخصی."
+  },
+  {
+    "category": "learning",
+    "slug": "quizlet",
+    "name": "Quizlet",
+    "domain": "quizlet.com",
+    "pattern": "quizlet",
+    "copy": "ساخت فلش‌کارت و مرور مطالب با تمرین‌های مطالعه."
+  },
+  {
+    "category": "learning",
+    "slug": "wordwall",
+    "name": "Wordwall",
+    "domain": "wordwall.net",
+    "pattern": "wordwall",
+    "copy": "ساخت تمرین و بازی تعاملی برای کلاس و یادگیری."
+  },
+  {
+    "category": "learning",
+    "slug": "memrise",
+    "name": "Memrise",
+    "domain": "memrise.com",
+    "pattern": "memrise",
+    "copy": "تمرین واژگان و عبارت‌های روزمرهٔ زبان."
+  },
+  {
+    "category": "learning",
+    "slug": "scribd",
+    "name": "Scribd",
+    "domain": "scribd.com",
+    "pattern": "scribd",
+    "copy": "سرویس مطالعه و دسترسی به اسناد منتشرشده در Scribd."
+  },
+  {
+    "category": "learning",
+    "slug": "elevenreader",
+    "name": "ElevenReader",
+    "domain": "elevenreader.io",
+    "pattern": "eleven\\s*reader",
+    "copy": "خواندن متن، مقاله و سند با صدای مصنوعی."
+  },
+  {
+    "category": "learning",
+    "slug": "readwise",
+    "name": "Readwise",
+    "domain": "readwise.io",
+    "pattern": "readwise",
+    "copy": "جمع‌آوری و مرور هایلایت‌های کتاب و مقاله."
+  },
+  {
+    "category": "learning",
+    "slug": "waking-up",
+    "name": "Waking Up",
+    "domain": "wakingup.com",
+    "pattern": "waking up",
+    "copy": "برنامهٔ تمرین مدیتیشن با جلسات و محتوای صوتی."
+  },
+  {
+    "category": "entertainment",
+    "slug": "spotify",
+    "name": "Spotify",
+    "domain": "spotify.com",
+    "pattern": "spotify",
+    "copy": "پخش موسیقی و پادکست و مدیریت فهرست‌های پخش."
+  },
+  {
+    "category": "entertainment",
+    "slug": "apple-music",
+    "name": "Apple Music",
+    "domain": "music.apple.com",
+    "pattern": "apple music",
+    "copy": "سرویس پخش موسیقی اپل برای شنیدن آلبوم و فهرست پخش."
+  },
+  {
+    "category": "entertainment",
+    "slug": "crunchyroll",
+    "name": "Crunchyroll",
+    "domain": "crunchyroll.com",
+    "pattern": "crunchyroll|ᴄʀᴜɴᴄʜʏʀᴏʟʟ",
+    "copy": "تماشای آنلاین انیمه و مجموعه‌های آسیایی."
+  },
+  {
+    "category": "entertainment",
+    "slug": "max",
+    "name": "HBO Max",
+    "domain": "max.com",
+    "pattern": "hbo\\s*max",
+    "copy": "سرویس پخش آنلاین فیلم و سریال، از جمله آثار HBO."
+  },
+  {
+    "category": "entertainment",
+    "slug": "prime-video",
+    "name": "Prime Video",
+    "domain": "primevideo.com",
+    "pattern": "prime video",
+    "copy": "پلتفرم ویدیویی آمازون برای تماشای فیلم و سریال."
+  },
+  {
+    "category": "entertainment",
+    "slug": "netflix",
+    "name": "Netflix",
+    "domain": "netflix.com",
+    "pattern": "netflix",
+    "copy": "سرویس پخش آنلاین فیلم، سریال و مستند."
+  },
+  {
+    "category": "entertainment",
+    "slug": "youtube-premium",
+    "name": "YouTube Premium",
+    "domain": "youtube.com",
+    "pattern": "youtube premium",
+    "copy": "اشتراک یوتیوب برای تماشا و گوش‌دادن با امکانات نسخهٔ Premium."
+  },
+  {
+    "category": "entertainment",
+    "slug": "shahid",
+    "name": "Shahid",
+    "domain": "shahid.mbc.net",
+    "pattern": "shahid",
+    "copy": "سرویس پخش فیلم و سریال با تمرکز بر محتوای عربی."
+  },
+  {
+    "category": "entertainment",
+    "slug": "iqiyi",
+    "name": "iQIYI",
+    "domain": "iq.com",
+    "pattern": "iqiyi",
+    "copy": "سرویس پخش فیلم و مجموعه‌های آسیایی."
+  },
+  {
+    "category": "entertainment",
+    "slug": "vieon",
+    "name": "VieON",
+    "domain": "vieon.vn",
+    "pattern": "vieon",
+    "copy": "سرویس ویدیویی ویتنامی برای پخش فیلم، سریال و تلویزیون."
+  },
+  {
+    "category": "entertainment",
+    "slug": "locket",
+    "name": "Locket Gold",
+    "domain": "locket.camera",
+    "pattern": "locket",
+    "copy": "اشتراک برنامهٔ اشتراک‌گذاری عکس روی ویجت گوشی."
+  },
+  {
+    "category": "office",
+    "slug": "microsoft-365",
+    "name": "Microsoft 365",
+    "domain": "microsoft365.com",
+    "pattern": "(?:office|microsoft|ms)\\s*365",
+    "copy": "ابزارهای مایکروسافت برای سند، صفحه‌گسترده، ارائه و کار ابری."
+  },
+  {
+    "category": "office",
+    "slug": "microsoft-office",
+    "name": "Microsoft Office",
+    "domain": "office.com",
+    "pattern": "\\boffice\\s*20(?:16|19|21|24)",
+    "copy": "نسخه‌های نرم‌افزارهای اداری مایکروسافت برای رایانه."
+  },
+  {
+    "category": "office",
+    "slug": "windows",
+    "name": "Windows",
+    "domain": "microsoft.com",
+    "pattern": "\\bwindows\\s*(?:10|11)",
+    "copy": "کلید فعال‌سازی ویندوز برای نسخه و روش فعال‌سازیِ درج‌شده در پلن."
+  },
+  {
+    "category": "office",
+    "slug": "copilot",
+    "name": "Microsoft Copilot",
+    "domain": "copilot.microsoft.com",
+    "pattern": "microsoft copilot",
+    "copy": "دستیار هوش مصنوعی مایکروسافت برای نوشتن و انجام کارهای روزمره."
+  },
+  {
+    "category": "office",
+    "slug": "notion",
+    "name": "Notion",
+    "domain": "notion.so",
+    "pattern": "\\bnotion\\b",
+    "copy": "فضای کاری برای یادداشت، مستندسازی و پیگیری پروژه."
+  },
+  {
+    "category": "office",
+    "slug": "ilovepdf",
+    "name": "iLovePDF",
+    "domain": "ilovepdf.com",
+    "pattern": "ilovepdf",
+    "copy": "ابزارهای آنلاین ادغام، تبدیل، فشرده‌سازی و ویرایش PDF."
+  },
+  {
+    "category": "office",
+    "slug": "zoom",
+    "name": "Zoom",
+    "domain": "zoom.us",
+    "pattern": "\\bzoom\\b",
+    "copy": "ابزار جلسهٔ تصویری و وبینار برای کلاس و جلسهٔ کاری."
+  },
+  {
+    "category": "office",
+    "slug": "linkedin",
+    "name": "LinkedIn",
+    "domain": "linkedin.com",
+    "pattern": "linke?d[iı]n",
+    "copy": "پلن‌های حرفه‌ای لینکدین برای کاریابی یا توسعهٔ فروش."
+  },
+  {
+    "category": "office",
+    "slug": "granola",
+    "name": "Granola",
+    "domain": "granola.ai",
+    "pattern": "\\bgranola\\b",
+    "copy": "یادداشت‌برداری و خلاصه‌سازی جلسه با هوش مصنوعی."
+  },
+  {
+    "category": "office",
+    "slug": "grammarly",
+    "name": "Grammarly",
+    "domain": "grammarly.com",
+    "pattern": "grammarly",
+    "copy": "بررسی نگارش انگلیسی، اصلاح جمله و تنظیم لحن."
+  },
+  {
+    "category": "office",
+    "slug": "wispr-flow",
+    "name": "Wispr Flow",
+    "domain": "wisprflow.ai",
+    "pattern": "wispr flow",
+    "copy": "تبدیل گفتار به متن برای نوشتن در برنامه‌ها."
+  },
+  {
+    "category": "office",
+    "slug": "icloud",
+    "name": "iCloud",
+    "domain": "icloud.com",
+    "pattern": "icloud",
+    "copy": "فضای ابری اپل برای همگام‌سازی فایل و پشتیبان دستگاه."
+  },
+  {
+    "category": "office",
+    "slug": "airtable",
+    "name": "Airtable",
+    "domain": "airtable.com",
+    "pattern": "airtable",
+    "copy": "مدیریت داده و پروژه با جدول و پایگاه دادهٔ بصری."
+  },
+  {
+    "category": "office",
+    "slug": "chatprd",
+    "name": "ChatPRD",
+    "domain": "chatprd.ai",
+    "pattern": "chatprd",
+    "copy": "دستیار نگارش نیازمندی‌ها و مستندات محصول."
+  },
+  {
+    "category": "office",
+    "slug": "tradingview",
+    "name": "TradingView",
+    "domain": "tradingview.com",
+    "pattern": "tradingview",
+    "copy": "نمودار، ابزار تحلیل بازار و ساخت فهرست پیگیری."
+  },
+  {
+    "category": "development",
+    "slug": "lovable",
+    "name": "Lovable",
+    "domain": "lovable.dev",
+    "pattern": "\\blovable\\b",
+    "copy": "ساخت نمونهٔ برنامهٔ وب با دستور متنی و ویرایش پروژه."
+  },
+  {
+    "category": "development",
+    "slug": "replit",
+    "name": "Replit",
+    "domain": "replit.com",
+    "pattern": "replit",
+    "copy": "محیط آنلاین نوشتن، اجرای کد و انتشار برنامه."
+  },
+  {
+    "category": "development",
+    "slug": "linear",
+    "name": "Linear",
+    "domain": "linear.app",
+    "pattern": "\\blinear\\b",
+    "copy": "مدیریت وظیفه، گزارش خطا و برنامه‌ریزی تیم محصول."
+  },
+  {
+    "category": "development",
+    "slug": "posthog",
+    "name": "PostHog",
+    "domain": "posthog.com",
+    "pattern": "posthog",
+    "copy": "تحلیل رفتار کاربر و رویدادهای محصول دیجیتال."
+  },
+  {
+    "category": "development",
+    "slug": "warp-terminal",
+    "name": "Warp",
+    "domain": "warp.dev",
+    "pattern": "\\bwarp build",
+    "copy": "ترمینال توسعه برای اجرای فرمان و مدیریت گردش کار کدنویسی."
+  },
+  {
+    "category": "development",
+    "slug": "n8n",
+    "name": "n8n",
+    "domain": "n8n.io",
+    "pattern": "\\bn8n\\b",
+    "copy": "خودکارسازی کارها با اتصال سرویس‌ها و ساخت گردش کار."
+  },
+  {
+    "category": "development",
+    "slug": "arize",
+    "name": "Arize",
+    "domain": "arize.com",
+    "pattern": "\\barize\\b",
+    "copy": "مشاهده و ارزیابی رفتار مدل‌ها و سامانه‌های هوش مصنوعی."
+  },
+  {
+    "category": "development",
+    "slug": "jam",
+    "name": "Jam",
+    "domain": "jam.dev",
+    "pattern": "\\bjam team",
+    "copy": "ثبت باگ با ضبط صفحه و زمینهٔ فنی برای تیم توسعه."
+  },
+  {
+    "category": "development",
+    "slug": "pangram",
+    "name": "Pangram",
+    "domain": "pangram.com",
+    "pattern": "pangram",
+    "copy": "ابزار بررسی متن برای تشخیص احتمال تولید با هوش مصنوعی."
+  },
+  {
+    "category": "development",
+    "slug": "jetbrains",
+    "name": "JetBrains",
+    "domain": "jetbrains.com",
+    "pattern": "jetbrains",
+    "copy": "محیط‌های برنامه‌نویسی JetBrains برای توسعه و اشکال‌زدایی."
+  },
+  {
+    "category": "development",
+    "slug": "railway",
+    "name": "Railway",
+    "domain": "railway.com",
+    "pattern": "railway",
+    "copy": "میزبانی و انتشار برنامه، سرویس و پایگاه داده."
+  },
+  {
+    "category": "development",
+    "slug": "resend",
+    "name": "Resend",
+    "domain": "resend.com",
+    "pattern": "resend",
+    "copy": "سرویس ارسال ایمیل تراکنشی از برنامه و API."
+  },
+  {
+    "category": "development",
+    "slug": "cursor",
+    "name": "Cursor",
+    "domain": "cursor.com",
+    "pattern": "\\bcursor\\b",
+    "copy": "ویرایشگر کد با دستیار هوش مصنوعی برای توضیح و تغییر پروژه."
+  },
+  {
+    "category": "development",
+    "slug": "codex-api",
+    "name": "Codex API",
+    "domain": "openai.com",
+    "pattern": "api.*codex|codex.*api",
+    "copy": "پلن‌های اعتبار API برای کار با کد، مطابق مقدار و دورهٔ هر گزینه."
+  },
+  {
+    "category": "development",
+    "slug": "youtube-automation",
+    "name": "YouTube Automation Pro",
+    "domain": "youtube.com",
+    "pattern": "youtube automation",
+    "copy": "ابزار مدیریت گردش کار تولید محتوا برای یوتیوب."
+  },
+  {
+    "category": "gaming",
+    "slug": "nord",
+    "name": "Nord · اتصال بازی",
+    "domain": "nordvpn.com",
+    "pattern": "\\bnord\\s*(?:vpn)\\b",
+    "copy": "اتصال از طریق سرورهای Nord برای تغییر مسیر ترافیک اینترنت."
+  },
+  {
+    "category": "gaming",
+    "slug": "express",
+    "name": "Express · اتصال بازی",
+    "domain": "expressvpn.com",
+    "pattern": "express\\s*vpn",
+    "copy": "سرویس Express برای اتصال رمزگذاری‌شده و انتخاب موقعیت سرور."
+  },
+  {
+    "category": "gaming",
+    "slug": "hma",
+    "name": "HMA · اتصال بازی",
+    "domain": "hidemyass.com",
+    "pattern": "\\bhma\\b",
+    "copy": "سرویس HMA برای اتصال از طریق سرورهای شبکه در موقعیت‌های متفاوت."
+  },
+  {
+    "category": "gaming",
+    "slug": "surfshark",
+    "name": "Surfshark · اتصال بازی",
+    "domain": "surfshark.com",
+    "pattern": "surf\\s*shark",
+    "copy": "اتصال رمزگذاری‌شده از طریق سرورهای Surfshark، با ظرفیت دستگاه متناسب با پلن."
+  },
+  {
+    "category": "gaming",
+    "slug": "proton",
+    "name": "Proton · اتصال بازی",
+    "domain": "protonvpn.com",
+    "pattern": "proton\\s*vpn",
+    "copy": "سرویس اتصال Proton برای رمزگذاری ترافیک و تغییر مسیر اینترنت."
+  },
+  {
+    "category": "gaming",
+    "slug": "discord",
+    "name": "Discord Nitro",
+    "domain": "discord.com",
+    "pattern": "discord nitro",
+    "copy": "اشتراک Nitro برای امکانات اضافه در پیام‌رسان و انجمن‌های دیسکورد."
+  },
+  {
+    "category": "security",
+    "slug": "kaspersky",
+    "name": "Kaspersky",
+    "domain": "kaspersky.com",
+    "pattern": "kaspersky",
+    "copy": "مجموعهٔ ابزارهای محافظت از دستگاه و امنیت آنلاین."
+  },
+  {
+    "category": "security",
+    "slug": "avira",
+    "name": "Avira",
+    "domain": "avira.com",
+    "pattern": "avira",
+    "copy": "ابزارهای محافظت از دستگاه و حریم خصوصی آنلاین."
+  },
+  {
+    "category": "security",
+    "slug": "proton-unlimited",
+    "name": "Proton Unlimited",
+    "domain": "proton.me",
+    "pattern": "proton unlimited",
+    "copy": "بستهٔ خدمات Proton برای ایمیل، فضای ابری و اتصال امن."
+  },
+  {
+    "category": "development",
+    "slug": "antigravity",
+    "name": "Google Antigravity",
+    "domain": "antigravity.google",
+    "pattern": "antigravity",
+    "copy": "محیط توسعهٔ گوگل برای کار با عامل‌های هوش مصنوعی و کد."
+  },
+  {
+    "category": "development",
+    "slug": "github-education",
+    "name": "GitHub Education",
+    "domain": "education.github.com",
+    "pattern": "github student",
+    "copy": "طرح آموزشی گیت‌هاب برای ابزارهای توسعه و یادگیری برنامه‌نویسی."
+  },
+  {
+    "category": "office",
+    "slug": "stripe-atlas",
+    "name": "Stripe Atlas",
+    "domain": "stripe.com",
+    "pattern": "stripe atlas",
+    "copy": "سرویس Stripe برای فرایند راه‌اندازی شرکت در آمریکا."
+  }
+]

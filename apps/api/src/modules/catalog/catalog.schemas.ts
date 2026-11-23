@@ -12,8 +12,22 @@ export const listProductsQuery = z.object({
   pageSize: z.coerce.number().int().min(1).max(50).default(12),
   category: z.string().trim().min(1).optional(),
   q: z.string().trim().min(1).max(100).optional(),
-  sort: z.enum(["newest", "price_asc", "price_desc"]).default("newest"),
+  sort: z
+    .enum([
+      "recommended",
+      "newest",
+      "price_asc",
+      "price_desc",
+      "available",
+      "popular",
+      "bestselling",
+    ])
+    .default("recommended"),
   featured: boolFlag,
+  // Storefront filters: purchasable now, access type and delivery of at least one plan.
+  inStock: boolFlag,
+  access: z.enum(["PERSONAL", "SHARED", "TEAM"]).optional(),
+  delivery: z.enum(["AUTOMATIC", "MANUAL"]).optional(),
 });
 
 export const bestsellingQuery = z.object({

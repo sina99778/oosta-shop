@@ -1,0 +1,43 @@
+{
+  "release": "/opt/oostaAI/releases/20261108-approved-stock",
+  "local": {
+    "verify": 0,
+    "lint": 0,
+    "build": 0,
+    "auditAll": 0,
+    "auditProduction": 0
+  },
+  "live": {
+    "supplierOrderId": "116970",
+    "siteOrderId": "cmw7s04ib0006qt019p9z8sst",
+    "state": "DELIVERED",
+    "purchasePosts": 1,
+    "chargedUsd": "0.40",
+    "cumulativeSpentUsd": "0.41",
+    "authorizedCeilingUsd": "1.58",
+    "walletBeforeUsd": "1.57",
+    "walletAfterUsd": "1.17",
+    "ownerHttp": 200,
+    "nonownerHttp": 404,
+    "inventoryUnits": 1,
+    "authorizationEnabled": false,
+    "reconciliationChargedAgain": false,
+    "officialLogin": true,
+    "officialPlan": "Premium",
+    "officialStatus": "Active",
+    "officialPeriodLabel": "Trial",
+    "officialTrialEnd": "2027-10-05",
+    "daysRemaining": 331,
+    "fullYearFromPurchaseVerified": false,
+    "loggedOut": true,
+    "passwordChanged": false,
+    "paidFeaturesUsed": false,
+    "publicPreviewChecks": "PASS",
+    "fxAttemptsObserved": 3
+  },
+  "limits": [
+    "Vendor title 1Yr differs from approximately331days remaining and official Trial label",
+    "No vendor refund or replacement purchase requested",
+    "No guarantee of future account availability"
+  ]
+}

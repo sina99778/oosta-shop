@@ -50,7 +50,9 @@ npm run db:up                 # via Docker
 
 # 4. Apply migrations and seed sample data
 npm run prisma:migrate -w @oosta/api
-npm run db:seed -w @oosta/api
+# The seed DELETES all data first, so it must be told which database to reset:
+# set OOSTA_SEED_RESET to host:port/database of DATABASE_URL (e.g. localhost:5432/oosta).
+OOSTA_SEED_RESET=localhost:5432/oosta npm run db:seed -w @oosta/api
 
 # 5. Run the apps (added in later phases)
 npm run dev:api
@@ -103,6 +105,6 @@ This project is being built in phases.
   compose file, and skeleton `api` / `web` workspaces.
 - **Phase 1 — Database modeling** ✅ — Prisma schema (User, Category, Product,
   ProductPlan, InventoryItem, Order, OrderItem) with gateway-agnostic payment fields,
-  the initial migration, and an idempotent seed script.
+  the initial migration, and a development seed script that resets demo data.
 
 Subsequent phases add the API, payments + instant-delivery engine, and the frontend.

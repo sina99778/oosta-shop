@@ -1,0 +1,16 @@
+[Unit]
+Description=Check pending Oosta preview receipts against Blu
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/oosta-blu-qa-poll
+TimeoutStartSec=190
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+LimitCORE=0
+StateDirectory=oosta-blu-status
+StateDirectoryMode=0755

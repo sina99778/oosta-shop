@@ -18,11 +18,17 @@
     "format:check": "prettier --check .",
     "dev:api": "npm run dev -w @oosta/api",
     "dev:web": "npm run dev -w @oosta/web",
+    "preview:storefront": "node scripts/storefront-preview.cjs",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:local:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pg-local.ps1 start",
     "db:local:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pg-local.ps1 stop",
-    "db:local:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pg-local.ps1 status"
+    "db:local:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pg-local.ps1 status",
+    "test:isolated": "node scripts/test-isolated.cjs",
+    "test:security": "node scripts/security-regression.cjs",
+    "test:contracts": "node node_modules/tsx/dist/cli.mjs apps/api/scripts/email-design-regressions.ts && node scripts/storefront-contracts.cjs && node scripts/admin-blog-contracts.cjs && node scripts/card-checkout-contracts.cjs && node scripts/supplier-contracts.cjs && node scripts/variant-ui-contracts.cjs && node scripts/design-ui-contracts.cjs && node scripts/guest-cart-contracts.cjs && node scripts/cart-review-contracts.cjs && node scripts/mobile-buy-bar-contracts.cjs && node scripts/product-seo-contracts.cjs && node scripts/seo-metadata-contracts.cjs && node scripts/web-build-origin-contracts.cjs && node scripts/seed-guard-regression.cjs && node scripts/product-content-contracts.cjs && node scripts/supplier-startup-contract.cjs && node scripts/fx-contracts.cjs && node scripts/fx-ui-contracts.cjs && node scripts/supplier-purchase-contracts.cjs && node scripts/supplier-qa-ui-contracts.cjs && node scripts/supplier-stock-contracts.cjs && node --test deploy/blu/event-wire.test.cjs deploy/blu/match-credit.test.cjs deploy/blu/session-vault.test.cjs deploy/blu/qa-poll.test.cjs && node scripts/preview-http-regressions.cjs && node --test deploy/ops/telegram-backup.test.cjs",
+    "verify": "npm run typecheck && npm run test:dependencies && npm run test:contracts && npm run test:security && npm run test:isolated",
+    "test:dependencies": "node scripts/audit-prisma-merge.cjs && node scripts/dependency-regressions.cjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",
@@ -30,6 +36,16 @@
     "globals": "^15.12.0",
     "prettier": "^3.3.3",
     "typescript": "^5.6.3",
-    "typescript-eslint": "^8.15.0"
+    "typescript-eslint": "^8.15.0",
+    "@prisma/config": "6.19.3"
+  },
+  "overrides": {
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "11.0.1"
+    },
+    "@prisma/config": {
+      "effect": "3.22.1"
+    },
+    "deepmerge-ts": "8.0.0"
   }
 }

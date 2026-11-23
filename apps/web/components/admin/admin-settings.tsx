@@ -160,8 +160,12 @@ export function AdminSettings({ dict }: { dict: Dictionary }) {
 
   async function removeBadge() {
     if (!token) return;
-    await api.del("/admin/settings/enamad", token).catch(() => {});
-    setHasBadge(false);
+    try {
+      await api.del("/admin/settings/enamad", token);
+      setHasBadge(false);
+    } catch {
+      setErr(dict.common.somethingWrong);
+    }
   }
 
   if (loading) {
@@ -324,7 +328,7 @@ export function AdminSettings({ dict }: { dict: Dictionary }) {
             <input
               ref={fileRef}
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp,image/gif"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];

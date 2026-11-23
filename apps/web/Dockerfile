@@ -11,6 +11,12 @@ RUN npm ci
 COPY apps/web ./apps/web
 ARG NEXT_PUBLIC_API_URL=http://localhost:4000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Public site origin (e.g. https://your-domain) for absolute URLs in metadata of
+# pages prerendered here. Empty keeps the old fallback (derived from the API URL).
+ARG NEXT_PUBLIC_WEB_URL=
+ENV NEXT_PUBLIC_WEB_URL=$NEXT_PUBLIC_WEB_URL
+ARG NEXT_PUBLIC_GA_MEASUREMENT_ID=
+ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=$NEXT_PUBLIC_GA_MEASUREMENT_ID
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build -w @oosta/web
 
@@ -24,5 +30,9 @@ ENV HOSTNAME=0.0.0.0
 COPY --from=build /app/apps/web/.next/standalone ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /app/apps/web/public ./apps/web/public
+# Next writes generated pages and cached images below .next.
+RUN mkdir -p apps/web/.next/cache \
+  && chown -R node:node apps/web/.next/cache apps/web/.next/server
 EXPOSE 3000
+USER node
 CMD ["node", "apps/web/server.js"]

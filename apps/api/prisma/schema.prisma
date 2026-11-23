@@ -18,6 +18,11 @@ enum Role {
   ADMIN
 }
 
+enum RecoveryChallengeKind {
+  RESET
+  VERIFY
+}
+
 enum ProductType {
   ACCOUNT
   LICENSE
@@ -34,6 +39,7 @@ enum PaymentStatus {
   PENDING
   PENDING_REVIEW
   PAID
+  PAID_PENDING_FULFILLMENT
   FAILED
   REJECTED
   REFUNDED
@@ -76,18 +82,43 @@ model User {
   id           String   @id @default(cuid())
   name         String
   email        String?  @unique
+  verifiedRecoveryEmail String?
   phone        String?  @unique
   passwordHash String
+  // Bumped on password change / logout-all; tokens carrying an older value are revoked.
+  sessionVersion Int             @default(0)
   role           Role            @default(USER)
   orders         Order[]
   reviews        Review[]
   tickets        Ticket[]
   ticketMessages TicketMessage[]
   apiKeys        ApiKey[]
+  supplierQaAttempts SupplierQaAttempt[]
+  supplierCheckoutQuotes SupplierCheckoutQuote[]
+  cartLines CartLine[]
+  welcomeGift WelcomeGift?
+  passwordReset PasswordReset?
+  stockAlerts StockAlert[]
+  notifications UserNotification[]
+  sessions       UserSession[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
   @@map("users")
+}
+
+model PasswordReset {
+  userId         String   @id
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash      String   @unique
+  kind           RecoveryChallengeKind
+  email          String
+  sessionVersion Int
+  requestedAt    DateTime
+  expiresAt      DateTime
+  usedAt         DateTime?
+
+  @@map("password_resets")
 }
 
 model Category {
@@ -99,6 +130,13 @@ model Category {
   updatedAt DateTime  @updatedAt
 
   @@map("categories")
+}
+
+model WelcomeGift {
+  userId String @id
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code String @unique
+  @@map("welcome_gifts")
 }
 
 model Product {
@@ -178,12 +216,16 @@ model Ticket {
   user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   subject   String
   status    TicketStatus    @default(OPEN)
+  // Optional order the customer is asking about; must belong to the ticket owner.
+  orderId   String?
+  order     Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
   messages  TicketMessage[]
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([orderId])
   @@map("tickets")
 }
 
@@ -195,6 +237,11 @@ model TicketMessage {
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   body      String
   isStaff   Boolean  @default(false)
+  // Optional private screenshot. Served only to the ticket owner and admins.
+  attachmentData Bytes?
+  attachmentMime String?
+  attachmentName String?
+  attachmentSize Int?
   createdAt DateTime @default(now())
 
   @@index([ticketId])
@@ -227,12 +274,15 @@ model BlogPost {
   content     String // Markdown
   coverData   Bytes?
   coverMime   String?
+  coverAlt    String? // Alt text for the cover image (empty = decorative)
+  tag         String? // One editorial topic used for journal filters and related posts
   status      PostStatus @default(DRAFT)
   publishedAt DateTime?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
   @@index([status, publishedAt])
+  @@index([tag])
   @@map("blog_posts")
 }
 
@@ -275,6 +325,15 @@ model Visit {
   @@map("visits")
 }
 
+model StorefrontStepCount {
+  day   DateTime
+  step  String
+  count Int      @default(0)
+
+  @@id([day, step])
+  @@map("storefront_step_counts")
+}
+
 // Small named binary assets (e.g. the Enamad e-trust badge image in the footer).
 model SiteAsset {
   key       String   @id
@@ -306,8 +365,16 @@ model ProductPlan {
   salePrice    Decimal?        @db.Decimal(12, 2) // discounted price (when set & < price)
   currency     String          @default("IRR")
   isActive     Boolean         @default(true)
+  sortOrder    Int             @default(0)
+  activationTerms String?
+  source       String          @default("INTERNAL")
+  variant      Json?
+  supplierMappings Json?
+  supplierCheckoutQuotes SupplierCheckoutQuote[]
   inventory    InventoryItem[]
   orderItems   OrderItem[]
+  cartLines    CartLine[]
+  stockAlerts  StockAlert[]
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
@@ -332,11 +399,14 @@ model InventoryItem {
   accountPassword String?
   licenseKey      String?
   giftCardCode    String?
+  deliveryInstructions String?
 
   // Fulfillment linkage — set atomically when the owning order is paid
   orderItemId String?
   orderItem   OrderItem? @relation(fields: [orderItemId], references: [id])
   soldAt      DateTime?
+  cartLineId  String?
+  cartLine    CartLine? @relation(fields: [cartLineId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -344,7 +414,25 @@ model InventoryItem {
   @@index([productId, planId, status])
   @@index([status])
   @@index([orderItemId])
+  @@index([cartLineId])
   @@map("inventory_items")
+}
+
+model CartLine {
+  id         String      @id @default(cuid())
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  planId     String
+  plan       ProductPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  amount     Decimal     @db.Decimal(12,2)
+  currency   String
+  signature  String
+  expiresAt  DateTime
+  orderId    String?
+  inventory  InventoryItem[]
+  @@unique([userId, planId])
+  @@index([expiresAt])
+  @@map("cart_lines")
 }
 
 model Order {
@@ -365,8 +453,15 @@ model Order {
   // Immutable provider settings needed to verify this specific payment session.
   // Runtime gateway settings may change while the buyer is on the gateway page.
   paymentMetadata  Json?
+  bluInvoiceKey    String?          @unique
+  welcomeGift      Boolean          @default(false)
 
   receipts  Receipt[]
+  tickets   Ticket[]
+  supplierQaAttempt SupplierQaAttempt?
+  supplierFulfillment SupplierFulfillment?
+  supplierCheckoutQuote SupplierCheckoutQuote?
+  bluBankClaim BluBankObservation?
 
   paidAt    DateTime?
   createdAt DateTime  @default(now())
@@ -389,6 +484,7 @@ model OrderItem {
   quantity  Int     @default(1)
   unitPrice Decimal @db.Decimal(12, 2)
   lineTotal Decimal @db.Decimal(12, 2)
+  planSnapshot Json?
 
   // Inventory units assigned to fulfill this line (one per quantity)
   fulfilledItems InventoryItem[]
@@ -417,4 +513,169 @@ model Receipt {
   @@index([status])
   @@index([orderId])
   @@map("receipts")
+}
+
+
+// Operator-funded integration QA: not a customer gateway payment or a public product.
+model SupplierCheckoutQuote {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  planId String
+  plan ProductPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  signature String
+  amount Decimal @db.Decimal(12,2)
+  selection Json
+  snapshot Json
+  expiresAt DateTime
+  orderId String? @unique
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, expiresAt])
+  @@map("supplier_checkout_quotes")
+}
+
+model EmailOutbox {
+  id String @id @default(cuid())
+  orderId String
+  kind String
+  to String
+  status String @default("PENDING")
+  attempts Int @default(0)
+  lastError String?
+  createdAt DateTime @default(now())
+  nextAt DateTime @default(now())
+  sentAt DateTime?
+  @@unique([orderId, kind])
+  @@index([status, nextAt])
+  @@map("email_outbox")
+}
+
+model StockAlert {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId    String
+  plan      ProductPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  locale    String
+  createdAt DateTime    @default(now())
+
+  @@unique([userId, planId])
+  @@index([planId])
+  @@map("stock_alerts")
+}
+
+model UserNotification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  key       String
+  locale    String
+  title     String
+  body      String
+  href      String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, key])
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("user_notifications")
+}
+
+model SupplierFulfillment {
+  id String @id @default(cuid())
+  orderId String @unique
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  reference String @unique
+  supplier String
+  externalId String
+  variantKey String
+  fingerprint String
+  quoteId String
+  maximumCost Decimal @db.Decimal(18,6)
+  approvedCost Decimal? @db.Decimal(18,6)
+  currency String
+  expiresAt DateTime
+  state String @default("READY")
+  supplierOrderId String?
+  chargedCost Decimal? @db.Decimal(18,6)
+  walletExposure Decimal? @db.Decimal(18,6)
+  // Private recovery data; never included in customer or admin DTOs.
+  result Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([supplier, supplierOrderId])
+  @@map("supplier_fulfillments")
+}
+
+// Explicit, non-renewing owner authorization. Never exposed through public settings.
+model SupplierWalletBudget {
+  supplier String @id
+  currency String
+  authorizedAmount Decimal @db.Decimal(18,6)
+  remainingAmount Decimal @db.Decimal(18,6)
+  enabled Boolean @default(false)
+  activeReference String? @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("supplier_wallet_budgets")
+}
+
+model SupplierQaAttempt {
+  id String @id @default(cuid())
+  authorizationId String
+  requestKey String @unique
+  reference String @unique
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  requestedById String
+  expectedCost Decimal @db.Decimal(18,6)
+  selection Json?
+  chargedCost Decimal? @db.Decimal(18,6)
+  currency String @default("USD")
+  state String @default("SENDING")
+  supplierOrderId String?
+  orderId String? @unique
+  order Order? @relation(fields:[orderId],references:[id],onDelete:Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([authorizationId])
+  @@map("supplier_qa_attempts")
+}
+
+model BluBankObservation {
+  transactionDigest String @id
+  invoiceKey        String
+  trackingDigest    String
+  occurredAt        DateTime
+  receivedAt        DateTime @default(now())
+  reviewRequired    Boolean @default(false)
+  matchedOrderId    String? @unique
+  matchedOrder      Order? @relation(fields: [matchedOrderId], references: [id], onDelete: Restrict)
+
+  @@index([invoiceKey])
+  @@map("blu_bank_observations")
+}
+
+// One row per browser login. Tokens carry its id (`sid`) so a customer can see the
+// devices signed in to their account and revoke one or all of the others.
+model UserSession {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent  String?
+  ipPrefix   String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+
+  @@index([userId, revokedAt])
+  @@map("user_sessions")
 }

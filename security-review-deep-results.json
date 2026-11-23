@@ -1,0 +1,94 @@
+[
+  {
+    "name": "OPEN_REDIRECT",
+    "evidence": {
+      "acceptedDestination": "//audit-external.invalid/path",
+      "validation": "actual AuthForm destination expression"
+    }
+  },
+  {
+    "name": "KNOWN_PRODUCTION_JWT_SECRET_ACCEPTED",
+    "evidence": {
+      "production": true,
+      "acceptedPublishedExampleSecret": true,
+      "forgedIdentity": "synthetic-admin-id"
+    }
+  },
+  {
+    "name": "TELEGRAM_GROUP_DISCLOSURE",
+    "evidence": {
+      "destinationChatId": -10012345,
+      "containsSyntheticBuyerEmail": true
+    }
+  },
+  {
+    "name": "RESTORE_PATH_TRAVERSAL_AND_NEGATED_CAPTION",
+    "evidence": {
+      "targetOutsideTempDirectory": true,
+      "caption": "do not restore this file",
+      "realWritesOrRestore": false
+    }
+  },
+  {
+    "name": "AGENT_MISSING_WRITE_AUTHORIZATION",
+    "evidence": {
+      "simulatedModel": true,
+      "readOnlyInstructionStillAllowedPaymentMutation": true,
+      "actualModelObedienceTested": false
+    }
+  },
+  {
+    "name": "PRODUCTION_SANDBOX_ALLOWED",
+    "evidence": {
+      "production": true,
+      "sandbox": true,
+      "blocked": false
+    }
+  },
+  {
+    "name": "multipart-control",
+    "evidence": {
+      "exitCode": 0,
+      "signal": null,
+      "stdout": "PROBE_READY multipart-control 163\n127.0.0.1 - - [04/Nov/2026:01:11:23 +0000] \"POST /orders/audit-order/receipt HTTP/1.1\" 400 68 \"-\" \"lightMyRequest\"\nPROBE_RESPONSE 400\n",
+      "stderr": ""
+    }
+  },
+  {
+    "name": "multipart-large-index",
+    "evidence": {
+      "exitCode": null,
+      "signal": "SIGTERM",
+      "error": "ETIMEDOUT",
+      "stdout": "PROBE_READY multipart-large-index 172\n",
+      "stderr": ""
+    }
+  },
+  {
+    "name": "compressed-deflate",
+    "evidence": {
+      "exitCode": 0,
+      "signal": null,
+      "stdout": "PROBE_READY compressed-deflate\n127.0.0.1 - - [04/Nov/2026:01:11:27 +0000] \"POST /not-a-route HTTP/1.1\" 404 77 \"-\" \"lightMyRequest\"\nPROBE_RESPONSE 404\n",
+      "stderr": ""
+    }
+  },
+  {
+    "name": "compressed-gzip",
+    "evidence": {
+      "exitCode": 0,
+      "signal": null,
+      "stdout": "PROBE_READY compressed-gzip\nPROBE_RESPONSE 500\n",
+      "stderr": "Error: incorrect header check\n    at genericNodeError (node:internal/errors:985:15)\n    at wrappedFn (node:internal/errors:539:14)\n    at Zlib.zlibOnError [as onerror] (node:zlib:190:17) {\n  errno: -3,\n  code: 'Z_DATA_ERROR',\n  expose: true,\n  statusCode: 400,\n  status: 400\n}\n"
+    }
+  },
+  {
+    "name": "compressed-br",
+    "evidence": {
+      "exitCode": 0,
+      "signal": null,
+      "stdout": "PROBE_READY compressed-br\n127.0.0.1 - - [04/Nov/2026:01:11:30 +0000] \"POST /not-a-route HTTP/1.1\" 404 77 \"-\" \"lightMyRequest\"\nPROBE_RESPONSE 404\n",
+      "stderr": ""
+    }
+  }
+]

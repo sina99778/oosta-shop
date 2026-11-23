@@ -26,7 +26,11 @@ export function apiOrigin(): string {
 // Cached by default (Next data cache, refreshed in the background every
 // `revalidateSeconds`) so repeat page renders cost ~0 API round-trips.
 // Pass 0 to bypass the cache (rarely needed — e.g. the sitemap).
-export async function fetchJson<T>(path: string, revalidateSeconds = 60): Promise<T | null> {
+export async function fetchJson<T>(
+  path: string,
+  revalidateSeconds = 60,
+  required = false,
+): Promise<T | null> {
   try {
     // Hard 5s cap: a slow/unreachable API degrades the page (defaults render)
     // instead of hanging the request until the gateway times out.
@@ -36,9 +40,14 @@ export async function fetchJson<T>(path: string, revalidateSeconds = 60): Promis
         : { cache: "no-store" as const }),
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      if (required) throw new Error("The store is temporarily unavailable");
+      return null;
+    }
     return (await res.json()) as T;
-  } catch {
+  } catch (error) {
+    if (required) throw error;
     return null;
   }
 }

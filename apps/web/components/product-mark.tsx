@@ -1,74 +1,26 @@
 import { cn } from "@/lib/cn";
 import type { ProductType } from "@/lib/types";
-
-export function ProductMark({
-  name,
-  slug,
-  type,
-  className,
-}: {
-  name: string;
-  slug: string;
-  type: ProductType;
-  className?: string;
-}) {
-  const base = "grid shrink-0 place-items-center overflow-hidden rounded-md border border-white/10";
-
-  if (slug.includes("chatgpt")) {
-    return (
-      <span className={cn(base, "bg-emerald-500 text-white", className)} aria-hidden>
-        <svg
-          viewBox="0 0 48 48"
-          className="h-[68%] w-[68%]"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="3.2"
-        >
-          <path d="M24 8a9 9 0 0 1 15 8v5a9 9 0 0 1-2 17l-4 2a9 9 0 0 1-16 0l-4-2a9 9 0 0 1-2-17v-5a9 9 0 0 1 13-8Z" />
-          <path d="m16 16 16 9-16 9V16Zm16 0-16 9 16 9V16Z" />
-        </svg>
-      </span>
-    );
-  }
-
-  if (slug.includes("claude")) {
-    return (
-      <span className={cn(base, "bg-[#e9783d] text-2xl font-black text-black", className)}>AI</span>
-    );
-  }
-
-  if (slug.includes("windows")) {
-    return (
-      <span className={cn(base, "bg-[#0678d8]", className)} aria-hidden>
-        <span className="grid h-1/2 w-1/2 grid-cols-2 gap-1">
-          {[0, 1, 2, 3].map((part) => (
-            <i key={part} className="bg-white" />
-          ))}
-        </span>
-      </span>
-    );
-  }
-
-  if (slug.includes("google-play")) {
-    return (
-      <span className={cn(base, "bg-[#171717]", className)} aria-hidden>
-        <span className="h-0 w-0 border-y-[17px] border-s-[27px] border-y-transparent border-s-[#42d77d]" />
-      </span>
-    );
-  }
-
-  if (slug.includes("gemini")) {
-    return (
-      <span className={cn(base, "bg-[#172033] text-3xl text-blue-400", className)} aria-hidden>
-        ✦
-      </span>
-    );
-  }
-
-  const fallback = type === "ACCOUNT" ? "AI" : type === "LICENSE" ? "KEY" : "GIFT";
+export function ProductMark({ type, className }: { type: ProductType; className?: string }) {
   return (
-    <span className={cn(base, "bg-primary text-xs font-black text-white", className)} aria-hidden>
-      {fallback || name.charAt(0)}
+    <span className={cn("oosta-product-mark", className)} data-kind={type} aria-hidden="true">
+      <svg
+        width="48"
+        height="48"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {type === "GIFTCARD" ? (
+          <path d="M3 9h18v4H3zM5 13v8h14v-8M12 9v12M12 9H8a2.5 2.5 0 1 1 2.3-3.5L12 9Zm0 0h4a2.5 2.5 0 1 0-2.3-3.5L12 9Z" />
+        ) : type === "LICENSE" ? (
+          <path d="M15 14a5 5 0 1 0-4.5-7.2L3 14.3V18h4v-3h3l2-2a5 5 0 0 0 3 1ZM16 8h.01" />
+        ) : (
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" />
+        )}
+      </svg>
     </span>
   );
 }

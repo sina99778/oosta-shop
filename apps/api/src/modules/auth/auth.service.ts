@@ -3,19 +3,40 @@
 import type { Prisma, User } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { hashPassword, verifyPassword } from "../../lib/password";
-import { signAccessToken } from "../../lib/jwt";
+import { issueSessionToken, revokeSessions, type SessionMeta } from "../../lib/userSessions";
 import { AppError } from "../../utils/httpError";
-import type { LoginInput, SignupInput } from "./auth.schemas";
+import { newWelcomeCode } from "../orders/welcome-gift";
+import type { ChangePasswordInput, LoginInput, SignupInput } from "./auth.schemas";
 
-export type PublicUser = Omit<User, "passwordHash">;
+export type PublicUser = Omit<User, "passwordHash" | "sessionVersion" | "verifiedRecoveryEmail"> & {
+  recoveryEmailVerified: boolean;
+};
 export type AuthResult = { user: PublicUser; token: string };
+const dummyPasswordHash = hashPassword("oosta-account-that-does-not-exist");
 
 function toPublicUser(user: User): PublicUser {
-  const { passwordHash: _passwordHash, ...rest } = user;
-  return rest;
+  const {
+    passwordHash: _passwordHash,
+    sessionVersion: _sessionVersion,
+    verifiedRecoveryEmail,
+    ...rest
+  } = user;
+  return {
+    ...rest,
+    recoveryEmailVerified: Boolean(
+      rest.role === "USER" && rest.email && rest.email === verifiedRecoveryEmail,
+    ),
+  };
 }
 
-export async function registerUser(input: SignupInput): Promise<AuthResult> {
+function issueToken(user: User, meta: SessionMeta): Promise<string> {
+  return issueSessionToken(user, meta);
+}
+
+export async function registerUser(
+  input: SignupInput,
+  meta: SessionMeta = {},
+): Promise<AuthResult> {
   const orConditions: Prisma.UserWhereInput[] = [];
   if (input.email) orConditions.push({ email: input.email });
   if (input.phone) orConditions.push({ phone: input.phone });
@@ -34,6 +55,7 @@ export async function registerUser(input: SignupInput): Promise<AuthResult> {
         email: input.email ?? null,
         phone: input.phone ?? null,
         passwordHash,
+        welcomeGift: { create: { code: newWelcomeCode() } },
       },
     });
   } catch (error) {
@@ -44,21 +66,70 @@ export async function registerUser(input: SignupInput): Promise<AuthResult> {
     throw error;
   }
 
-  return { user: toPublicUser(user), token: signAccessToken({ sub: user.id, role: user.role }) };
+  return { user: toPublicUser(user), token: await issueToken(user, meta) };
 }
 
-export async function loginUser(input: LoginInput): Promise<AuthResult> {
+export async function loginUser(input: LoginInput, meta: SessionMeta = {}): Promise<AuthResult> {
   const identifier = input.identifier.trim();
   const user = await prisma.user.findFirst({
     where: { OR: [{ email: identifier }, { phone: identifier }] },
   });
 
-  // Verify password even when the user is absent? Keep it simple: uniform error message.
-  if (!user || !(await verifyPassword(input.password, user.passwordHash))) {
+  // Keep the expensive password check on both paths to reduce timing enumeration.
+  const validPassword = await verifyPassword(
+    input.password,
+    user?.passwordHash ?? (await dummyPasswordHash),
+  );
+  if (!user || !validPassword) {
     throw new AppError(401, "UNAUTHORIZED", "Invalid credentials");
   }
 
-  return { user: toPublicUser(user), token: signAccessToken({ sub: user.id, role: user.role }) };
+  return { user: toPublicUser(user), token: await issueToken(user, meta) };
+}
+
+// Requires the current password, then rotates the hash and bumps sessionVersion in
+// one update so every token issued before the change (other devices, a stolen copy)
+// stops working. Returns a fresh token for the caller's own session.
+export async function changePassword(
+  userId: string,
+  input: ChangePasswordInput,
+  meta: SessionMeta = {},
+): Promise<AuthResult> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError(401, "UNAUTHORIZED", "User no longer exists");
+  if (!(await verifyPassword(input.currentPassword, user.passwordHash))) {
+    // 400, not 401: the session itself is valid and clients drop sessions on 401.
+    throw new AppError(400, "INVALID_CURRENT_PASSWORD", "Current password is incorrect");
+  }
+  const passwordHash = await hashPassword(input.newPassword);
+  let updated: User;
+  try {
+    updated = await prisma.user.update({
+      where: { id: userId, passwordHash: user.passwordHash, sessionVersion: user.sessionVersion },
+      data: { passwordHash, sessionVersion: { increment: 1 } },
+    });
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2025")
+      throw new AppError(
+        409,
+        "CREDENTIALS_CHANGED",
+        "Credentials changed during this request. Sign in again.",
+      );
+    throw error;
+  }
+  // The version bump already rejects older tokens; ending the rows keeps the device
+  // list truthful. The caller continues on a fresh session.
+  await revokeSessions(userId);
+  return { user: toPublicUser(updated), token: await issueToken(updated, meta) };
+}
+
+// "Log out on every device": revokes all existing tokens for this user.
+export async function revokeAllSessions(userId: string): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { sessionVersion: { increment: 1 } },
+  });
+  await revokeSessions(userId);
 }
 
 export async function getUserById(id: string): Promise<PublicUser> {

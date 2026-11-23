@@ -15,6 +15,7 @@ import { formatDate } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import type { AdminTicketDetail } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
+import { TicketAttachment } from "@/components/tickets/ticket-attachment";
 
 function tone(s: string): "success" | "muted" | "primary" {
   if (s === "ANSWERED") return "success";
@@ -32,6 +33,7 @@ export function AdminTicketDetailView({
   dict: Dictionary;
 }) {
   const { token } = useAuth();
+  const fa = locale === "fa";
   const t = dict.admin.tickets;
   const statusMap = t.status as Record<string, string>;
   const [reload, setReload] = useState(0);
@@ -42,15 +44,19 @@ export function AdminTicketDetailView({
 
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   async function reply(e: FormEvent) {
     e.preventDefault();
     if (!token || !body.trim()) return;
     setBusy(true);
+    setActionError(null);
     try {
       await api.post(`/admin/tickets/${ticketId}/messages`, { body }, token);
       setBody("");
       setReload((r) => r + 1);
+    } catch {
+      setActionError(dict.common.somethingWrong);
     } finally {
       setBusy(false);
     }
@@ -58,8 +64,13 @@ export function AdminTicketDetailView({
 
   async function setStatus(status: "OPEN" | "CLOSED") {
     if (!token) return;
-    await api.post(`/admin/tickets/${ticketId}/status`, { status }, token).catch(() => {});
-    setReload((r) => r + 1);
+    setActionError(null);
+    try {
+      await api.post(`/admin/tickets/${ticketId}/status`, { status }, token);
+      setReload((r) => r + 1);
+    } catch {
+      setActionError(dict.common.somethingWrong);
+    }
   }
 
   if (loading) {
@@ -87,6 +98,23 @@ export function AdminTicketDetailView({
           <p className="text-sm text-muted">
             {t.customer}: {ticket.user.name} · {ticket.user.email ?? ticket.user.phone ?? "—"}
           </p>
+          {ticket.customer && (
+            <p className="text-sm text-muted">
+              {fa ? "سفارش‌ها" : "Orders"}: {ticket.customer.orderCount.toLocaleString(locale)} ·{" "}
+              {fa ? "عضو از" : "Member since"} {formatDate(ticket.customer.memberSince, locale)}
+            </p>
+          )}
+          {ticket.order && (
+            <p className="text-sm">
+              <Link
+                className="text-primary underline"
+                href={`/${locale}/admin/orders/${encodeURIComponent(ticket.order.id)}`}
+              >
+                {fa ? "سفارش مرتبط" : "Related order"}{" "}
+                <bdi dir="ltr">#{ticket.order.id.slice(-8)}</bdi>
+              </Link>
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Badge tone={tone(ticket.status)}>{statusMap[ticket.status] ?? ticket.status}</Badge>
@@ -112,15 +140,31 @@ export function AdminTicketDetailView({
               )}
             >
               <p className="mb-1 text-xs font-medium text-muted">{m.isStaff ? t.staff : t.you}</p>
-              <p className="whitespace-pre-line">{m.body}</p>
+              {m.body && <p className="whitespace-pre-line">{m.body}</p>}
+              {m.attachment && token && (
+                <TicketAttachment
+                  path={`/admin/tickets/${encodeURIComponent(ticket.id)}/messages/${encodeURIComponent(m.id)}/attachment`}
+                  token={token}
+                  name={m.attachment.name}
+                  size={m.attachment.size}
+                  locale={locale}
+                />
+              )}
               <p className="mt-1 text-[10px] text-muted">{formatDate(m.createdAt, locale)}</p>
             </div>
           </div>
         ))}
       </div>
 
+      {actionError && (
+        <p role="alert" className="text-danger">
+          {actionError}
+        </p>
+      )}
       <form onSubmit={reply} className="space-y-2">
         <textarea
+          aria-label={t.writeReply}
+          maxLength={5000}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           rows={3}

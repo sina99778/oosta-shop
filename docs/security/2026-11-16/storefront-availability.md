@@ -1,0 +1,11 @@
+# Storefront availability
+
+The catalog now reports four states from existing data: local stock, confirmed supplier stock, supplier availability on request, and out of stock. Public product totals count only available units on active internal plans, so inactive, unassigned and supplier units cannot advertise local stock. Supplier states retain existing mapping, freshness, warranty and delivery checks. Product cards avoid displaying the internal price of a different plan for a supplier-stock or on-request state. The availability sort puts internal stock first.
+
+The selected plan, checkout configuration and chosen payment method govern the purchase controls. Supplier plans keep the authenticated quote route and can be rechecked when the current catalog has no verified offer. Structured product offers are emitted only for stocked internal plans with a configured payment method. The order API retains its independent stock and payment validation. No permissions, provider credentials, payment gates or database schema changed.
+
+The red regressions reproduced misleading counts from inactive/unassigned inventory and the absence of supplier and checkout distinctions. Disposable and rendering tests also cover stale offers, mixed sources, checkout disabled, card-only checkout, and unavailable supplier plans.
+
+`npm run verify`, `npm run lint`, and both production image builds passed. Both npm audits reported zero vulnerabilities. Synthetic visual checks covered cards and plan controls at 320, 390 and 1440 pixels. Homepage catalog data uses the existing server cache, while the product page fetches live availability from the API and checkout validates stock independently.
+
+Release `20261116-storefront-availability` was verified over HTTPS on the homepage, both catalog locales, and the ChatGPT and Gemini detail pages. The first 50 results sorted by availability had supplier stock and zero internal units at the time of the check. Detail DTOs distinguished confirmed stock, unavailable plans and on-request plans. Structured data omitted purchasable offers while public checkout was disabled. The first release smoke used an invalid page size of 100, triggering a rollback. The unchanged images passed after the smoke was rerun with the validated page size of 50. No purchase, provider call or payment was initiated by the live smoke.

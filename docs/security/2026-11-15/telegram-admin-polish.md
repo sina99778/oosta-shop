@@ -1,0 +1,13 @@
+# Telegram admin menu and status
+
+The private admin menu adds a Blu status button and `/blu`, `/orders`, and `/menu` shortcuts. Blu status reuses the web admin status reader, includes the automatic approval switch and the last check in Tehran time, and exposes no bank references or destination details. The order query selects recent order IDs, statuses, amounts and a bounded list of product names. It omits buyer contacts and credentials. Rial values are converted to toman for display only.
+
+All new commands and callbacks pass through the existing configured-admin and private-chat checks. There are no new write actions, public endpoints, DTO changes, migrations or dependencies. Existing gateway, receipt and restore authorization continues to apply. The regression runs the actual bot handlers with a synthetic Telegram API and disposable database. It checks menu access, status, private-chat denial, price conversion and the absence of customer contact data. The first run reproduced the missing menu action before implementation.
+
+`npm run verify`, `npm run lint`, the production API build and both dependency audits passed. Both audits reported zero advisories. Release `20261115-telegram-admin-polish` recreated only the API container. Its public health endpoint returned 200, Telegram startup logged no launch error, and the Blu timer remained active. Telegram verified the bot identity and configured private chat. The three deployed read handlers returned their expected output using a stub for outgoing messages. An actual Telegram message delivery test was not performed.
+
+## Persistent chat buttons
+
+`/start` and `/menu` now present four standard Telegram reply buttons for recent orders, Blu status, pending receipts and the existing tools menu. Button text is routed before generic AI input. The same private admin middleware covers commands, typed button labels and callbacks. The receipts shortcut calls the existing private receipt handler and preserves receipt review authorization. No new payment action, API endpoint, dependency or schema change was added. A disposable regression first reproduced the missing reply keyboard, then exercised its four button labels and denied use by a different sender or in a group without sending real Telegram messages.
+
+Full verify, ESLint, the production API image build and both audits passed. Release `20261115-telegram-keyboard` returned healthy over public HTTPS and started the bot without a launch error. The deployed `/start` handler produced four persistent buttons and the tools label opened the inline menu with Telegram output stubbed. Rendering on the user's device was not observed.

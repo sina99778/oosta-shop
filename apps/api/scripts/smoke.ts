@@ -465,14 +465,17 @@ async function testOrders(): Promise<void> {
   const paidCount = [vB1, vB2].filter(
     (v) => v.statusCode === 200 && body(v).status === "paid",
   ).length;
-  const oosCount = [vB1, vB2].filter((v) => v.statusCode === 409).length;
+  const oosCount = [vB1, vB2].filter(
+    (v) =>
+      v.statusCode === 200 && body(v).status === "pending" && typeof body(v).orderId === "string",
+  ).length;
   record(
     "oversell: exactly one paid",
     paidCount === 1,
     `codes=${vB1.statusCode},${vB2.statusCode}`,
   );
   record(
-    "oversell: exactly one 409 out-of-stock",
+    "oversell: confirmed payment returns a pending delivery with order id",
     oosCount === 1,
     `codes=${vB1.statusCode},${vB2.statusCode}`,
   );
@@ -498,8 +501,32 @@ async function testOrders(): Promise<void> {
     list.statusCode === 200 && Array.isArray(myOrders) && myOrders.length >= 4,
     `count=${myOrders?.length}`,
   );
+  const listRow = (myOrders as { id: string; firstProductName?: string }[] | undefined)?.find(
+    (order) => order.id === orderId1,
+  );
+  record(
+    "GET /orders lists the first product without fulfillment data",
+    !!listRow &&
+      listRow.firstProductName === product.name &&
+      !("items" in listRow) &&
+      !("credentials" in listRow) &&
+      /private.*no-store/.test(String(list.headers["cache-control"])),
+    "owner-only, private list summary",
+  );
+  const otherBuyer = await prisma.user.create({
+    data: { name: "Second buyer", email: `order_reader_${suffix}@example.invalid`, passwordHash: "unused" },
+  });
+  const foreignList = await get("/orders", signAccessToken({ sub: otherBuyer.id, role: "USER" }));
+  const anonymousList = await get("/orders");
+  record(
+    "GET /orders hides summaries from other users and anonymous requests",
+    foreignList.statusCode === 200 && Array.isArray(body(foreignList).orders) &&
+      (body(foreignList).orders as unknown[]).length === 0 && anonymousList.statusCode === 401,
+    `other=${foreignList.statusCode} anonymous=${anonymousList.statusCode}`,
+  );
 
   // Cleanup (FK-safe)
+  await prisma.user.delete({ where: { id: otherBuyer.id } });
   await prisma.order.deleteMany({ where: { userId } });
   await prisma.inventoryItem.deleteMany({ where: { productId: product.id } });
   await prisma.productPlan.deleteMany({ where: { productId: product.id } });
@@ -624,6 +651,65 @@ async function testAdmin(): Promise<void> {
   // No image uploaded yet -> image endpoint 404
   const noImg = await get(`/products/${productId}/image`);
   record("product image (none) -> 404", noImg.statusCode === 404, `status=${noImg.statusCode}`);
+  record(
+    "missing product image is not cacheable",
+    noImg.headers["cache-control"] === "private, no-store",
+    String(noImg.headers["cache-control"]),
+  );
+  const deniedImage = await post(`/admin/products/${productId}/image`, {});
+  record(
+    "image upload requires authentication",
+    deniedImage.statusCode === 401,
+    String(deniedImage.statusCode),
+  );
+  const forbiddenImage = await post(`/admin/products/${productId}/image`, {}, userToken);
+  record(
+    "image upload requires current admin role",
+    forbiddenImage.statusCode === 403,
+    String(forbiddenImage.statusCode),
+  );
+  const { setProductImage, removeProductImage } =
+    await import("../src/modules/admin/admin.service");
+  await prisma.product.update({
+    where: { id: productId },
+    data: { updatedAt: new Date("2020-01-01") },
+  });
+  const initialVersion = obj(body(await get(`/products/${slug}`)).product).imageVersion;
+  await setProductImage(productId, {
+    buffer: Buffer.from("synthetic-image"),
+    mimetype: "image/webp",
+  });
+  const withImage = obj(body(await get(`/products/${slug}`)).product);
+  const listedImage = (
+    (body(await get(`/products?q=${encodeURIComponent(String(withImage.name))}`)).items ??
+      []) as Array<Record<string, unknown>>
+  ).find((item) => item.id === productId);
+  record(
+    "updated image has a new public version",
+    typeof withImage.imageVersion === "string" && withImage.imageVersion !== initialVersion,
+    String(withImage.imageVersion),
+  );
+  record(
+    "list and detail share image version",
+    listedImage?.imageVersion === withImage.imageVersion,
+    String(listedImage?.imageVersion),
+  );
+  const image = await get(`/products/${productId}/image?v=${withImage.imageVersion}`);
+  record(
+    "public image returns cacheable bytes",
+    image.statusCode === 200 &&
+      image.body === "synthetic-image" &&
+      String(image.headers["cache-control"]).startsWith("public,"),
+    String(image.statusCode),
+  );
+  await removeProductImage(productId);
+  const removedImage = await get(`/products/${productId}/image`);
+  record(
+    "removed image returns uncached 404",
+    removedImage.statusCode === 404 &&
+      removedImage.headers["cache-control"] === "private, no-store",
+    String(removedImage.statusCode),
+  );
 
   // Deactivate -> disappears from public catalog
   const deact = await patch(`/admin/products/${productId}`, { isActive: false }, adminToken);
@@ -810,14 +896,17 @@ async function testCardToCard(): Promise<void> {
   const c2cOrder = obj(body(c2cCreate).order);
   const c2cId = String(c2cOrder.id);
 
-  const uploadReceipt = async () => {
+  const uploadReceipt = async (
+    mimeType = "image/png",
+    file = Buffer.from("89504e470d0a1a0a", "hex"),
+  ) => {
     const b = "----rcp" + Math.floor(Math.random() * 1e9);
     const payload = Buffer.concat([
       Buffer.from(
-        `--${b}\r\nContent-Disposition: form-data; name="receipt"; filename="r.png"\r\nContent-Type: image/png\r\n\r\n`,
+        `--${b}\r\nContent-Disposition: form-data; name="receipt"; filename="receipt"\r\nContent-Type: ${mimeType}\r\n\r\n`,
         "utf8",
       ),
-      Buffer.from("FAKE-RECEIPT"),
+      file,
       Buffer.from(`\r\n--${b}--\r\n`, "utf8"),
     ]);
     return inject(app, {
@@ -831,15 +920,88 @@ async function testCardToCard(): Promise<void> {
       remoteAddress: ip,
     });
   };
-  const up1 = await uploadReceipt();
-  const up2 = await uploadReceipt();
+  const invalidReceipt = await uploadReceipt("IMAGE/PNG", Buffer.from("synthetic receipt"));
   record(
-    "two receipts upload on one order -> 201",
+    "receipt MIME and file signature must match",
+    invalidReceipt.statusCode === 400 && obj(body(invalidReceipt).error).code === "BAD_FILE_TYPE",
+    `status=${invalidReceipt.statusCode}`,
+  );
+  const up1 = await uploadReceipt("Image/PNG");
+  const up2 = await uploadReceipt("Application/PDF", Buffer.from("%PDF-1.7\nsynthetic receipt"));
+  record(
+    "mixed-case PNG and PDF receipts upload on one order -> 201",
     up1.statusCode === 201 && up2.statusCode === 201,
     `s1=${up1.statusCode} s2=${up2.statusCode}`,
   );
   const receiptA = String(body(up1).receiptId);
   const receiptB = String(body(up2).receiptId);
+  const pdf = await get(`/admin/receipts/${receiptB}/image`, adminToken);
+  record(
+    "admin PDF receipt is private, sandboxed and served as an attachment",
+    pdf.statusCode === 200 &&
+      pdf.headers["content-type"] === "application/pdf" &&
+      pdf.headers["cache-control"] === "private, no-store" &&
+      pdf.headers["content-security-policy"] === "sandbox" &&
+      String(pdf.headers["content-disposition"]).startsWith("attachment"),
+    `status=${pdf.statusCode}`,
+  );
+
+  const suffixQuery = encodeURIComponent(`#${c2cId.slice(-8).toUpperCase()}`);
+  const searchPath = `/admin/orders?q=${suffixQuery}&status=PENDING_REVIEW`;
+  const search = await get(searchPath, adminToken);
+  const hits = body(search).items as Array<{ id: string }>;
+  record(
+    "admin order search matches the displayed suffix and status",
+    hits.length === 1 && hits[0].id === c2cId,
+    "",
+  );
+  const unmatched = await get(
+    `/admin/orders?q=${encodeURIComponent("not_a_valid_order")}`,
+    adminToken,
+  );
+  record("admin order search rejects wildcard input", unmatched.statusCode === 400, "");
+  const paidSearch = await get(`/admin/orders?q=${c2cId}&status=PAID`, adminToken);
+  record(
+    "admin order search combines the order ID and status",
+    (body(paidSearch).items as unknown[]).length === 0,
+    "",
+  );
+  const orderPath = `/admin/orders/${c2cId}`;
+  const scopedReceipts = `/admin/receipts?orderId=${c2cId}`;
+  const matching = body(await get(scopedReceipts, adminToken));
+  const other = body(await get(`/admin/receipts?orderId=${orderId}`, adminToken));
+  record(
+    "admin receipt history stays scoped to the selected order",
+    (matching.items as unknown[]).length === 2 &&
+      matching.pendingCount === 2 &&
+      (other.items as unknown[]).length === 0 &&
+      other.pendingCount === 0,
+    "",
+  );
+  const privateDetails = await get(orderPath, adminToken);
+  record(
+    "order detail is private and excludes stock credentials",
+    privateDetails.statusCode === 200 &&
+      String(privateDetails.headers["cache-control"]).includes("no-store") &&
+      !privateDetails.payload.includes("accountPassword") &&
+      !privateDetails.payload.includes(`c_${suffix}@s.local`),
+    "",
+  );
+  for (const path of [
+    searchPath,
+    orderPath,
+    scopedReceipts,
+    `/admin/receipts/${receiptA}/image`,
+    `/admin/receipts/${receiptB}/image`,
+  ]) {
+    const anonymous = await get(path);
+    const regular = await get(path, token);
+    record(
+      "admin order workspace denies anonymous and regular users",
+      anonymous.statusCode === 401 && regular.statusCode === 403,
+      path,
+    );
+  }
 
   const approveA = await post(`/admin/receipts/${receiptA}/approve`, {}, adminToken);
   record(
@@ -943,14 +1105,22 @@ async function testRichness(): Promise<void> {
   );
   record("detail isFeatured true", detail.isFeatured === true, String(detail.isFeatured));
 
-  const order = obj(
-    body(await post("/orders", { items: [{ planId: plan.id, quantity: 1 }] }, buyerToken)).order,
-  );
+  const checkout = body(await post("/orders", { items: [{ planId: plan.id, quantity: 1 }] }, buyerToken));
+  const order = obj(checkout.order);
   record(
     "order total uses sale price (150000)",
     Number(order.totalAmount) === 150000,
     String(order.totalAmount),
   );
+
+  const reviewPath = `/products/${product.id}/reviews`;
+  const unpaidReview = await post(reviewPath, { rating: 5 }, buyerToken);
+  record("unpaid buyer cannot review", unpaidReview.statusCode === 403, "");
+  const settled = await post("/payments/verify", {
+    authority: String(obj(checkout.payment).authority),
+    status: "OK",
+  });
+  record("review fixture payment settled", settled.statusCode === 200 && body(settled).status === "paid", "");
 
   // Reviews: submit -> moderate -> reflected in rating
   const sub = await post(
@@ -1016,7 +1186,13 @@ async function testBlog(): Promise<void> {
   // Create as DRAFT
   const create = await post(
     "/admin/blog",
-    { title: "How to buy", slug, content: "# Guide\n\nSome **content**.", status: "DRAFT" },
+    {
+      title: "How to buy",
+      slug,
+      content: "# Guide\n\nSome **content**.",
+      coverAlt: "Synthetic cover description",
+      status: "DRAFT",
+    },
     adminToken,
   );
   record("create blog post -> 201", create.statusCode === 201, `status=${create.statusCode}`);
@@ -1046,6 +1222,19 @@ async function testBlog(): Promise<void> {
     detail.statusCode === 200 && typeof obj(body(detail).post).content === "string",
     `status=${detail.statusCode}`,
   );
+  const published = obj(body(detail).post);
+  record(
+    "public post exposes cover alt text and last update time",
+    published.coverAlt === "Synthetic cover description" &&
+      !Number.isNaN(Date.parse(String(published.updatedAt))),
+    JSON.stringify({ coverAlt: published.coverAlt, updatedAt: published.updatedAt }),
+  );
+  const tooLongAlt = await patch(`/admin/blog/${id}`, { coverAlt: "x".repeat(201) }, adminToken);
+  record(
+    "cover alt over 200 chars -> 400",
+    tooLongAlt.statusCode === 400,
+    `status=${tooLongAlt.statusCode}`,
+  );
   const pubList = body(await get("/blog")).posts as Array<{ slug: string }> | undefined;
   record(
     "published in public list",
@@ -1056,7 +1245,7 @@ async function testBlog(): Promise<void> {
   // Media upload (multipart) + serve
   const boundary = "----blog" + suffix;
   const CRLF = "\r\n";
-  const bytes = Buffer.from("FAKE-PNG-BLOG-MEDIA");
+  const bytes = Buffer.from("89504e470d0a1a0a", "hex");
   const payload = Buffer.concat([
     Buffer.from(
       `--${boundary}${CRLF}Content-Disposition: form-data; name="image"; filename="m.png"${CRLF}Content-Type: image/png${CRLF}${CRLF}`,
@@ -1270,17 +1459,17 @@ async function testPagesAndSettings(): Promise<void> {
       "content-type": "application/json",
       "x-country-code": "ir",
       "user-agent": "Mozilla/5.0 (smoke test)",
-      "ar-real-ip": "5.5.5.5",
+      "ar-real-ip": "198.18.0.80",
     },
     payload: JSON.stringify({ path: `/fa/products?x=1#y` }),
     remoteAddress: ip,
   });
   const visits = await prisma.visit.findMany({ orderBy: { createdAt: "desc" }, take: 1 });
   record(
-    "track -> 204, country+clean path stored",
+    "track -> 204, untrusted country discarded and clean path stored",
     track.statusCode === 204 &&
       (await prisma.visit.count()) === before + 1 &&
-      visits[0]?.country === "IR" &&
+      visits[0]?.country === "??" &&
       visits[0]?.path === "/fa/products",
     `status=${track.statusCode} country=${visits[0]?.country} path=${visits[0]?.path}`,
   );
@@ -1301,7 +1490,7 @@ async function testPagesAndSettings(): Promise<void> {
   // ---- Enamad badge upload / serve / delete ----
   const eBoundary = "----enamad" + suffix;
   const CRLF2 = "\r\n";
-  const eBytes = Buffer.from("FAKE-ENAMAD-PNG");
+  const eBytes = Buffer.from("89504e470d0a1a0a", "hex");
   const ePayload = Buffer.concat([
     Buffer.from(
       `--${eBoundary}${CRLF2}Content-Disposition: form-data; name="image"; filename="e.png"${CRLF2}Content-Type: image/png${CRLF2}${CRLF2}`,
@@ -1551,11 +1740,76 @@ async function testTickets(): Promise<void> {
     staffReply.statusCode === 200 && obj(body(staffReply).ticket).status === "ANSWERED",
     `status=${staffReply.statusCode}`,
   );
+  const deniedReply = await post(
+    `/tickets/${ticketId}/messages`,
+    { body: "Not the owner" },
+    otherToken,
+  );
+  record("another customer cannot reply to a ticket", deniedReply.statusCode === 404, "");
+  const deniedStaff = await post(
+    `/admin/tickets/${ticketId}/messages`,
+    { body: "Not staff" },
+    token,
+  );
+  record("customer cannot post a staff reply", deniedStaff.statusCode === 403, "");
+  await prisma.$executeRaw`CREATE FUNCTION oosta_test_ticket_failure() RETURNS trigger AS $$
+    BEGIN RAISE EXCEPTION 'synthetic ticket status write failure'; END;
+    $$ LANGUAGE plpgsql`;
+  await prisma.$executeRaw`CREATE TRIGGER oosta_test_ticket_failure BEFORE UPDATE OF status ON tickets
+    FOR EACH ROW
+    EXECUTE FUNCTION oosta_test_ticket_failure()`;
+  try {
+    const failure = await post(
+      `/tickets/${ticketId}/messages`,
+      { body: "Rollback fixture" },
+      token,
+    );
+    const state = obj(body(await get(`/tickets/${ticketId}`, token)).ticket);
+    record(
+      "customer message rolls back if the ticket status update fails",
+      failure.statusCode === 500 &&
+        state.status === "ANSWERED" &&
+        (state.messages as unknown[]).length === 3,
+      "",
+    );
+    const staffFailure = await post(
+      `/admin/tickets/${ticketId}/messages`,
+      { body: "Staff rollback fixture" },
+      adminToken,
+    );
+    const staffState = obj(body(await get(`/tickets/${ticketId}`, token)).ticket);
+    record(
+      "staff message rolls back if the ticket status update fails",
+      staffFailure.statusCode === 500 &&
+        staffState.status === "ANSWERED" &&
+        (staffState.messages as unknown[]).length === 3,
+      "",
+    );
+  } finally {
+    await prisma.$executeRaw`DROP TRIGGER oosta_test_ticket_failure ON tickets`;
+    await prisma.$executeRaw`DROP FUNCTION oosta_test_ticket_failure()`;
+  }
   const close = await post(`/admin/tickets/${ticketId}/status`, { status: "CLOSED" }, adminToken);
   record(
     "admin close -> CLOSED",
     close.statusCode === 200 && obj(body(close).ticket).status === "CLOSED",
     `status=${close.statusCode}`,
+  );
+  let terminalReply = 0;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    terminalReply = (
+      await post("/tickets/missingfixture/messages", { body: "Test limiter" }, token)
+    ).statusCode;
+  }
+  const otherReply = await post(
+    "/tickets/missingfixture/messages",
+    { body: "Separate account budget" },
+    otherToken,
+  );
+  record(
+    "ticket write limiter applies per account",
+    terminalReply === 429 && otherReply.statusCode === 404,
+    "",
   );
 
   // Cleanup (messages cascade with ticket)

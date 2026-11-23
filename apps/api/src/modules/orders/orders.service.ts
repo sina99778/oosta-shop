@@ -1,3 +1,4 @@
+import { readVariant } from "../suppliers/variant";
 // Orders + the instant-delivery engine.
 //
 // Overselling is prevented by claiming inventory atomically at delivery time inside
@@ -6,18 +7,45 @@
 // PAID order is a no-op).
 
 import { Prisma } from "@prisma/client";
+import { createPublicKey } from "node:crypto";
 import { prisma } from "../../lib/prisma";
 import { env } from "../../config/env";
 import { AppError } from "../../utils/httpError";
 import { getPaymentProvider, getPaymentProviderForOrder } from "../payments/provider";
-import { getGatewayConfig } from "../../lib/gatewayConfig";
-import { notifyAdmin } from "../../bot";
+import { getGatewayConfig, isOnlinePaymentBlocked } from "../../lib/gatewayConfig";
+import { lockOrder } from "../../lib/orderLock";
+import { notifyAdmin, notifySupplierReceipt } from "../../bot";
+import { readManualSupplier } from "../suppliers/manual-payment";
+import { readCartCard } from "./cart-state";
+import { assertNoWelcomeCheckout } from "./welcome-gift";
 import type { CreateOrderInput } from "./orders.schemas";
+import { readBluInvoice, reserveBluInvoice } from "./blu-invoice";
+import { claimAvailableStock, releaseExpiredBluStock } from "./blu-stock";
+import { canDeliverPrivateBluStock } from "./blu-private-stock";
+import { renewalEstimate } from "./renewals";
+import { addOrderNotification } from "./order-notifications";
+
+export function bluStockVerifierReady() {
+  try {
+    const key = createPublicKey({
+      key: Buffer.from(env.BLU_EVENT_PUBLIC_KEY ?? "", "base64"),
+      format: "der",
+      type: "spki",
+    });
+    return (
+      key.asymmetricKeyType === "ed25519" &&
+      Buffer.from(env.BLU_TRACKING_HMAC_KEY ?? "", "base64").length === 32
+    );
+  } catch {
+    return false;
+  }
+}
 
 type OrderWithItems = Prisma.OrderGetPayload<{
   include: {
     items: { include: { product: true; plan: true; fulfilledItems: true } };
     receipts: true;
+    user: { select: { role: true } };
   };
 }>;
 type FulfilledItem = OrderWithItems["items"][number]["fulfilledItems"][number];
@@ -37,13 +65,47 @@ function credentialOf(item: FulfilledItem) {
     accountPassword: item.accountPassword,
     licenseKey: item.licenseKey,
     giftCardCode: item.giftCardCode,
+    deliveryInstructions: item.deliveryInstructions,
   };
 }
 
 async function serializeOrderDetail(order: OrderWithItems) {
   const paid = order.paymentStatus === "PAID";
+  const invoice = order.bluInvoiceKey ? readBluInvoice(order.paymentMetadata) : null;
+  const manual = readManualSupplier(order.paymentMetadata);
+  const cart = readCartCard(order.paymentMetadata);
+  const remainingMs = invoice ? Math.max(0, Date.parse(invoice.expiresAt) - Date.now()) : 0;
+  const expired = !!invoice && remainingMs === 0;
+  const now = new Date();
   return {
+    bluInvoice: invoice
+      ? {
+          baseAmount: invoice.baseAmount,
+          discount: invoice.discount,
+          expiresAt: invoice.expiresAt,
+          expired,
+          remainingMs,
+          qaOnly: !!invoice.qaCampaign,
+          stockHeld: !!invoice.stockHeld,
+          privateStockQa: !!invoice.privateStockQa,
+          supplierCheckout: !!invoice.supplierCheckout,
+        }
+      : null,
     id: order.id,
+    isSupplierQa:
+      !!order.paymentMetadata &&
+      typeof order.paymentMetadata === "object" &&
+      !Array.isArray(order.paymentMetadata) &&
+      order.paymentMetadata.purpose === "SUPPLIER_QA",
+    supplierQaKind:
+      order.paymentMetadata &&
+      typeof order.paymentMetadata === "object" &&
+      !Array.isArray(order.paymentMetadata) &&
+      order.paymentMetadata.purpose === "SUPPLIER_QA"
+        ? order.paymentMetadata.qaProductKind === "REAL_STOCK"
+          ? "REAL_STOCK"
+          : "API_TEST"
+        : null,
     totalAmount: Number(order.totalAmount),
     currency: order.currency,
     paymentStatus: order.paymentStatus,
@@ -59,10 +121,18 @@ async function serializeOrderDetail(order: OrderWithItems) {
         slug: item.product.slug,
         type: item.product.type,
       },
-      plan: { id: item.plan.id, label: item.plan.label },
+      plan: {
+        id: item.plan.id,
+        ...(savedPlan(item.planSnapshot) ?? {
+          label: item.plan.label,
+          variant: readVariant(item.plan.variant),
+          durationDays: item.plan.durationDays,
+        }),
+      },
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
       lineTotal: Number(item.lineTotal),
+      renewal: renewalEstimate(order, item, now),
       // The account vault: delivered credentials, exposed only for paid orders.
       credentials: paid ? item.fulfilledItems.map(credentialOf) : [],
     })),
@@ -76,14 +146,67 @@ async function serializeOrderDetail(order: OrderWithItems) {
       reviewedAt: r.reviewedAt,
     })),
     // For an unpaid card-to-card order, surface the destination card so the buyer can pay.
+    manualSupplier: manual
+      ? {
+          expiresAt: manual.expiresAt,
+          remainingMs: Math.max(0, Date.parse(manual.expiresAt) - Date.now()),
+          deliveryHours: env.SUPPLIER_MANUAL_DELIVERY_HOURS || null,
+        }
+      : null,
+    cartPayment: cart
+      ? {
+          expiresAt: cart.cartExpiresAt,
+          remainingMs: Math.max(0, Date.parse(cart.cartExpiresAt) - Date.now()),
+        }
+      : null,
     cardToCard:
-      order.paymentProvider === "CARD_TO_CARD" && order.paymentStatus !== "PAID"
-        ? await cardToCardInfo()
+      order.paymentProvider === "CARD_TO_CARD" &&
+      ["PENDING", "PENDING_REVIEW", "REJECTED"].includes(order.paymentStatus)
+        ? order.bluInvoiceKey
+          ? invoice && !expired
+            ? { number: invoice.number, holder: invoice.holder, bank: invoice.bank }
+            : null
+          : manual
+            ? Date.parse(manual.expiresAt) > Date.now() && order.paymentStatus === "PENDING"
+              ? { number: manual.number, holder: manual.holder, bank: manual.bank }
+              : null
+            : cart
+              ? Date.parse(cart.cartExpiresAt) > Date.now()
+                ? cart.cartCard
+                : null
+              : await cardToCardInfo()
         : null,
   };
 }
 
+function savedPlan(value: Prisma.JsonValue | null) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    typeof value.label !== "string"
+  )
+    return null;
+  return {
+    label: value.label,
+    variant: readVariant(value.variant),
+    durationDays: typeof value.durationDays === "number" ? value.durationDays : null,
+  };
+}
+
 export async function createOrder(userId: string, input: CreateOrderInput) {
+  const holdBluStock = env.BLU_STOCK_CHECKOUT_ENABLED && input.method === "card_to_card";
+  if (holdBluStock) {
+    if (!bluStockVerifierReady())
+      throw new AppError(
+        503,
+        "BLU_VERIFICATION_UNAVAILABLE",
+        "Blu payment verification is unavailable",
+      );
+    if (input.items.length !== 1 || input.items[0].quantity !== 1)
+      throw new AppError(400, "BLU_SINGLE_ITEM_REQUIRED", "Use one item per Blu checkout");
+    await releaseExpiredBluStock();
+  }
   const planIds = [...new Set(input.items.map((i) => i.planId))];
   const plans = await prisma.productPlan.findMany({
     where: { id: { in: planIds }, isActive: true },
@@ -93,6 +216,12 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
 
   for (const item of input.items) {
     const plan = planMap.get(item.planId);
+    if (plan?.source === "SUPPLIER")
+      throw new AppError(
+        503,
+        "SUPPLIER_CHECKOUT_DISABLED",
+        "Supplier orders are not enabled; no payment has been created",
+      );
     if (!plan || !plan.product.isActive) {
       throw new AppError(404, "NOT_FOUND", `Plan not found: ${item.planId}`);
     }
@@ -141,6 +270,12 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
       quantity: item.quantity,
       unitPrice,
       lineTotal,
+      planSnapshot: {
+        label: plan.label,
+        durationDays: plan.durationDays,
+        variant: readVariant(plan.variant),
+        source: plan.source,
+      },
     };
   });
 
@@ -151,38 +286,72 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
     if (!gw.cardEnabled) {
       throw new AppError(400, "METHOD_UNAVAILABLE", "Card-to-card payment is not available");
     }
-    const order = await prisma.order.create({
-      data: {
-        userId,
-        totalAmount: total,
-        currency,
-        paymentStatus: "PENDING",
-        paymentProvider: "CARD_TO_CARD",
-        items: { create: itemsData },
-      },
+    const data = {
+      userId,
+      totalAmount: total,
+      currency,
+      paymentStatus: "PENDING" as const,
+      paymentProvider: "CARD_TO_CARD" as const,
+      items: { create: itemsData },
+    };
+    const order = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR NO KEY UPDATE`;
+      await assertNoWelcomeCheckout(tx, userId);
+      if (!holdBluStock && userId !== env.BLU_INVOICE_QA_USER_ID) return tx.order.create({ data });
+      if (holdBluStock) {
+        const open = await tx.order.count({
+          where: {
+            userId,
+            paymentStatus: { in: ["PENDING", "REJECTED", "PENDING_REVIEW"] },
+            items: { some: { fulfilledItems: { some: { status: "RESERVED" } } } },
+          },
+        });
+        if (open > 0)
+          throw new AppError(409, "BLU_STOCK_ORDER_OPEN", "An existing order is holding stock");
+      }
+      const invoice = await reserveBluInvoice(tx, gw, total, currency);
+      const created = await tx.order.create({
+        data: {
+          ...data,
+          ...invoice,
+          paymentMetadata: holdBluStock
+            ? { ...invoice.paymentMetadata, stockHeld: true }
+            : invoice.paymentMetadata,
+        },
+        include: { items: true },
+      });
+      if (holdBluStock)
+        for (const item of created.items) await claimAvailableStock(tx, item, "RESERVED");
+      return created;
     });
+    const amount = Number(order.totalAmount);
     return {
-      order: {
-        id: order.id,
-        totalAmount: Number(total),
+      order: { id: order.id, totalAmount: amount, currency, paymentStatus: order.paymentStatus },
+      cardToCard: {
+        number: gw.cardNumber,
+        holder: gw.cardHolder,
+        bank: gw.cardBank,
+        amount,
         currency,
-        paymentStatus: order.paymentStatus,
       },
-      cardToCard: { ...(await cardToCardInfo()), amount: Number(total), currency },
     };
   }
 
   // --- Online: open a payment-gateway session and return the redirect URL. -------
   const provider = await getPaymentProvider();
-  const order = await prisma.order.create({
-    data: {
-      userId,
-      totalAmount: total,
-      currency,
-      paymentStatus: "PENDING",
-      paymentProvider: provider.name,
-      items: { create: itemsData },
-    },
+  const order = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR NO KEY UPDATE`;
+    await assertNoWelcomeCheckout(tx, userId);
+    return tx.order.create({
+      data: {
+        userId,
+        totalAmount: total,
+        currency,
+        paymentStatus: "PENDING",
+        paymentProvider: provider.name,
+        items: { create: itemsData },
+      },
+    });
   });
 
   let payment;
@@ -221,33 +390,72 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
   };
 }
 
-export async function deliverOrder(orderId: string, refId: string | null): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
-    if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
-    if (order.paymentStatus === "PAID") return; // idempotent
+export async function deliverOrder(orderId: string, refId: string | null): Promise<boolean> {
+  return prisma.$transaction((tx) => deliverOrderInTransaction(tx, orderId, refId));
+}
 
-    for (const item of order.items) {
-      // Lock and claim available units; SKIP LOCKED makes concurrent claims race-safe.
-      const rows = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM inventory_items
-        WHERE "planId" = ${item.planId} AND status = 'AVAILABLE'
-        ORDER BY "createdAt" ASC
-        LIMIT ${item.quantity}
-        FOR UPDATE SKIP LOCKED`;
-      if (rows.length < item.quantity) {
-        throw new AppError(409, "OUT_OF_STOCK", "Items went out of stock during fulfillment");
-      }
-      await tx.inventoryItem.updateMany({
-        where: { id: { in: rows.map((r) => r.id) } },
-        data: { status: "SOLD", orderItemId: item.id, soldAt: new Date() },
-      });
-    }
+export async function deliverOrderInTransaction(
+  tx: Prisma.TransactionClient,
+  orderId: string,
+  refId: string | null,
+): Promise<boolean> {
+  await lockOrder(tx, orderId);
+  const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: true } });
+  if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
+  if (order.paymentStatus === "PAID") return false;
+  const invoice = readBluInvoice(order.paymentMetadata);
+  const privateStockQa = await canDeliverPrivateBluStock(tx, order, invoice);
+  if (
+    order.bluInvoiceKey &&
+    (order.items.length === 0 || (invoice?.qaCampaign && !privateStockQa))
+  ) {
+    throw new AppError(
+      409,
+      "BLU_QA_NO_FULFILLMENT",
+      "Blu payment-only QA invoices do not deliver products",
+    );
+  }
+  if (order.paymentStatus === "REFUNDED" || order.paymentStatus === "EXPIRED") {
+    throw new AppError(409, "ORDER_CLOSED", "This order can no longer be fulfilled");
+  }
 
-    await tx.order.update({
-      where: { id: orderId },
-      data: { paymentStatus: "PAID", paidAt: new Date(), paymentRefId: refId },
+  for (const item of order.items) {
+    const held = await tx.inventoryItem.updateMany({
+      where: { orderItemId: item.id, status: "RESERVED" },
+      data: { status: "SOLD", soldAt: new Date() },
     });
+    if (held.count > item.quantity)
+      throw new AppError(409, "INVALID_STOCK_HOLD", "The reserved stock requires review");
+    if (held.count < item.quantity)
+      await claimAvailableStock(tx, { ...item, quantity: item.quantity - held.count }, "SOLD");
+  }
+
+  await tx.order.update({
+    where: { id: orderId },
+    data: { paymentStatus: "PAID", paidAt: new Date(), paymentRefId: refId },
+  });
+  if (!privateStockQa) await addOrderNotification(tx, order.userId, orderId, "ORDER_DELIVERED");
+  if (privateStockQa)
+    await tx.supplierQaAttempt.updateMany({
+      where: { orderId, state: "AWAITING_PAYMENT" },
+      data: { state: "DELIVERED" },
+    });
+  return true;
+}
+
+async function recordVerificationFailure(orderId: string) {
+  return prisma.$transaction(async (tx) => {
+    await lockOrder(tx, orderId);
+    const order = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+    if (order.paymentStatus === "PAID") return { status: "paid" as const, orderId };
+    if (order.paymentStatus === "PAID_PENDING_FULFILLMENT") {
+      return { status: "pending" as const, orderId };
+    }
+    await tx.order.updateMany({
+      where: { id: orderId, paymentStatus: { in: ["PENDING", "FAILED"] } },
+      data: { paymentStatus: "FAILED" },
+    });
+    return { status: "failed" as const, orderId };
   });
 }
 
@@ -261,10 +469,14 @@ export async function verifyAndDeliver(authority: string, status: string) {
   if (order.paymentStatus === "PAID") {
     return { status: "paid" as const, orderId: order.id };
   }
+  const metadata = order.paymentMetadata as Prisma.JsonObject | null;
+  if (order.paymentStatus === "PAID_PENDING_FULFILLMENT" && metadata?.lateCartPayment === true)
+    return { status: "pending" as const, orderId: order.id };
+  if (order.paymentStatus === "EXPIRED" && order.paymentProvider === "MANUAL")
+    return { status: "failed" as const, orderId: order.id };
 
   if (status !== "OK") {
-    await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "FAILED" } });
-    return { status: "failed" as const };
+    return recordVerificationFailure(order.id);
   }
 
   const provider = getPaymentProviderForOrder(order.paymentProvider);
@@ -275,34 +487,72 @@ export async function verifyAndDeliver(authority: string, status: string) {
     verificationContext: order.paymentMetadata,
   });
   if (!verification.success) {
-    await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "FAILED" } });
-    return { status: "failed" as const };
+    return recordVerificationFailure(order.id);
   }
 
+  let delivered: boolean;
   try {
-    await deliverOrder(order.id, verification.refId);
+    delivered = await deliverOrder(order.id, verification.refId);
   } catch (error) {
+    if (
+      error instanceof AppError &&
+      error.code === "ORDER_CLOSED" &&
+      order.paymentProvider === "ZARINPAL" &&
+      metadata?.cartStockHeld === true
+    ) {
+      // A positively verified late charge must remain visible for reconciliation.
+      const saved = await prisma.order.updateMany({
+        where: { id: order.id, paymentStatus: "EXPIRED" },
+        data: {
+          paymentStatus: "PAID_PENDING_FULFILLMENT",
+          paymentRefId: verification.refId,
+          paidAt: new Date(),
+          paymentMetadata: { ...metadata, lateCartPayment: true },
+        },
+      });
+      if (saved.count) {
+        void notifyAdmin(
+          `پرداخت آنلاین سفارش #${order.id.slice(-8)} پس از انقضای فاکتور تأیید شد. سفارش برای بررسی و تحویل یا بازپرداخت در انتظار است.`,
+        ).catch(() => {});
+        return { status: "pending" as const, orderId: order.id };
+      }
+      const closed = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+      if (closed.paymentStatus === "PAID_PENDING_FULFILLMENT")
+        return { status: "pending" as const, orderId: order.id };
+    }
     if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
-      await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: "FAILED" } });
+      const recorded = await prisma.order.updateMany({
+        where: {
+          id: order.id,
+          paidAt: null,
+          paymentStatus: { in: ["PENDING", "FAILED", "PAID_PENDING_FULFILLMENT"] },
+        },
+        data: {
+          paymentStatus: "PAID_PENDING_FULFILLMENT",
+          paymentRefId: verification.refId,
+          paidAt: new Date(),
+        },
+      });
+      if (!recorded.count) {
+        const current = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+        if (current.paymentStatus === "PAID") return { status: "paid" as const, orderId: order.id };
+        return { status: "pending" as const, orderId: order.id };
+      }
 
       // Notify admin about stock exhaustion and manual refund requirement
       void notifyAdmin(
         `⚠️ *کمبود موجودی در حین پرداخت*\n\n` +
           `سفارش *#${order.id.slice(-8)}* با مبلغ ${Number(order.totalAmount)} ${order.currency} پرداخت شد، اما موجودی محصول به اتمام رسیده بود.\n` +
-          `وضعیت سفارش به FAILED تغییر یافت. لطفا نسبت به بازگردانی وجه کاربر یا شارژ مجدد انبار اقدام نمایید.`,
+          `پرداخت ثبت شده و سفارش منتظر تأمین موجودی است. لطفا نسبت به بازگردانی وجه کاربر یا شارژ مجدد انبار اقدام نمایید.`,
       ).catch(() => {});
 
-      throw new AppError(
-        409,
-        "OUT_OF_STOCK",
-        "Payment captured but stock was exhausted; order failed and must be refunded",
-      );
+      return { status: "pending" as const, orderId: order.id };
     }
     throw error;
   }
 
   // Tell the admin about the sale (and any plan that just ran low) — fire & forget.
-  void notifySale(order.id).catch(() => {});
+  if (delivered) void notifySale(order.id).catch(() => {});
 
   return { status: "paid" as const, orderId: order.id };
 }
@@ -363,7 +613,20 @@ export async function listOrders(userId: string) {
   const orders = await prisma.order.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
-    include: { _count: { select: { items: true } } },
+    select: {
+      id: true,
+      totalAmount: true,
+      currency: true,
+      paymentStatus: true,
+      createdAt: true,
+      paidAt: true,
+      _count: { select: { items: true } },
+      items: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: 1,
+        select: { product: { select: { name: true } } },
+      },
+    },
   });
   return orders.map((order) => ({
     id: order.id,
@@ -371,6 +634,7 @@ export async function listOrders(userId: string) {
     currency: order.currency,
     paymentStatus: order.paymentStatus,
     itemCount: order._count.items,
+    firstProductName: order.items[0]?.product.name ?? null,
     createdAt: order.createdAt,
     paidAt: order.paidAt,
   }));
@@ -382,6 +646,7 @@ export async function getOrderDetail(userId: string, orderId: string) {
     include: {
       items: { include: { product: true, plan: true, fulfilledItems: true } },
       receipts: { orderBy: { createdAt: "desc" } },
+      user: { select: { role: true } },
     },
   });
   if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
@@ -405,41 +670,84 @@ export async function uploadReceipt(
   reference?: string,
 ) {
   if (!file) throw new AppError(400, "NO_FILE", "A receipt image is required");
-  if (!ALLOWED_RECEIPT_TYPES.has(file.mimetype)) {
+  const mimeType = file.mimetype.toLowerCase();
+  if (!ALLOWED_RECEIPT_TYPES.has(mimeType)) {
     throw new AppError(400, "BAD_FILE_TYPE", "Receipt must be an image (JPG/PNG/WebP) or PDF");
   }
 
-  const order = await prisma.order.findFirst({ where: { id: orderId, userId } });
-  if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
-  if (order.paymentProvider !== "CARD_TO_CARD") {
-    throw new AppError(400, "NOT_CARD_TO_CARD", "This order is not a card-to-card order");
-  }
-  if (order.paymentStatus === "PAID") {
-    throw new AppError(400, "ALREADY_PAID", "This order is already paid");
-  }
+  const saved = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+    await lockOrder(tx, orderId);
+    const order = await tx.order.findFirst({ where: { id: orderId, userId } });
+    if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
+    if (order.paymentProvider !== "CARD_TO_CARD") {
+      throw new AppError(400, "NOT_CARD_TO_CARD", "This order is not a card-to-card order");
+    }
+    if (!["PENDING", "PENDING_REVIEW", "REJECTED"].includes(order.paymentStatus)) {
+      throw new AppError(400, "ALREADY_PAID", "This order is already paid");
+    }
+    const normalized = reference
+      ?.trim()
+      .replace(/[۰-۹٠-٩]/g, (digit) => String(digit.charCodeAt(0) % 16));
+    const invoice = readBluInvoice(order.paymentMetadata);
+    const manual = readManualSupplier(order.paymentMetadata);
+    const cart = readCartCard(order.paymentMetadata);
+    if (cart && order.paymentStatus === "PENDING" && Date.parse(cart.cartExpiresAt) <= Date.now())
+      throw new AppError(409, "ORDER_CLOSED", "This payment window has expired");
+    if (manual && order.paymentStatus === "REJECTED")
+      throw new AppError(409, "ALREADY_REVIEWED", "Request a new supplier order");
+    if (
+      (cart || manual || invoice?.stockHeld || invoice?.supplierCheckout) &&
+      !/^\d{4,30}$/.test(normalized ?? "")
+    )
+      throw new AppError(
+        400,
+        "BLU_REFERENCE_REQUIRED",
+        "Enter the bank tracking or reference number",
+      );
 
-  const receipt = await prisma.receipt.create({
-    data: {
-      orderId: order.id,
-      imageData: new Uint8Array(file.buffer),
-      mimeType: file.mimetype,
-      reference: reference?.trim() || null,
-      status: "PENDING",
-    },
-  });
-  await prisma.order.update({
-    where: { id: order.id },
-    data: { paymentStatus: "PENDING_REVIEW" },
-  });
+    const count = await tx.receipt.count({ where: { orderId } });
+    const recent = await tx.receipt.count({
+      where: { order: { userId }, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+    });
+    if (count >= 5 || recent >= 20) {
+      throw new AppError(
+        429,
+        "RECEIPT_LIMIT",
+        "Receipt upload limit reached; please contact support",
+      );
+    }
+    const receipt = await tx.receipt.create({
+      data: {
+        orderId: order.id,
+        imageData: new Uint8Array(file.buffer),
+        mimeType,
+        reference: (manual || cart ? normalized : reference?.trim()) || null,
+        status: "PENDING",
+      },
+    });
+    await tx.order.update({
+      where: { id: order.id },
+      data: { paymentStatus: "PENDING_REVIEW" },
+    });
 
-  return { ok: true, receiptId: receipt.id, paymentStatus: "PENDING_REVIEW" as const };
+    return {
+      ok: true,
+      receiptId: receipt.id,
+      paymentStatus: "PENDING_REVIEW" as const,
+      manual: !!manual,
+    };
+  });
+  const { manual, ...response } = saved;
+  if (manual) void notifySupplierReceipt(saved.receiptId, orderId);
+  return response;
 }
 
 // Public payment configuration the storefront uses to decide which methods to offer.
 export async function getPaymentConfig() {
   const gw = await getGatewayConfig();
   return {
-    online: true,
+    online: !(env.isProduction && gw.provider === "mock") && !isOnlinePaymentBlocked(gw),
     cardToCard: gw.cardEnabled,
     card: gw.cardEnabled ? await cardToCardInfo() : null,
   };

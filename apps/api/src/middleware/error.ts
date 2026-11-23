@@ -36,12 +36,17 @@ export function errorHandler(
       path: issue.path.join("."),
       message: issue.message,
     }));
-  } else if (err instanceof MulterError) {
+  } else if (
+    err instanceof MulterError ||
+    // Multer forwards busboy parse failures (malformed part headers, truncated forms)
+    // with a storageErrors list; they are client mistakes, not server faults.
+    (err instanceof Error && Array.isArray((err as { storageErrors?: unknown }).storageErrors))
+  ) {
     statusCode = 400;
     code = "UPLOAD_ERROR";
     message =
-      err.code === "LIMIT_FILE_SIZE"
-        ? "Receipt file is too large (max 5 MB)"
+      err instanceof MulterError && err.code === "LIMIT_FILE_SIZE"
+        ? "File is too large (max 5 MB)"
         : "File upload failed";
   } else if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === "P2002") {
@@ -58,7 +63,14 @@ export function errorHandler(
       message = "Database request error";
     }
   } else if (err instanceof Error && err.message) {
-    message = err.message;
+    const parserError = err as Error & { status?: number; type?: string };
+    if ([400, 413, 415].includes(parserError.status ?? 0)) {
+      statusCode = parserError.status!;
+      code = "INVALID_REQUEST_BODY";
+      message = "Request body is invalid, too large, or uses an unsupported encoding";
+    } else {
+      message = err.message;
+    }
   }
 
   if (statusCode >= 500) {

@@ -1,0 +1,21 @@
+# Automatic Blu receipt checks in preview
+
+Release `20261114-blu-qa-poll` runs a storefront systemd timer two minutes after each prior run completes. The local command selects up to five distinct numeric references on the configured QA user's current campaign invoice, only while the order and receipts are pending review and within 24 hours after invoice expiry. It validates the current USER role and the immutable destination, currency and exact amount. The command has no HTTP route. An empty queue exits before SSH or bank access.
+
+The storefront sends jobs over the loopback reverse tunnel using a pinned server key and a dedicated forced-command SSH key restricted to the local end of the tunnel. Only the queued destination, amount and reference cross that tunnel. The collector validates and bounds input, uses the existing saved encrypted session and lock, and publishes through the existing scoped Ed25519 endpoint. Journal output contains counts or fixed failure labels. Unavailable transport and required enrollment are distinct service failures and are retried on subsequent cycles. The private journal provides operator visibility. A dashboard notification is pending.
+
+The runner checks further references after provisional match or review. The selector suppresses the already claimed reference by comparing both HMAC domains while allowing other pending references to be considered. Regression coverage includes invalid input, idle runs, transport loss, re-enrollment, wrong campaign, current role, matched-reference suppression and multiple references. The original bank transaction timestamp must still fall within the invoice window. The bounded bank search covers the latest 20 entries for each lookup.
+
+Production builds, full verify with a disposable database and lint passed. Both npm audits reported zero vulnerabilities. Collector tests ran on both hosts used for development and validation. The dedicated key ignored a supplied shell command and accepted the fixed runner's empty queue. Replaying the retained real receipt through this SSH and systemd stdin path returned one provisional match without another transfer or OTP. The scheduler ran with the current empty queue after deployment.
+
+The retained test stays provisional. Customer payment approval, fulfillment, panel alerts and validation on a fresh transfer initiated after scheduler activation are pending. Stop the timer with `systemctl disable --now oosta-blu-qa-poll.timer`. Rollback may use the prior tagged API image and collector backups, while keeping the observation ledger intact.
+
+## Fresh scheduled test
+
+On 2026-11-14 a new campaign reserved 10,020 IRR for invoice `cmwfpysxx0001m8017t67h6tr`, expiring at 01:50:51 UTC. The previous invoice and observation were retained. Configuration and database backups were saved before changing the campaign, and the new reservation was backed up after issuance.
+
+Verified the active timer, empty work queue and saved bank session. The new owner checkout returned 200 with no-store and another user returned 404. The exact public receipt POST returned 401 without authentication, 400 for an owner request without a file and 404 for another user with a file. The previous receipt route and public issuance returned 503, and unsigned bank ingress returned 401. There were no receipts or observations for the new invoice at handoff. Retire the exact receipt route after the test or expiry.
+
+The owner receipt arrived at 01:25:16 UTC. The next scheduled run recorded `BLU_QA_POLL {"matched":1}` at 01:27:14 UTC without a manual collector invocation. Database verification found one receipt and one matching observation, a bank timestamp inside the invoice window, and a matching reference HMAC. The observation had no competing-evidence flag. The order stayed PENDING_REVIEW with no paid timestamp and no product items. The selector returned an empty queue afterward.
+
+Removed the temporary receipt ingress and verified the preview returned 503 for that POST. Unsigned event ingestion still returned 401. Saved a private database backup containing the successful match. This completes the fresh-transfer scheduler test. Dashboard alerts and customer payment approval and fulfillment remain separate work.

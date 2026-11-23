@@ -6,6 +6,7 @@
 
 import { env } from "../config/env";
 import { ZodError } from "zod";
+import { randomBytes } from "node:crypto";
 import * as adminSvc from "../modules/admin/admin.service";
 import * as blogSvc from "../modules/blog/blog.service";
 import * as pagesSvc from "../modules/pages/pages.service";
@@ -42,7 +43,35 @@ import {
 import { getAgentModels, parseModelHints } from "./agentPrefs";
 
 export type PendingImage = { buffer: Buffer; mimeType: string };
-type ToolCtx = { image?: PendingImage; imageModel?: string };
+type ToolCtx = { image?: PendingImage; imageModel?: string; approvals?: Set<string> };
+const pendingActions = new Map<
+  string,
+  { tool: string; args: Record<string, unknown>; ctx: ToolCtx; expires: number }
+>();
+
+// Model output is never sufficient permission to mutate the store. Approval is
+// bound to one concrete operation and can only be consumed once by the admin bot.
+export async function approveAgentAction(
+  id: string,
+): Promise<{ message: string; image?: PendingImage }> {
+  const action = pendingActions.get(id);
+  pendingActions.delete(id);
+  if (!action || action.expires < Date.now()) throw new Error("Action approval expired");
+  const tool = TOOLS.find((item) => item.name === action.tool);
+  if (!tool) throw new Error("Unknown action");
+  await tool.run(action.args, action.ctx);
+  return {
+    message: `Completed: ${action.tool}`,
+    image: action.tool === "generate_image" ? action.ctx.image : undefined,
+  };
+}
+
+export function pendingAgentActions(ids: Set<string>) {
+  return [...ids].flatMap((id) => {
+    const action = pendingActions.get(id);
+    return action ? [{ id, description: `${action.tool}\n${JSON.stringify(action.args)}` }] : [];
+  });
+}
 
 type JsonSchema = Record<string, unknown>;
 type Tool = {
@@ -297,7 +326,7 @@ const TOOLS: Tool[] = [
   {
     name: "generate_image",
     description:
-      "Generate an image from a text prompt (product shots, blog covers, illustrations). The result becomes the ATTACHED image — place it afterwards with set_product_image, add_product_gallery_image, set_blog_cover or upload_blog_image. Write the prompt in English and make it detailed (subject, style, background, lighting).",
+      "Request approval to generate an image from text. The approved image is sent to the administrator's Telegram chat. Write a detailed English prompt (subject, style, background, lighting).",
     parameters: obj({ prompt: str("detailed English description of the desired image") }, [
       "prompt",
     ]),
@@ -309,7 +338,7 @@ const TOOLS: Tool[] = [
       ctx.image = { buffer: image.buffer, mimeType: image.mimeType };
       return {
         ok: true,
-        note: "Image generated and attached. Now place it with set_product_image / add_product_gallery_image / set_blog_cover / upload_blog_image.",
+        note: "Image generated for the administrator.",
       };
     },
   },
@@ -444,7 +473,16 @@ const TOOLS: Tool[] = [
       planId: str(),
       status: { type: "string", enum: ["AVAILABLE", "RESERVED", "SOLD"] },
     }),
-    run: (a) => adminSvc.listInventory(inventoryQuerySchema.parse(a)),
+    run: async (a) => {
+      const inventory = await adminSvc.listInventory(inventoryQuerySchema.parse(a));
+      return {
+        ...inventory,
+        items: inventory.items.map(
+          ({ accountPassword: _password, licenseKey: _license, giftCardCode: _gift, ...item }) =>
+            item,
+        ),
+      };
+    },
   },
   {
     name: "list_orders",
@@ -554,7 +592,7 @@ Rules:
 - Write all human content (descriptions, blog posts, excerpts) in the SAME language the user used (usually Persian), unless asked otherwise. Make it high quality and SEO-friendly.
 - New blog posts/products can be created as DRAFT unless the user asks to publish.
 - When a photo is attached (see [context]): use set_product_image (or add_product_gallery_image) for a product, or set_blog_cover for a blog post. To place a photo INSIDE blog text, call upload_blog_image to get a URL and then update_blog_post with the content containing ![alt](url). If the user doesn't say which item, use the most recent product/post id from [context].
-- When the user wants an image but NO photo is attached, call generate_image with a detailed ENGLISH prompt (subject, style, background, lighting), then place the result exactly like an attached photo. For product shots prefer clean e-commerce hero style.
+- When the user wants a new image, call generate_image with a detailed ENGLISH prompt (subject, style, background, lighting), then stop for approval. The admin can reply to the generated image to request placement. For product shots prefer clean e-commerce hero style.
 - Standalone pages (about, terms, FAQ, guides): create_page / update_page. They appear at /<locale>/p/<slug>.
 - Site look & feel: update_site_settings changes theme colors (hex), home hero/announcement copy, footer about text and contact info live, per language (En/Fa keys). Read get_site_settings first when modifying.
 - Product display order: update_product sortOrder (higher = earlier) or reorder_products with the full desired order.
@@ -649,6 +687,24 @@ async function runTool(
 ): Promise<Record<string, unknown>> {
   const tool = TOOLS.find((t) => t.name === name);
   if (!tool) return { error: `Unknown tool: ${name}` };
+  if (!name.startsWith("get_") && !name.startsWith("list_")) {
+    for (const [id, action] of pendingActions)
+      if (action.expires < Date.now()) pendingActions.delete(id);
+    if (pendingActions.size >= 20)
+      return { error: "Too many pending actions; review them before requesting more" };
+    const id = randomBytes(12).toString("hex");
+    pendingActions.set(id, {
+      tool: name,
+      args,
+      ctx: { image: ctx.image, imageModel: ctx.imageModel },
+      expires: Date.now() + 120000,
+    });
+    ctx.approvals?.add(id);
+    return {
+      approvalRequired: true,
+      note: "Stop here. The administrator must approve the displayed operation before it runs.",
+    };
+  }
   try {
     const result = await tool.run(args ?? {}, ctx);
     return { result: result ?? { ok: true } };
@@ -753,13 +809,13 @@ async function runOpenRouterLoop(
 // to the image tools; opts.onStep is called with each tool name (for progress UI).
 export async function runAgent(
   instruction: string,
-  opts: { image?: PendingImage; onStep?: (note: string) => void } = {},
+  opts: { image?: PendingImage; onStep?: (note: string) => void; approvals?: Set<string> } = {},
 ): Promise<string> {
   if (!isAgentEnabled()) {
     return "هوش مصنوعی تنظیم نشده است (OPENROUTER_API_KEY یا GEMINI_API_KEY).";
   }
 
-  const ctx: ToolCtx = { image: opts.image };
+  const ctx: ToolCtx = { image: opts.image, approvals: opts.approvals };
   const notes: string[] = [];
   if (opts.image) notes.push("A photo is attached to this message.");
   if (lastProductId) notes.push(`Most recent product id: ${lastProductId}.`);

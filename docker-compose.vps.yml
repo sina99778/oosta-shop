@@ -1,0 +1,42 @@
+# Overlay for a shared VPS with an existing host Nginx.
+# docker compose -p oosta -f docker-compose.prod.yml -f docker-compose.vps.yml --env-file /opt/oostaAI/shared/.env.production up -d postgres api web
+services:
+  postgres:
+    mem_limit: 256m
+    cpus: 0.5
+  api:
+    environment:
+      SUPPLIER_CREDENTIALS_FILE: /run/secrets/oosta-suppliers.env
+      BLU_INVOICE_QA_USER_ID: ${BLU_INVOICE_QA_USER_ID:-}
+      BLU_INVOICE_CARD_NUMBER: ${BLU_INVOICE_CARD_NUMBER:-}
+      BLU_INVOICE_IBAN: ${BLU_INVOICE_IBAN:-}
+      BLU_QA_CARD_HOLDER_B64: ${BLU_QA_CARD_HOLDER_B64:-}
+      BLU_QA_INVOICE_CAMPAIGN: ${BLU_QA_INVOICE_CAMPAIGN:-}
+      BLU_QA_AMOUNT_IRR: ${BLU_QA_AMOUNT_IRR:-}
+      BLU_EVENT_PUBLIC_KEY: ${BLU_EVENT_PUBLIC_KEY:-}
+      BLU_TRACKING_HMAC_KEY: ${BLU_TRACKING_HMAC_KEY:-}
+      BLU_POLL_STATUS_FILE: /run/oosta-blu-status/last-run
+      BLU_STOCK_CHECKOUT_ENABLED: ${BLU_STOCK_CHECKOUT_ENABLED:-false}
+      BLU_AUTO_APPROVE_ENABLED: ${BLU_AUTO_APPROVE_ENABLED:-false}
+      OOSTA_SUPPLIER_WALLET_PURCHASES: ${OOSTA_SUPPLIER_WALLET_PURCHASES:-false}
+      SUPPLIER_MANUAL_APPROVAL: ${SUPPLIER_MANUAL_APPROVAL:-false}
+      SUPPLIER_MANUAL_DELIVERY_HOURS: ${SUPPLIER_MANUAL_DELIVERY_HOURS:-0}
+      SUPPLIER_TELEGRAM_ADMIN_USER_ID: ${SUPPLIER_TELEGRAM_ADMIN_USER_ID:-}
+    volumes:
+      # Allow the container's node user (UID/GID 1000) to read the host file via a narrow ACL.
+      - /opt/oostaAI/shared/suppliers.env:/run/secrets/oosta-suppliers.env:ro
+      - /var/lib/oosta-blu-status:/run/oosta-blu-status:ro
+    ports:
+      - "127.0.0.1:4400:4000"
+    mem_limit: 256m
+    cpus: 0.75
+  web:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: /api
+    ports:
+      - "127.0.0.1:3400:3000"
+    mem_limit: 384m
+    cpus: 0.75
+  nginx:
+    profiles: [bundled-proxy]

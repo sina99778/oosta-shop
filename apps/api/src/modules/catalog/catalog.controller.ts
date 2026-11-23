@@ -11,15 +11,18 @@ export async function listCategories(_req: Request, res: Response): Promise<void
 
 export async function listProducts(_req: Request, res: Response): Promise<void> {
   const query = res.locals.query as ListProductsQuery;
+  res.setHeader("Cache-Control", "no-store");
   res.json(await catalog.listProducts(query));
 }
 
 export async function bestselling(_req: Request, res: Response): Promise<void> {
   const { limit } = res.locals.query as BestsellingQuery;
+  res.setHeader("Cache-Control", "no-store");
   res.json({ products: await catalog.getBestselling(limit) });
 }
 
 export async function productBySlug(req: Request, res: Response): Promise<void> {
+  res.setHeader("Cache-Control", "no-store");
   res.json({ product: await catalog.getProductBySlug(String(req.params.slug)) });
 }
 
@@ -28,6 +31,7 @@ export async function productBySlug(req: Request, res: Response): Promise<void> 
 const IMAGE_CACHE = "public, max-age=3600, stale-while-revalidate=86400";
 
 export async function productImage(req: Request, res: Response): Promise<void> {
+  res.setHeader("Cache-Control", "private, no-store");
   const { data, mimeType } = await catalog.getProductImage(String(req.params.id));
   res.setHeader("Content-Type", mimeType);
   res.setHeader("Cache-Control", IMAGE_CACHE);
@@ -35,6 +39,7 @@ export async function productImage(req: Request, res: Response): Promise<void> {
 }
 
 export async function galleryImage(req: Request, res: Response): Promise<void> {
+  res.setHeader("Cache-Control", "private, no-store");
   const { data, mimeType } = await catalog.getGalleryImage(String(req.params.id));
   res.setHeader("Content-Type", mimeType);
   res.setHeader("Cache-Control", IMAGE_CACHE);

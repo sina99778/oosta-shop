@@ -1,0 +1,9 @@
+# Blu preview rollout
+
+Published release `/opt/oostaAI/releases/20261112-blu-shadow-preview` to the existing read-only storefront. Both additive migrations applied. The API and web services were rebuilt with the existing production Compose configuration. Nginx configuration validation passed and its routing was left intact. Public order writes and the Blu ingress were denied. Direct loopback POST to the inactive Blu ingress returned 404. The storefront smoke checks passed. No bank observations were inserted.
+
+Before activation, a mode-0600 database backup `pre-blu-shadow-preview-20261112.dump` was taken and its table directory was read successfully. Previous API and web images were tagged for rollback. Both previously delivered supplier QA records still exist with total cost USD0.41, and the FX ledger exists. No working data was reset or seeded. Both npm audits returned zero findings at the time of rollout.
+
+The Iran collector was updated and its synthetic signing test ran on that host. The existing encrypted session remains usable. No event signing or tracking HMAC credential is installed. A separate read-only probe found one exact enrolled deposit, one card linked to that deposit, a valid-format IBAN that agrees with the transaction history and a populated holder field. No bank identifiers, holder or credentials were output or copied to the storefront.
+
+Production card-to-card is disabled, has no configured destination card, and there is no active internal plan with available stock. The existing checkout therefore cannot create a real QA order. The next step is an isolated payment-only QA invoice with a bank-bound destination and an operator-approved test amount. Keep product fulfillment and public payments outside that test. Then compare a real transfer against the issued invoice via the signed shadow route.

@@ -1,6 +1,9 @@
+import type { ProductVariant } from "./product-variant";
 // Shared API response types for the storefront.
 
 export type ProductType = "ACCOUNT" | "LICENSE" | "GIFTCARD";
+export type Availability = "LOCAL_STOCK" | "SUPPLIER_STOCK" | "ON_REQUEST" | "OUT_OF_STOCK";
+export type IndicativePrice = { amount: number; currency: "IRR"; expiresAt: string };
 
 export type Category = {
   id: string;
@@ -17,13 +20,21 @@ export type ProductSummary = {
   slug: string;
   image: string | null;
   hasImage: boolean;
+  imageVersion?: string;
+  updatedAt?: string;
   type: ProductType;
   category: CategoryRef;
+  quoteRequired?: boolean;
   priceFrom: number | null;
+  indicativePriceFrom?: IndicativePrice | null;
+  supplierStockUnconfirmed?: boolean;
+  pricePlanId?: string | null;
+  priceDurationDays?: number | null;
   originalPriceFrom: number | null;
   discountPercent: number;
   currency: string;
   availableStock: number;
+  availability?: Availability;
   inStock: boolean;
   lowStock: boolean;
   isFeatured: boolean;
@@ -36,6 +47,13 @@ export type PlanDetail = {
   id: string;
   label: string;
   durationDays: number | null;
+  sortOrder?: number;
+  activationTerms?: string | null;
+  variant?: ProductVariant | null;
+  source?: "INTERNAL" | "SUPPLIER";
+  quoteRequired?: boolean;
+  indicativePrice?: IndicativePrice | null;
+  supplierStockUnconfirmed?: boolean;
   price: number;
   salePrice: number | null;
   effectivePrice: number;
@@ -43,6 +61,7 @@ export type PlanDetail = {
   discountPercent: number;
   currency: string;
   availableStock: number;
+  availability?: Availability;
   inStock: boolean;
 };
 
@@ -88,11 +107,26 @@ export type AdminReviewList = {
 
 // Support tickets
 export type TicketStatus = "OPEN" | "ANSWERED" | "CLOSED";
-export type TicketMessage = { id: string; body: string; isStaff: boolean; createdAt: string };
+export type TicketAttachmentInfo = { name: string | null; mime: string; size: number };
+export type TicketMessage = {
+  id: string;
+  body: string;
+  isStaff: boolean;
+  createdAt: string;
+  attachment?: TicketAttachmentInfo | null;
+};
+export type TicketOrderRef = {
+  id: string;
+  createdAt: string;
+  totalAmount: number;
+  currency: string;
+  paymentStatus: string;
+};
 export type TicketListItem = {
   id: string;
   subject: string;
   status: TicketStatus;
+  orderId?: string | null;
   messageCount: number;
   lastMessage: string;
   updatedAt: string;
@@ -103,6 +137,7 @@ export type TicketDetail = {
   status: TicketStatus;
   createdAt: string;
   updatedAt: string;
+  order?: TicketOrderRef | null;
   messages: TicketMessage[];
 };
 type TicketUser = { id: string; name: string; email: string | null; phone: string | null };
@@ -119,7 +154,10 @@ export type AdminTicketList = {
   openCount: number;
   pagination: Pagination;
 };
-export type AdminTicketDetail = TicketDetail & { user: TicketUser };
+export type AdminTicketDetail = TicketDetail & {
+  user: TicketUser;
+  customer?: { memberSince: string; orderCount: number };
+};
 
 // Blog
 export type BlogPostSummary = {
@@ -128,9 +166,18 @@ export type BlogPostSummary = {
   title: string;
   excerpt: string | null;
   hasCover: boolean;
+  coverAlt?: string | null;
+  tag?: string | null;
+  readingMinutes?: number;
   publishedAt: string | null;
+  updatedAt?: string;
 };
-export type BlogPostDetail = BlogPostSummary & { content: string };
+export type BlogLinkedProduct = { id: string; slug: string; name: string; type: ProductType };
+export type BlogPostDetail = BlogPostSummary & {
+  content: string;
+  related?: BlogPostSummary[];
+  products?: BlogLinkedProduct[];
+};
 export type AdminBlogPost = {
   id: string;
   slug: string;
@@ -148,6 +195,8 @@ export type AdminBlogPostDetail = {
   content: string;
   status: "DRAFT" | "PUBLISHED";
   hasCover: boolean;
+  coverAlt?: string | null;
+  tag?: string | null;
   publishedAt: string | null;
 };
 
@@ -183,8 +232,15 @@ export type OrderSummary = {
   currency: string;
   paymentStatus: string;
   itemCount: number;
+  firstProductName?: string | null;
   createdAt: string;
   paidAt: string | null;
+};
+
+export type WelcomeGift = {
+  code: string;
+  percent: number;
+  state: "AVAILABLE" | "RESERVED" | "USED";
 };
 
 export type Credential = {
@@ -194,16 +250,23 @@ export type Credential = {
   accountPassword: string | null;
   licenseKey: string | null;
   giftCardCode: string | null;
+  deliveryInstructions?: string | null;
 };
 
 export type OrderItemDetail = {
   id: string;
   product: { id: string; name: string; slug: string; type: ProductType };
-  plan: { id: string; label: string };
+  plan: {
+    id: string;
+    label: string;
+    variant?: ProductVariant | null;
+    durationDays?: number | null;
+  };
   quantity: number;
   unitPrice: number;
   lineTotal: number;
   credentials: Credential[];
+  renewal: { estimatedEndAt: string; daysRemaining: number; planId: string | null } | null;
 };
 
 export type CardInfo = { number: string; holder: string; bank: string };
@@ -218,6 +281,10 @@ export type ReceiptInfo = {
 };
 
 export type OrderDetail = {
+  cartPayment?: { expiresAt: string; remainingMs: number } | null;
+  manualSupplier?: { expiresAt: string; remainingMs: number; deliveryHours: number | null } | null;
+  isSupplierQa?: boolean;
+  supplierQaKind?: "API_TEST" | "REAL_STOCK" | null;
   id: string;
   totalAmount: number;
   currency: string;
@@ -229,6 +296,17 @@ export type OrderDetail = {
   items: OrderItemDetail[];
   receipts: ReceiptInfo[];
   cardToCard: CardInfo | null;
+  bluInvoice?: {
+    baseAmount: number;
+    discount: number;
+    expiresAt: string;
+    expired: boolean;
+    remainingMs: number;
+    qaOnly?: boolean;
+    stockHeld?: boolean;
+    privateStockQa?: boolean;
+    supplierCheckout?: boolean;
+  } | null;
 };
 
 export type PaymentMethod = "online" | "card_to_card";
@@ -246,7 +324,29 @@ export type CreateOrderResponse = {
 };
 
 // Admin receipt review (queue + history)
+export type AdminOrderDetail = {
+  id: string;
+  totalAmount: number;
+  currency: string;
+  paymentStatus: string;
+  paymentProvider: string | null;
+  paymentRefId: string | null;
+  user: { name: string; email: string | null; phone: string | null };
+  createdAt: string;
+  paidAt: string | null;
+  items: {
+    id: string;
+    product: { name: string };
+    plan: { label: string };
+    quantity: number;
+    lineTotal: number;
+    fulfilledCount: number;
+    reservedCount: number;
+  }[];
+};
+
 export type AdminReceipt = {
+  bankEvidence?: "matched" | "waiting" | "review" | null;
   id: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
   reference: string | null;

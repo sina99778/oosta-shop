@@ -1,3 +1,4 @@
+import { supplierQuoteRouter } from "./modules/suppliers/suppliers.routes";
 // Assembles the Express application: security middleware, parsers, logging,
 // rate limiting, route mounting, and the centralized error handlers (last).
 
@@ -9,8 +10,10 @@ import { env } from "./config/env";
 import { globalRateLimiter } from "./middleware/rateLimit";
 import { errorHandler, notFoundHandler } from "./middleware/error";
 import { healthRouter } from "./routes/health";
-import { authRouter } from "./modules/auth/auth.routes";
+import { authRouter, createPasswordResetRouter } from "./modules/auth/auth.routes";
+import { createSmtpSender, type SendMail } from "./lib/mailer";
 import { catalogRouter } from "./modules/catalog/catalog.routes";
+import { bluEventRouter } from "./modules/orders/blu-events";
 import { ordersRouter } from "./modules/orders/orders.routes";
 import { paymentsRouter } from "./modules/payments/payments.routes";
 import { ticketsRouter } from "./modules/tickets/tickets.routes";
@@ -19,33 +22,78 @@ import { pagesRouter, pagesAdminRouter } from "./modules/pages/pages.routes";
 import { analyticsRouter } from "./modules/analytics/analytics.routes";
 import { settingsRouter, settingsAdminRouter } from "./modules/settings/settings.routes";
 import { adminRouter } from "./modules/admin/admin.routes";
+import { maintenanceGate } from "./lib/maintenance";
+import { createSupplierCheckout, supplierCheckoutRouter } from "./modules/suppliers/checkout";
+import type { SupplierRegistry } from "./modules/suppliers/fulfillment";
+import { liveSupplierRegistry } from "./modules/suppliers/live-adapters";
+import { cartRouter } from "./modules/orders/cart.routes";
+import { stockAlertsRouter } from "./modules/auth/stock-alerts";
 
-export function createApp() {
+export function createApp(
+  options: {
+    supplierAdapters?: SupplierRegistry;
+    sendPasswordResetEmail?: SendMail;
+  } = {},
+) {
   const app = express();
+  const supplierCheckout = createSupplierCheckout(
+    options.supplierAdapters ?? liveSupplierRegistry(),
+  );
+  app.locals.supplierCheckout = supplierCheckout;
 
   app.disable("x-powered-by");
-  // Production chain is client -> ArvanCloud edge -> nginx -> Express (2 trusted
-  // hops), so req.ip resolves to the real visitor. With only 1, every visitor
-  // behind the same CDN edge shared one rate-limit bucket (site-wide 429s).
-  app.set("trust proxy", env.isProduction ? 2 : 1);
+  // Account data, credentials and payment results must not enter browser/proxy caches.
+  app.use(
+    [
+      "/auth",
+      "/orders",
+      "/cart",
+      "/tickets",
+      "/admin",
+      "/payments/verify",
+      "/supplier-quotes",
+      "/supplier-checkout",
+      "/internal/blu-events",
+      /^\/products\/[^/]+\/reviews$/,
+    ],
+    (_req, res, next) => {
+      res.setHeader("Cache-Control", "private, no-store");
+      next();
+    },
+  );
+
+  app.use(maintenanceGate);
+  // Nginx sanitizes forwarding headers; only explicit proxy subnets are trusted.
+  app.set(
+    "trust proxy",
+    env.TRUST_PROXY.split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
 
   // Security + parsing
   app.use(helmet());
   app.use(cors({ origin: env.corsOrigins, credentials: true }));
-  app.use(express.json({ limit: "1mb" }));
-  app.use(express.urlencoded({ extended: true }));
+  app.use(globalRateLimiter);
+  app.use("/internal/blu-events", bluEventRouter);
+  app.use(express.json({ limit: "1mb", inflate: false }));
+  app.use(express.urlencoded({ extended: false, limit: "64kb", inflate: false }));
 
   // Logging
   app.use(morgan(env.isProduction ? "combined" : "dev"));
 
   // Global rate limiting
-  app.use(globalRateLimiter);
 
   // Routes
   app.use("/health", healthRouter);
   app.use("/auth", authRouter);
+  app.use("/auth", stockAlertsRouter);
+  app.use("/auth", createPasswordResetRouter(options.sendPasswordResetEmail ?? createSmtpSender()));
   app.use(catalogRouter);
   app.use("/orders", ordersRouter);
+  app.use("/cart", cartRouter);
+  app.use("/supplier-quotes", supplierQuoteRouter);
+  app.use("/supplier-checkout", supplierCheckoutRouter(supplierCheckout));
   app.use("/payments", paymentsRouter);
   app.use("/tickets", ticketsRouter);
   app.use(blogRouter); // public blog

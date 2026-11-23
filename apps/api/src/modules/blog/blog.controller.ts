@@ -10,7 +10,8 @@ function sendImage(res: Response, data: Buffer, mimeType: string, cache: string)
 
 // Public
 export async function listPublished(_req: Request, res: Response): Promise<void> {
-  res.json(await blog.listPublished());
+  const query = (res.locals.query ?? {}) as { tag?: string };
+  res.json(await blog.listPublished(query.tag));
 }
 export async function getBySlug(req: Request, res: Response): Promise<void> {
   res.json({ post: await blog.getPublishedBySlug(String(req.params.slug)) });

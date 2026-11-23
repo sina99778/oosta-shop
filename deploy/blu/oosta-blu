@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+case "${1:-}" in
+  enroll) mode=--enroll; io=--pty ;;
+  check) mode=--saved-check; io=--pipe ;;
+  deposit) mode=--deposit; io=--pty ;;
+  publish) mode=--publish; io=--pty ;;
+  poll) mode=--publish-stdin; io=--pipe ;;
+  *) echo "Usage: oosta-blu enroll|check|deposit|publish|poll" >&2; exit 2 ;;
+esac
+test "$#" -eq 1
+runtime=300
+if [ "$mode" = --publish-stdin ]; then runtime=28; fi
+
+set -- --quiet "$io" --wait --collect \
+  -p User=oosta-blu-probe -p NoNewPrivileges=yes \
+  -p ProtectSystem=strict -p ProtectHome=yes -p PrivateTmp=yes \
+  -p LimitCORE=0 -p UMask=0077 -p RuntimeMaxSec="$runtime" \
+  -p ReadWritePaths=/var/lib/oosta-blu-probe \
+  -p LoadCredential=session-key:/etc/oosta-blu-probe/session-key
+if [ "$mode" = --publish ] || [ "$mode" = --publish-stdin ]; then
+  set -- "$@" -p LoadCredential=event-key:/etc/oosta-blu-probe/event-signing-key.pem \
+    -p LoadCredential=tracking-key:/etc/oosta-blu-probe/tracking-key
+fi
+exec systemd-run "$@" \
+  /usr/bin/flock -n /var/lib/oosta-blu-probe/run.lock \
+  /opt/oosta-blu/node/bin/node /opt/oosta-blu/shadow-check.cjs "$mode"

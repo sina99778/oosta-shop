@@ -1,0 +1,1068 @@
+.shell {
+  max-width: 75rem;
+  padding-block: clamp(1.5rem, 4vw, 2.75rem) clamp(3rem, 7vw, 5.5rem);
+}
+.layout {
+  display: grid;
+  gap: 1.5rem;
+  align-items: start;
+}
+.main {
+  min-width: 0;
+}
+.sideCard {
+  display: contents;
+}
+.sideProfile,
+.sideFoot {
+  display: none;
+}
+/* Account sections as one segmented control on mobile; sidebar nav on desktop. */
+.nav {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  gap: 0.25rem;
+  max-width: 100%;
+  padding: 0.25rem;
+  margin-block-end: 0.25rem;
+  border: 1px solid var(--c-border);
+  border-radius: 0.9rem;
+  background: var(--c-surface);
+}
+@media (min-width: 60rem) {
+  .layout {
+    grid-template-columns: minmax(14.5rem, 17.25rem) minmax(0, 1fr);
+    gap: 1.75rem;
+  }
+  .sideCard {
+    position: sticky;
+    top: 5.5rem;
+    display: grid;
+    gap: 0.9rem;
+    padding: 1.15rem;
+    border: 1px solid var(--c-border);
+    border-radius: 1.1rem;
+    background: var(--c-card);
+    box-shadow: var(--shadow-card);
+  }
+  .sideProfile {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-bottom: 0.9rem;
+    border-bottom: 1px solid var(--c-border);
+  }
+  .sideAvatar {
+    display: grid;
+    place-items: center;
+    inline-size: 2.65rem;
+    block-size: 2.65rem;
+    flex: none;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--c-mint) 55%, var(--c-card));
+    color: var(--c-navy);
+    font-size: 0.95rem;
+    font-weight: 850;
+  }
+  :global(.dark) .sideAvatar {
+    background: #1b3d3c;
+    color: var(--c-mint);
+  }
+  .sideMeta {
+    display: grid;
+    min-width: 0;
+    gap: 0.1rem;
+  }
+  .sideMeta strong {
+    font-size: 0.9375rem;
+    font-weight: 800;
+    color: var(--c-fg);
+    overflow-wrap: anywhere;
+  }
+  .sideMeta span {
+    font-size: 0.78rem;
+    color: var(--c-muted);
+    overflow-wrap: anywhere;
+  }
+  .navHeading {
+    display: block;
+    margin-block-end: -0.4rem;
+    padding-inline: 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 650;
+    color: var(--c-muted);
+  }
+  .nav {
+    display: grid;
+    width: 100%;
+    overflow: visible;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    gap: 0.25rem;
+  }
+  .nav a {
+    justify-content: flex-start;
+    width: 100%;
+    padding-inline: 0.85rem;
+  }
+  .sideFoot {
+    display: block;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--c-border);
+  }
+  .sideLogout {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    min-height: 44px;
+    padding-inline: 0.85rem;
+    border-radius: 0.65rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--c-danger-text);
+    transition: background-color 0.15s;
+  }
+  .sideLogout:hover {
+    background: color-mix(in srgb, var(--color-danger) 8%, var(--c-card));
+  }
+}
+.nav a,
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding-inline: 0.95rem;
+  border-radius: 0.65rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-align: center;
+}
+.nav a {
+  flex: none;
+  white-space: nowrap;
+  color: var(--c-muted);
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+.nav a:focus-visible,
+.sideLogout:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: -2px;
+}
+.nav a:hover {
+  background: var(--c-surface);
+  color: var(--c-fg);
+}
+.nav a[aria-current] {
+  background: color-mix(in srgb, var(--c-mint) 38%, var(--c-card));
+  color: var(--c-fg);
+  font-weight: 800;
+}
+:global(.dark) .nav a[aria-current] {
+  background: #1b3d3c;
+  color: #e7f6f1;
+}
+.navLabel {
+  text-align: start;
+}
+.navBadge {
+  min-width: 1.35rem;
+  padding-inline: 0.35rem;
+  border-radius: 999px;
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.35rem;
+  text-align: center;
+}
+.navHeading {
+  display: none;
+}
+.action {
+  border: 1px solid var(--c-border);
+  background: var(--c-card);
+  color: var(--c-fg);
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+}
+.action:hover {
+  border-color: var(--c-primary);
+  color: var(--c-primary);
+}
+.action:focus-visible,
+.row:focus-visible,
+.filters button:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+/* Clean light-surface account header (Figma "05 — حساب کاربری") */
+.hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  margin-block-end: 1.5rem;
+  color: var(--c-fg);
+}
+.hero > div {
+  min-width: 0;
+}
+.eyebrow {
+  margin-block-end: 0.3rem;
+  color: var(--c-primary);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+.hero h1 {
+  font-size: clamp(1.75rem, 3.6vw, 2.5rem);
+  font-weight: 850;
+  line-height: 1.4;
+  color: var(--c-fg);
+  overflow-wrap: anywhere;
+}
+.heroDetail {
+  color: var(--c-muted);
+  margin-block-start: 0.35rem;
+  font-size: 1rem;
+}
+.hero .action {
+  border-color: color-mix(in srgb, var(--c-primary) 82%, var(--c-navy));
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+}
+.hero .action:hover {
+  background: var(--c-primary-hover);
+  color: var(--c-on-primary);
+}
+.hero .action:focus-visible {
+  outline-color: var(--c-primary);
+}
+.stack {
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+}
+.columns {
+  display: grid;
+  align-items: start;
+  gap: 1.25rem;
+}
+.columns > * {
+  min-width: 0;
+}
+.panel {
+  background: var(--c-card);
+  border: 1px solid var(--c-border);
+  border-radius: 0.9rem;
+  box-shadow: var(--shadow-card);
+  padding: clamp(0.85rem, 3vw, 1.5rem);
+  min-width: 0;
+}
+.panel h2 {
+  font-weight: 800;
+  font-size: 1.15rem;
+}
+.vaultCard {
+  border-color: color-mix(in srgb, var(--c-primary) 26%, var(--c-border));
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--c-mint) 14%, var(--c-card)),
+    var(--c-card) 42%
+  );
+}
+:global(.dark) .vaultCard {
+  background: var(--c-card);
+}
+.vaultHead {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.65rem;
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: var(--c-primary);
+}
+.pendingBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin-block-start: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 0.85rem;
+  border: 1px solid #f0b46b;
+  background: var(--c-warning-bg, #fef3e2);
+  color: var(--c-fg);
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+.identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-block-start: 0.5rem;
+}
+.avatar {
+  display: grid;
+  place-items: center;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  flex: none;
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--c-mint) 55%, var(--c-card));
+  color: var(--c-navy);
+  font-size: 1rem;
+  font-weight: 850;
+}
+:global(.dark) .avatar {
+  background: #1b3d3c;
+  color: var(--c-mint);
+}
+.identityText {
+  display: grid;
+  gap: 0.15rem;
+  overflow-wrap: anywhere;
+}
+.identityText strong {
+  color: var(--c-fg);
+}
+.verifiedBadge {
+  background: var(--c-success-bg, #e7f6ec);
+  color: var(--c-primary);
+}
+.verifyLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: 0.8rem;
+  border-radius: 0.55rem;
+  border: 1px solid #f0b46b;
+  background: var(--c-warning-bg, #fef3e2);
+  color: var(--c-warning, #b45309);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(0.5rem, 2vw, 0.9rem);
+}
+.metrics > div,
+.resend {
+  min-width: 0;
+  border: 1px solid var(--c-border);
+  border-radius: 0.85rem;
+  background: var(--c-card);
+}
+.metrics > div {
+  padding: clamp(0.65rem, 2vw, 1.05rem);
+  overflow-wrap: anywhere;
+  box-shadow: var(--shadow-card);
+}
+.metrics dt {
+  color: var(--c-muted);
+  font-size: clamp(0.75rem, 2.2vw, 0.875rem);
+}
+.metrics dd {
+  margin-top: 0.25rem;
+  font-size: clamp(1rem, 2.5vw, 1.35rem);
+  font-weight: 850;
+}
+.metrics a,
+.emptyGift {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--c-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.recoveryGrid {
+  display: grid;
+  gap: 0.8rem;
+  max-width: 36rem;
+  margin-block-start: 1rem;
+}
+.resend summary {
+  min-height: 44px;
+  padding: 0.7rem 0.85rem;
+  color: var(--c-primary);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+.resend form {
+  padding: 0.4rem 0.85rem 0.85rem;
+}
+.sessionPanel {
+  border-color: var(--c-border);
+}
+.sessionsHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+.devices {
+  display: grid;
+  margin-block-start: 1rem;
+  border: 1px solid var(--c-border);
+  border-radius: 0.85rem;
+  overflow: hidden;
+  list-style: none;
+  padding: 0;
+}
+.devices li {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  border-block-start: 1px solid var(--c-border);
+}
+.devices li:first-child {
+  border-block-start: 0;
+}
+.deviceIcon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  background: var(--c-surface);
+  color: var(--c-muted);
+}
+.devices li[data-current="true"] .deviceIcon {
+  background: var(--c-mint);
+  color: #102b28;
+}
+.deviceText {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 0.1rem;
+}
+.deviceText strong {
+  font-size: 0.9375rem;
+  text-align: start;
+}
+.deviceText small {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+}
+.currentDevice {
+  flex: none;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  background: var(--c-mint);
+  color: #102b28;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+.sessionsFoot {
+  margin-block-start: 1rem;
+}
+.select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-control);
+  background: var(--c-card);
+  color: var(--c-fg);
+  font: inherit;
+  font-size: 0.9375rem;
+}
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.pickedFile {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.35rem 0.25rem 0.7rem;
+  border-radius: 999px;
+  background: var(--c-surface);
+  font-size: 0.8125rem;
+}
+.pickedFile button {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  color: var(--c-danger-text);
+}
+.attachment {
+  display: grid;
+  gap: 0.35rem;
+  margin-block-start: 0.65rem;
+  max-width: 20rem;
+}
+.attachment img {
+  width: 100%;
+  max-height: 16rem;
+  object-fit: contain;
+  border-radius: 0.65rem;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+}
+.attachment figcaption {
+  color: var(--c-muted);
+  font-size: 0.75rem;
+}
+.attachmentPlaceholder {
+  display: grid;
+  place-items: center;
+  min-height: 6rem;
+  border-radius: 0.65rem;
+  background: var(--c-surface);
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+}
+.coupon {
+  padding: clamp(1.15rem, 4vw, 2rem);
+  border: 1px solid color-mix(in srgb, var(--c-mint) 32%, var(--c-navy));
+  border-radius: 1rem;
+  background: var(--c-navy);
+  color: #e9f2f6;
+}
+.coupon h2 {
+  margin-block-start: 0.65rem;
+}
+.couponBadge {
+  display: inline-block;
+  padding: 0.35rem 0.7rem;
+  border-radius: 100px;
+  background: var(--c-mint);
+  color: var(--c-navy);
+  font-size: 0.875rem;
+  font-weight: 850;
+}
+.couponCode {
+  max-width: 100%;
+  padding: 0.65rem 0.85rem;
+  border: 1px dashed var(--c-mint);
+  border-radius: 0.65rem;
+  color: var(--c-mint);
+  overflow-wrap: anywhere;
+}
+.notificationHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+}
+.notificationList {
+  display: grid;
+  margin-block-start: 0.8rem;
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: 1rem;
+  background: var(--c-card);
+}
+/* Inbox row (Figma "Account / صندوق پیام"): icon, message, then time and actions. */
+.notificationRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.5rem 0.9rem;
+  padding: 1rem 1.25rem;
+  overflow-wrap: anywhere;
+}
+.notificationRow + .notificationRow {
+  border-top: 1px solid var(--c-border);
+}
+.notificationRow[data-unread] {
+  background: color-mix(in srgb, var(--c-primary) 5%, var(--c-card));
+}
+.noticeIcon {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  background: var(--c-surface);
+  color: var(--c-primary);
+}
+.notificationRow h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.unreadDot {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--c-primary);
+}
+.noticeAside {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+@media (min-width: 48rem) {
+  .notificationRow {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .noticeAside {
+    grid-column: 3;
+    justify-content: flex-end;
+    max-width: 14rem;
+  }
+}
+.purchaseSection {
+  display: grid;
+  gap: 0.85rem;
+  margin-block-start: 1.5rem;
+  scroll-margin-block-start: 6rem;
+}
+.purchaseSection > h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.filters button {
+  min-height: 44px;
+  padding-inline: 0.95rem;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  background: var(--c-card);
+  color: var(--c-muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.filters button:hover {
+  color: var(--c-fg);
+  border-color: color-mix(in srgb, var(--c-primary) 45%, var(--c-border));
+}
+.filters button[aria-pressed="true"] {
+  border-color: var(--c-navy);
+  background: var(--c-navy);
+  color: var(--c-mint);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-mint) 22%, transparent);
+}
+/* A list row: the leading rail carries the status tone, the trailing circle the affordance. */
+.row {
+  --row-tone: var(--c-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  padding: clamp(0.9rem, 2.5vw, 1.25rem);
+  background: var(--c-card);
+  border: 1px solid var(--c-border);
+  border-radius: 0.9rem;
+  box-shadow:
+    inset 4px 0 0 var(--row-tone),
+    var(--shadow-card);
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.row:dir(rtl) {
+  box-shadow:
+    inset -4px 0 0 var(--row-tone),
+    var(--shadow-card);
+}
+.row[data-tone="success"] {
+  --row-tone: #22a06b;
+}
+.row[data-tone="pending"] {
+  --row-tone: #d39b2a;
+}
+.row[data-tone="primary"] {
+  --row-tone: var(--c-primary);
+}
+.row[data-tone="danger"] {
+  --row-tone: var(--c-danger-text);
+}
+.row:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--c-primary) 45%, var(--c-border));
+}
+.rowGo {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-primary);
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+.row:hover .rowGo {
+  background: var(--c-navy);
+  color: var(--c-mint);
+  transform: translateX(-3px);
+}
+.row:dir(ltr):hover .rowGo {
+  transform: translateX(3px);
+}
+.empty {
+  display: grid;
+  justify-items: start;
+  gap: 0.9rem;
+}
+.row > div {
+  min-width: 0;
+}
+.rowTitle {
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+.rowMeta {
+  color: var(--c-muted);
+  font-size: 0.85rem;
+  margin-block-start: 0.3rem;
+  overflow-wrap: anywhere;
+}
+.rowAside {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem 0.85rem;
+}
+.textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 0.75rem;
+  border: 1px solid var(--c-border);
+  border-radius: 0.45rem;
+  background: var(--c-surface);
+  color: var(--c-fg);
+}
+.textarea:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+.message {
+  max-width: min(92%, 41rem);
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--c-border);
+  border-radius: 0.65rem;
+  background: var(--c-surface);
+  overflow-wrap: anywhere;
+}
+.message[data-staff="true"] {
+  border-inline-start: 3px solid var(--c-primary);
+}
+.message[data-staff="false"] {
+  margin-inline-start: auto;
+  background: color-mix(in srgb, var(--c-primary) 8%, var(--c-card));
+}
+.message p {
+  white-space: pre-wrap;
+}
+.factRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.factRow > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (min-width: 56rem) {
+  .columns {
+    grid-template-columns: minmax(0, 1.65fr) minmax(17rem, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row,
+  .rowGo,
+  .nav a,
+  .action {
+    transition: none;
+  }
+  .row:hover,
+  .row:hover .rowGo,
+  .row:dir(ltr):hover .rowGo {
+    transform: none;
+  }
+}
+
+/* Dashboard (Figma "Account / داشبورد و سفارش‌ها"): icon stat cards and an orders table. */
+.metrics > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "label icon" "value value" "note note";
+  align-items: center;
+  row-gap: 0.35rem;
+}
+.metrics dt {
+  grid-area: label;
+}
+.metrics dd {
+  grid-area: value;
+  margin-top: 0;
+}
+.metrics small {
+  grid-area: note;
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: var(--c-primary);
+}
+.statIcon {
+  grid-area: icon;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--c-mint) 45%, var(--c-card));
+  color: var(--c-navy);
+}
+:global(.dark) .statIcon {
+  background: #1b3d3c;
+  color: var(--c-mint);
+}
+.action svg {
+  flex: none;
+}
+.ordersCard {
+  margin-block-start: 1.5rem;
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: 1.1rem;
+  background: var(--c-card);
+  box-shadow: var(--shadow-card);
+  scroll-margin-block-start: 6rem;
+}
+.ordersHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 1.25rem 1.5rem;
+}
+.ordersHead h2 {
+  font-size: 1.375rem;
+  font-weight: 850;
+}
+.ordersHead .filters button {
+  min-height: 2.25rem;
+  padding-inline: 0.75rem;
+  font-size: 0.8125rem;
+}
+.ordersCard > .empty,
+.ordersCard > .panel,
+.tableEmpty {
+  margin: 0 1.5rem 1.5rem;
+}
+.tableEmpty {
+  color: var(--c-muted);
+}
+.ordersTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.ordersTable thead th {
+  background: var(--c-surface);
+  padding: 0.75rem 1.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--c-muted);
+  text-align: start;
+}
+.ordersTable td {
+  border-top: 1px solid var(--c-border);
+  padding: 1rem 1.5rem;
+  vertical-align: middle;
+}
+.orderNo {
+  font-weight: 800;
+  color: var(--c-primary);
+  white-space: nowrap;
+}
+.orderNo:hover {
+  text-decoration: underline;
+}
+.orderItems {
+  display: block;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.orderItems small {
+  color: var(--c-muted);
+  font-weight: 500;
+}
+.orderDate {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  color: var(--c-muted);
+}
+.orderAmount {
+  font-weight: 800;
+  white-space: nowrap;
+}
+.orderAction {
+  text-align: end;
+}
+.viewButton,
+.payButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding-inline: 1rem;
+  border-radius: 0.7rem;
+  font-size: 0.8125rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.viewButton {
+  background: var(--c-surface);
+  color: var(--c-fg);
+}
+.viewButton:hover {
+  color: var(--c-primary);
+}
+.payButton {
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+}
+.payButton:hover {
+  background: var(--c-primary-hover);
+}
+.orderNo:focus-visible,
+.viewButton:focus-visible,
+.payButton:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+/* Phones: each order becomes a stacked card with its column labels. */
+@media (max-width: 47.99rem) {
+  .ordersTable thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .ordersTable,
+  .ordersTable tbody,
+  .ordersTable tr,
+  .ordersTable td {
+    display: block;
+  }
+  .ordersTable tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem 0.75rem;
+    border-top: 1px solid var(--c-border);
+    padding: 1rem 1.25rem;
+  }
+  .ordersTable td {
+    border: 0;
+    padding: 0;
+  }
+  .ordersTable td:nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .ordersTable td:nth-child(3) {
+    grid-row: 1;
+    grid-column: 2;
+    justify-self: end;
+  }
+  .ordersTable td:nth-child(4) {
+    grid-row: 3;
+  }
+  .ordersTable td:nth-child(5) {
+    grid-row: 3;
+    grid-column: 2;
+  }
+  .ordersHead {
+    padding: 1rem 1.25rem;
+  }
+}
+
+/* Security (Figma "Account / امنیت حساب"): password and recovery email side by side. */
+.securityGrid {
+  display: grid;
+  gap: 0.85rem;
+  align-items: start;
+}
+@media (min-width: 60rem) {
+  .securityGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.securityNote {
+  display: grid;
+  gap: 0.15rem;
+  border: 1px solid #f0b46b;
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, #f59e0b 10%, var(--c-card));
+  padding: 0.75rem 0.9rem;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+.securityNote span {
+  color: var(--c-muted);
+}
+
+/* Order detail title carries the status badge (Figma "Account / جزئیات سفارش"). */
+.orderTitle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.85rem;
+}
+.orderTitle > span:last-child {
+  font-size: 0.8125rem;
+}
+.factRow dd[data-tone="success"] {
+  color: #15803d;
+  font-weight: 800;
+}
+:global(.dark) .factRow dd[data-tone="success"] {
+  color: #4ade80;
+}
+.factRow dd[data-tone="danger"] {
+  color: var(--c-danger-text);
+  font-weight: 800;
+}

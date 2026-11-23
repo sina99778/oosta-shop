@@ -1,24 +1,70 @@
 // Customer-facing support tickets.
 
+import type { Response } from "express";
 import { prisma } from "../../lib/prisma";
+import { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/httpError";
 import { notifyAdmin } from "../../bot";
+
+export type NewAttachment = { data: Buffer; mime: string; size: number; name: string | null };
+
+const attachmentData = (a: NewAttachment | null) =>
+  a
+    ? {
+        attachmentData: Uint8Array.from(a.data),
+        attachmentMime: a.mime,
+        attachmentSize: a.size,
+        attachmentName: a.name,
+      }
+    : {};
+
+// Ticket reads never load screenshot bytes; they are fetched one at a time.
+export const messageOmit = { attachmentData: true } as const;
+const orderSummarySelect = {
+  id: true,
+  createdAt: true,
+  totalAmount: true,
+  currency: true,
+  paymentStatus: true,
+} as const;
+
+async function ownedOrderId(userId: string, orderId: string | undefined) {
+  if (!orderId) return null;
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, userId },
+    select: { id: true },
+  });
+  // The same answer for a foreign or missing order: no cross-account probing.
+  if (!order) throw new AppError(404, "ORDER_NOT_FOUND", "Order not found");
+  return order.id;
+}
 
 function shortId(id: string): string {
   return id.slice(-8);
 }
 
-export async function createTicket(userId: string, subject: string, body: string) {
+export async function createTicket(
+  userId: string,
+  input: { subject: string; body: string; orderId?: string; attachment: NewAttachment | null },
+) {
+  const orderId = await ownedOrderId(userId, input.orderId);
   const ticket = await prisma.ticket.create({
     data: {
       userId,
-      subject,
+      subject: input.subject,
       status: "OPEN",
-      messages: { create: { authorId: userId, body, isStaff: false } },
+      orderId,
+      messages: {
+        create: {
+          authorId: userId,
+          body: input.body,
+          isStaff: false,
+          ...attachmentData(input.attachment),
+        },
+      },
     },
-    include: { user: { select: { name: true } } },
   });
-  void notifyAdmin(`🆕 New ticket #${shortId(ticket.id)} from ${ticket.user.name}\n${subject}`);
+  void notifyAdmin(`🆕 تیکت جدید #${shortId(ticket.id)}`);
   return { id: ticket.id, status: ticket.status };
 }
 
@@ -35,8 +81,10 @@ export async function listMyTickets(userId: string) {
     id: t.id,
     subject: t.subject,
     status: t.status,
+    orderId: t.orderId,
     messageCount: t._count.messages,
     lastMessage: t.messages[0]?.body ?? "",
+    lastFromStaff: t.messages[0]?.isStaff ?? false,
     updatedAt: t.updatedAt,
   }));
 }
@@ -44,44 +92,125 @@ export async function listMyTickets(userId: string) {
 export async function getMyTicket(userId: string, id: string) {
   const ticket = await prisma.ticket.findFirst({
     where: { id, userId },
-    include: { messages: { orderBy: { createdAt: "asc" } } },
+    include: ticketInclude,
   });
   if (!ticket) throw new AppError(404, "NOT_FOUND", "Ticket not found");
   return serializeTicket(ticket);
 }
 
-export async function addMyMessage(userId: string, id: string, body: string) {
-  const ticket = await prisma.ticket.findFirst({ where: { id, userId } });
-  if (!ticket) throw new AppError(404, "NOT_FOUND", "Ticket not found");
-  await prisma.ticketMessage.create({
-    data: { ticketId: id, authorId: userId, body, isStaff: false },
-  });
-  await prisma.ticket.update({ where: { id }, data: { status: "OPEN", updatedAt: new Date() } });
-  void notifyAdmin(`💬 New reply on ticket #${shortId(id)}\n${body.slice(0, 200)}`);
-  return getMyTicket(userId, id);
+const ticketInclude = {
+  messages: { orderBy: { createdAt: "asc" }, omit: messageOmit },
+  order: { select: orderSummarySelect },
+} satisfies Prisma.TicketInclude;
+
+export async function addMyMessage(
+  userId: string,
+  id: string,
+  body: string,
+  attachment: NewAttachment | null = null,
+) {
+  const ticket = await prisma.ticket
+    .update({
+      where: { id, userId },
+      data: {
+        status: "OPEN",
+        updatedAt: new Date(),
+        messages: {
+          create: { authorId: userId, body, isStaff: false, ...attachmentData(attachment) },
+        },
+      },
+      include: ticketInclude,
+    })
+    .catch(ticketWriteError);
+  void notifyAdmin(`💬 پاسخ جدید در تیکت #${shortId(id)}`);
+  return serializeTicket(ticket);
 }
 
-type TicketWithMessages = {
+export function ticketWriteError(error: unknown): never {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+    throw new AppError(404, "NOT_FOUND", "Ticket not found");
+  }
+  throw error;
+}
+
+type MessageRow = {
   id: string;
-  subject: string;
-  status: string;
+  body: string;
+  isStaff: boolean;
   createdAt: Date;
-  updatedAt: Date;
-  messages: { id: string; body: string; isStaff: boolean; createdAt: Date }[];
+  attachmentMime: string | null;
+  attachmentName: string | null;
+  attachmentSize: number | null;
 };
 
-function serializeTicket(t: TicketWithMessages) {
+export function serializeMessage(m: MessageRow) {
+  return {
+    id: m.id,
+    body: m.body,
+    isStaff: m.isStaff,
+    createdAt: m.createdAt,
+    attachment:
+      m.attachmentMime && m.attachmentSize
+        ? { name: m.attachmentName, mime: m.attachmentMime, size: m.attachmentSize }
+        : null,
+  };
+}
+
+export function serializeOrderSummary(
+  order: Prisma.OrderGetPayload<{ select: typeof orderSummarySelect }> | null,
+) {
+  return order
+    ? {
+        id: order.id,
+        createdAt: order.createdAt,
+        totalAmount: Number(order.totalAmount),
+        currency: order.currency,
+        paymentStatus: order.paymentStatus,
+      }
+    : null;
+}
+
+function serializeTicket(t: Prisma.TicketGetPayload<{ include: typeof ticketInclude }>) {
   return {
     id: t.id,
     subject: t.subject,
     status: t.status,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
-    messages: t.messages.map((m) => ({
-      id: m.id,
-      body: m.body,
-      isStaff: m.isStaff,
-      createdAt: m.createdAt,
-    })),
+    order: serializeOrderSummary(t.order),
+    messages: t.messages.map(serializeMessage),
   };
+}
+
+// Owner (or any admin) download of one screenshot. Missing, foreign and
+// attachment-less messages all answer the same 404.
+export async function getAttachment(
+  who: { userId?: string; admin?: boolean },
+  ticketId: string,
+  messageId: string,
+) {
+  const message = await prisma.ticketMessage.findFirst({
+    where: {
+      id: messageId,
+      ticketId,
+      attachmentData: { not: null },
+      ...(who.admin ? {} : { ticket: { userId: who.userId } }),
+    },
+    select: { attachmentData: true, attachmentMime: true, attachmentName: true },
+  });
+  if (!message?.attachmentData || !message.attachmentMime)
+    throw new AppError(404, "NOT_FOUND", "Attachment not found");
+  return message;
+}
+
+export function sendAttachment(
+  res: Response,
+  file: { attachmentData: Uint8Array | null; attachmentMime: string | null },
+): void {
+  res.setHeader("Content-Type", file.attachmentMime!);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Disposition", "inline");
+  res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self'; sandbox");
+  res.setHeader("Cache-Control", "private, no-store");
+  res.end(Buffer.from(file.attachmentData!));
 }

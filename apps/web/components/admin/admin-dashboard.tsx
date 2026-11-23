@@ -1,172 +1,302 @@
 "use client";
 
+import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
-import { Container } from "@/components/ui/container";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { QueryError } from "@/components/query-error";
 import { Spinner } from "@/components/ui/spinner";
-import { formatDate, formatPrice } from "@/lib/format";
+import { formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import type { AdminStats } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
+import { BluStatusCard } from "./blu-status-card";
+import { AdminOrderList } from "./admin-order-list";
+import styles from "./admin.module.css";
 
-function statusTone(s: string): "success" | "muted" | "danger" {
-  if (s === "PAID") return "success";
-  if (s === "PENDING" || s === "PENDING_REVIEW") return "muted";
-  return "danger";
+function SalesChart({
+  data,
+  locale,
+  noData,
+}: {
+  data: AdminStats;
+  locale: Locale;
+  noData: string;
+}) {
+  const fa = locale === "fa";
+  const timeZone = "Asia/Tehran";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(new Date());
+  const fields = Object.fromEntries(parts.map(({ type, value }) => [type, Number(value)]));
+  const end = new Date(Date.UTC(fields.year, fields.month - 1, fields.day));
+  const byDay = new Map(data.salesByDay.map((day) => [day.day, day]));
+  const number = new Intl.NumberFormat(fa ? "fa-IR" : "en-US");
+  const date = new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", timeZone });
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const at = new Date(end);
+    at.setUTCDate(end.getUTCDate() - 6 + index);
+    const entry = byDay.get(at.toISOString().slice(0, 10));
+    return { at, count: entry?.count ?? 0, revenue: entry?.revenue ?? 0 };
+  });
+  const maxRevenue = Math.max(1, ...days.map((day) => day.revenue));
+  const revenue = days.reduce((total, day) => total + day.revenue, 0);
+  const count = days.reduce((total, day) => total + day.count, 0);
+
+  return (
+    <>
+      <div className={styles.chartTotal}>
+        <strong>{formatPrice(revenue, data.currency, locale)}</strong>
+        <span>
+          {count
+            ? fa
+              ? `${number.format(count)} سفارش تحویل‌شده`
+              : `${number.format(count)} delivered orders`
+            : noData}
+        </span>
+      </div>
+      <div className={styles.chart} aria-hidden="true">
+        <div className={styles.bars}>
+          {days.map(({ at, count, revenue }) => (
+            <div
+              className={styles.barSlot}
+              key={at.toISOString()}
+              title={`${date.format(at)} · ${formatPrice(revenue, data.currency, locale)} · ${number.format(count)}`}
+            >
+              <span
+                className={styles.bar}
+                data-empty={revenue <= 0}
+                data-today={at.getTime() === end.getTime()}
+                style={{ height: `${Math.max(1, (revenue / maxRevenue) * 100)}%` }}
+              />
+            </div>
+          ))}
+        </div>
+        <div className={styles.axis}>
+          {days.map(({ at }, index) => (
+            <span key={at.toISOString()}>
+              {index === 6 ? (fa ? "امروز" : "Today") : date.format(at)}
+            </span>
+          ))}
+        </div>
+      </div>
+      <details className={styles.chartDetails}>
+        <summary>{fa ? "جزئیات فروش روزانه" : "Daily sales details"}</summary>
+        <table className={styles.dailyTable}>
+          <thead>
+            <tr>
+              <th scope="col">{fa ? "روز" : "Day"}</th>
+              <th scope="col">{fa ? "سفارش" : "Orders"}</th>
+              <th scope="col">{fa ? "مبلغ" : "Revenue"}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {days.map(({ at, count, revenue }) => (
+              <tr key={at.toISOString()}>
+                <td>{date.format(at)}</td>
+                <td>{number.format(count)}</td>
+                <td>{formatPrice(revenue, data.currency, locale)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
+    </>
+  );
 }
 
 export function AdminDashboard({ locale, dict }: { locale: Locale; dict: Dictionary }) {
   const { token } = useAuth();
   const t = dict.admin.dash;
+  const fa = locale === "fa";
+  const base = `/${locale}/admin`;
+  const number = new Intl.NumberFormat(fa ? "fa-IR" : "en-US");
   const statusMap = dict.dashboard.status as Record<string, string>;
-  const { data, loading } = useApi<AdminStats>(token ? "/admin/stats" : null, token ?? undefined);
+  const { data, loading, error, refetch } = useApi<AdminStats>(
+    token ? "/admin/stats" : null,
+    token ?? undefined,
+  );
 
-  if (loading || !data) {
-    return (
-      <Container className="py-20 text-center">
-        <Spinner className="size-6" />
-      </Container>
-    );
-  }
-
-  const maxRev = Math.max(1, ...data.salesByDay.map((d) => d.revenue));
-  const stats = [
-    { label: t.revenue, value: formatPrice(data.revenueTotal, data.currency, locale) },
-    { label: t.revenue30, value: formatPrice(data.revenue30, data.currency, locale) },
-    { label: t.paidOrders, value: String(data.paidOrders) },
-    { label: t.customers, value: String(data.customers) },
-  ];
+  const stats = data
+    ? [
+        { label: t.revenue30, value: formatPrice(data.revenue30, data.currency, locale) },
+        {
+          label: t.paidOrders,
+          value: number.format(data.paidOrders),
+          note: fa
+            ? `از ${number.format(data.totalOrders)} سفارش`
+            : `of ${number.format(data.totalOrders)} orders`,
+        },
+        { label: t.customers, value: number.format(data.customers) },
+        { label: t.revenue, value: formatPrice(data.revenueTotal, data.currency, locale) },
+      ]
+    : [];
 
   return (
-    <Container className="space-y-6 py-8">
-      <h1 className="text-2xl font-bold">{t.title}</h1>
+    <div className={styles.dashboard}>
+      <header className={styles.dashboardHeader}>
+        <div>
+          <h1>{fa ? "نمای کلی فروشگاه" : "Store overview"}</h1>
+          <p className={styles.today}>
+            {fa ? "امروز: " : "Today: "}
+            {new Intl.DateTimeFormat(fa ? "fa-IR" : "en-US", {
+              dateStyle: "long",
+              timeZone: "Asia/Tehran",
+            }).format(new Date())}
+          </p>
+        </div>
+        <div className={styles.headerActions}>
+          <Link href={base + "/products/new"} className={styles.primaryLink}>
+            <span aria-hidden="true">+</span>
+            {fa ? "افزودن محصول" : "Add product"}
+          </Link>
+          <Link href={base + "/receipts"} className={styles.secondaryLink}>
+            {fa ? "باز کردن صف رسیدها" : "Open receipt queue"}
+          </Link>
+        </div>
+      </header>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {stats.map((s) => (
-          <Card key={s.label} className="relative overflow-hidden">
-            <div className="absolute inset-x-0 -top-10 h-20 bg-brand-gradient opacity-10 blur-2xl" />
-            <p className="text-sm text-muted">{s.label}</p>
-            <p className="mt-1 text-2xl font-bold tracking-tight">{s.value}</p>
-          </Card>
-        ))}
-      </div>
+      {loading ? (
+        <div className={styles.panel} role="status">
+          <Spinner className="size-5" /> <span className="sr-only">{dict.common.loading}</span>
+        </div>
+      ) : error || !data ? (
+        <section className={styles.panel}>
+          <QueryError message={dict.common.somethingWrong} onRetry={refetch} />
+        </section>
+      ) : (
+        <>
+          <div className={styles.paymentStrip}>
+            <Link
+              className={styles.queueLink}
+              data-attention={data.pendingReview > 0}
+              href={base + "/receipts"}
+            >
+              <b>{number.format(data.pendingReview)}</b>
+              <span>
+                <strong>
+                  {fa ? "سفارش در انتظار بررسی رسید" : "Orders awaiting receipt review"}
+                </strong>
+                <small>
+                  {fa ? "باز کردن صف رسیدها" : "Open receipt queue"}{" "}
+                  <span aria-hidden="true">↗</span>
+                </small>
+              </span>
+            </Link>
+            <BluStatusCard locale={locale} copy={dict.admin.bluStatus} token={token} />
+          </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <p className="text-sm text-muted">{t.orders}</p>
-          <p className="mt-1 text-xl font-semibold">{data.totalOrders}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-muted">{t.pendingReview}</p>
-          <p className="mt-1 text-xl font-semibold text-primary">{data.pendingReview}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-muted">{t.customers}</p>
-          <p className="mt-1 text-xl font-semibold">{data.customers}</p>
-        </Card>
-      </div>
-
-      {/* Sales chart */}
-      <Card>
-        <h2 className="mb-4 font-semibold">{t.salesChart}</h2>
-        {data.salesByDay.length === 0 ? (
-          <p className="text-sm text-muted">{t.noData}</p>
-        ) : (
-          <div className="flex h-40 items-end gap-1.5">
-            {data.salesByDay.map((d) => (
-              <div
-                key={d.day}
-                className="group flex flex-1 flex-col items-center justify-end gap-1"
-              >
-                <div
-                  className="w-full rounded-t bg-brand-gradient transition-all"
-                  style={{ height: `${Math.max(4, (d.revenue / maxRev) * 100)}%` }}
-                  title={`${d.day}: ${formatPrice(d.revenue, data.currency, locale)} (${d.count})`}
-                />
-                <span className="text-[10px] text-muted">{d.day.slice(5)}</span>
+          <dl className={styles.metrics}>
+            {stats.map(({ label, value, note }) => (
+              <div className={styles.metric} key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+                {note && <small>{note}</small>}
               </div>
             ))}
-          </div>
-        )}
-      </Card>
+          </dl>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Top products */}
-        <Card>
-          <h2 className="mb-3 font-semibold">{t.topProducts}</h2>
-          {data.topProducts.length === 0 ? (
-            <p className="text-sm text-muted">{t.noData}</p>
-          ) : (
-            <div className="space-y-2">
-              {data.topProducts.map((p, i) => (
-                <div key={p.id} className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2">
-                    <span className="grid size-6 place-items-center rounded-md bg-primary/10 text-xs font-bold text-primary">
-                      {i + 1}
-                    </span>
-                    {p.name}
-                  </span>
-                  <span className="text-muted">
-                    {p.unitsSold} {t.unitsSold}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
-        {/* Low stock */}
-        <Card>
-          <h2 className="mb-3 font-semibold">{t.lowStock}</h2>
-          {data.lowStock.length === 0 ? (
-            <p className="text-sm text-muted">{t.noData}</p>
-          ) : (
-            <div className="space-y-2">
-              {data.lowStock.map((p) => (
-                <div key={p.id} className="flex items-center justify-between text-sm">
-                  <span>{p.name}</span>
-                  <Badge tone={p.stock === 0 ? "danger" : "muted"}>{p.stock}</Badge>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
-
-      {/* Recent orders */}
-      <Card>
-        <h2 className="mb-3 font-semibold">{t.recentOrders}</h2>
-        {data.recentOrders.length === 0 ? (
-          <p className="text-sm text-muted">{t.noData}</p>
-        ) : (
-          <div className="space-y-2">
-            {data.recentOrders.map((o) => (
-              <div
-                key={o.id}
-                className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2 text-sm last:border-0"
-              >
+          <div className={styles.dashboardBody}>
+            <section className={styles.panel}>
+              <header className={styles.panelHeader}>
                 <div>
-                  <span className="font-medium">#{o.id.slice(-8)}</span>{" "}
-                  <span className="text-muted">
-                    {o.user.name} · {o.user.email ?? o.user.phone ?? "—"}
-                  </span>
+                  <h2>{fa ? "فروش هفتگی" : "Weekly sales"}</h2>
+                  <p>
+                    {fa
+                      ? "۷ روز اخیر · مبلغ سفارش‌های تحویل‌شده"
+                      : "Last 7 days · revenue from delivered orders"}
+                  </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-muted">{formatDate(o.createdAt, locale)}</span>
-                  <span className="font-semibold">
-                    {formatPrice(o.totalAmount, o.currency, locale)}
-                  </span>
-                  <Badge tone={statusTone(o.paymentStatus)}>
-                    {statusMap[o.paymentStatus] ?? o.paymentStatus}
-                  </Badge>
-                </div>
-              </div>
-            ))}
+              </header>
+              <SalesChart data={data} locale={locale} noData={t.noData} />
+            </section>
+
+            <section className={styles.panel}>
+              <header className={styles.panelHeader}>
+                <h2>{t.recentOrders}</h2>
+                <Link href={base + "/orders"} className={styles.inlineLink}>
+                  {fa ? "همه سفارش‌ها" : "All orders"} <span aria-hidden="true">↗</span>
+                </Link>
+              </header>
+              {!data.recentOrders.length ? (
+                <p className={styles.empty}>{t.noData}</p>
+              ) : (
+                <AdminOrderList orders={data.recentOrders} locale={locale} statuses={statusMap} />
+              )}
+            </section>
+
+            <div className={styles.inventoryGrid}>
+              <section className={styles.panel}>
+                <header className={styles.panelHeader}>
+                  <div>
+                    <h2>{fa ? "موجودی داخلی کم" : "Low internal inventory"}</h2>
+                    <p>{fa ? "تعداد ثبت‌شده در انبار سایت" : "Units held by the store"}</p>
+                  </div>
+                </header>
+                {!data.lowStock.length ? (
+                  <p className={styles.empty}>{t.noData}</p>
+                ) : (
+                  <ul className={styles.productList}>
+                    {data.lowStock.map((product) => (
+                      <li key={product.id}>
+                        <Link href={base + "/products/" + product.id}>
+                          <span dir="auto">{product.name}</span>
+                          <span
+                            className={styles.stockCount}
+                            data-level={product.stock <= 2 ? "low" : "warn"}
+                          >
+                            {number.format(product.stock)} {fa ? "عدد" : "left"}
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+              <section className={styles.panel}>
+                <header className={styles.panelHeader}>
+                  <h2>{t.topProducts}</h2>
+                </header>
+                {!data.topProducts.length ? (
+                  <p className={styles.empty}>{t.noData}</p>
+                ) : (
+                  <ul className={styles.productList}>
+                    {data.topProducts.map((product) => (
+                      <li key={product.id}>
+                        <Link href={base + "/products/" + product.id} className={styles.topProduct}>
+                          <span dir="auto">{product.name}</span>
+                          <small>
+                            {number.format(product.unitsSold)} {t.unitsSold}
+                          </small>
+                          <span className={styles.topBar} aria-hidden="true">
+                            <span
+                              style={{
+                                width: `${Math.max(
+                                  6,
+                                  Math.round(
+                                    (product.unitsSold /
+                                      Math.max(
+                                        ...data.topProducts.map((item) => item.unitsSold),
+                                        1,
+                                      )) *
+                                      100,
+                                  ),
+                                )}%`,
+                              }}
+                            />
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </div>
           </div>
-        )}
-      </Card>
-    </Container>
+        </>
+      )}
+    </div>
   );
 }

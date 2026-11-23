@@ -1,15 +1,32 @@
+import { supplierAdminRouter } from "../suppliers/suppliers.routes";
 // Admin routes — all require a valid JWT AND the ADMIN role.
 
 import { Router } from "express";
+import { z } from "zod";
+import { AppError } from "../../utils/httpError";
+import { issuePrivateBluInvoice } from "../orders/blu-invoice";
+import { readBluPollStatus } from "../orders/blu-poll-status";
 import { authenticate, requireRole } from "../../middleware/auth";
 import { validate } from "../../middleware/validate";
 import { uploadProductImage } from "../../middleware/upload";
 import * as schemas from "./admin.schemas";
 import * as ctrl from "./admin.controller";
+import { ticketAttachmentParamsSchema } from "../tickets/tickets.schemas";
 
 export const adminRouter = Router();
 
 adminRouter.use(authenticate, requireRole("ADMIN"));
+adminRouter.use("/suppliers", supplierAdminRouter);
+adminRouter.get("/blu/status", async (_req, res) => {
+  res.json(await readBluPollStatus());
+});
+adminRouter.post("/blu/qa-invoice", validate({ body: z.object({}).strict() }), async (req, res) => {
+  const address = req.socket.remoteAddress;
+  if (address !== "127.0.0.1" && address !== "::1" && address !== "::ffff:127.0.0.1") {
+    throw new AppError(404, "NOT_FOUND", "Route not found");
+  }
+  res.json({ invoice: await issuePrivateBluInvoice() });
+});
 
 // Dashboard
 adminRouter.get("/stats", ctrl.stats);
@@ -108,6 +125,11 @@ adminRouter.get(
 // Orders overview
 adminRouter.get("/orders", validate({ query: schemas.ordersQuerySchema }), ctrl.listOrders);
 adminRouter.get("/orders/:id", validate({ params: schemas.idParamSchema }), ctrl.getOrder);
+adminRouter.get(
+  "/orders/:id/delivery-codes",
+  validate({ params: schemas.idParamSchema }),
+  ctrl.getOrderDeliveryCodes,
+);
 
 // Card-to-card receipts (review queue + permanent history)
 adminRouter.get("/receipts", validate({ query: schemas.receiptsQuerySchema }), ctrl.listReceipts);
@@ -144,6 +166,11 @@ adminRouter.delete("/reviews/:id", validate({ params: schemas.idParamSchema }), 
 // Support tickets
 adminRouter.get("/tickets", validate({ query: schemas.ticketsQuerySchema }), ctrl.listTickets);
 adminRouter.get("/tickets/:id", validate({ params: schemas.idParamSchema }), ctrl.getTicket);
+adminRouter.get(
+  "/tickets/:id/messages/:messageId/attachment",
+  validate({ params: ticketAttachmentParamsSchema }),
+  ctrl.getTicketAttachment,
+);
 adminRouter.post(
   "/tickets/:id/messages",
   validate({ params: schemas.idParamSchema, body: schemas.ticketReplySchema }),
