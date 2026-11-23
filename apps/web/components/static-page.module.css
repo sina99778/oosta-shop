@@ -1,0 +1,95 @@
+/* Policy and info pages (Figma "Content / صفحهٔ ثابت"): header band, section list, text. */
+.band {
+  border-block-end: 1px solid var(--c-border);
+  background: var(--c-surface);
+}
+.bandInner {
+  max-width: 78rem;
+  padding-block: clamp(1.25rem, 3vw, 1.75rem) clamp(1.5rem, 4vw, 2.25rem);
+}
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.6rem;
+  font-size: 0.8125rem;
+  color: var(--c-muted);
+}
+.crumbs a:hover {
+  color: var(--c-fg);
+}
+.crumbs [aria-current="page"] {
+  color: var(--c-fg);
+  font-weight: 650;
+}
+.title {
+  margin-block: 0.75rem 0.35rem;
+  font-size: clamp(1.75rem, 3.6vw, 2.5rem);
+  font-weight: 850;
+  line-height: 1.4;
+}
+.updated {
+  font-size: 0.8125rem;
+  color: var(--c-muted);
+}
+.body {
+  display: grid;
+  gap: 1.5rem;
+  max-width: 78rem;
+  padding-block: clamp(1.5rem, 4vw, 3rem) clamp(3rem, 6vw, 4.5rem);
+}
+.toc {
+  align-self: start;
+  border: 1px solid var(--c-border);
+  border-radius: 1rem;
+  background: var(--c-card);
+  padding: 0.75rem;
+}
+.toc ol {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.toc a {
+  display: block;
+  border-radius: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--c-fg);
+}
+.toc a:hover,
+.toc a:focus-visible {
+  background: color-mix(in srgb, var(--c-mint) 30%, var(--c-card));
+}
+.article {
+  min-width: 0;
+  max-width: 50rem;
+  font-size: 1rem;
+  line-height: 1.95;
+}
+.article h2 {
+  scroll-margin-top: 6rem;
+  font-size: clamp(1.35rem, 2.4vw, 1.75rem);
+  font-weight: 850;
+}
+.article h2:not(:first-child) {
+  margin-block-start: 1.5em;
+}
+@media (min-width: 60rem) {
+  .body {
+    grid-template-columns: minmax(0, 1fr) 18.75rem;
+    grid-template-areas: "article toc";
+    column-gap: 3.5rem;
+  }
+  .article {
+    grid-area: article;
+  }
+  .toc {
+    grid-area: toc;
+    position: sticky;
+    top: 5.5rem;
+  }
+}

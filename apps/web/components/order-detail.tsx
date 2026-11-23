@@ -75,16 +75,42 @@ export function OrderDetail({
     order.manualSupplier?.remainingMs === 0 ||
     (order.paymentStatus === "PENDING" && order.cartPayment?.remainingMs === 0);
 
+  const providerLabel =
+    order.paymentProvider === "ZARINPAL"
+      ? fa
+        ? "پرداخت آنلاین (زرین‌پال)"
+        : "Online payment (Zarinpal)"
+      : order.paymentProvider === "CARD_TO_CARD"
+        ? fa
+          ? "کارت‌به‌کارت"
+          : "Card transfer"
+        : order.paymentProvider === "MANUAL"
+          ? fa
+            ? "ثبت دستی"
+            : "Recorded manually"
+          : null;
+
   return (
     <AccountFrame
       locale={locale}
       section="orders"
       title={
+        <span className={styles.orderTitle}>
+          <span>
+            {d.orderNo} <bdi>#{shortId}</bdi>
+          </span>
+          <Badge tone={orderStatusTone(order.paymentStatus)}>
+            {statusMap[order.paymentStatus] ?? order.paymentStatus}
+          </Badge>
+        </span>
+      }
+      detail={
         <>
-          {d.orderNo} <bdi>#{shortId}</bdi>
+          {fa ? "ثبت: " : "Placed: "}
+          <time dateTime={order.createdAt}>{formatDate(order.createdAt, locale)}</time>
+          {providerLabel && <> · {providerLabel}</>}
         </>
       }
-      detail={<time dateTime={order.createdAt}>{formatDate(order.createdAt, locale)}</time>}
       action={
         <Link href={supportLink} className={styles.action}>
           {fa ? "پشتیبانی این سفارش" : "Get help with this order"}
@@ -204,12 +230,7 @@ export function OrderDetail({
           aria-label={fa ? "پرداخت و رسیدها" : "Payment and receipts"}
         >
           <section className={`${styles.panel} ${styles.stack}`}>
-            <div className={styles.factRow}>
-              <h2>{fa ? "وضعیت پرداخت" : "Payment status"}</h2>
-              <Badge tone={orderStatusTone(order.paymentStatus)}>
-                {statusMap[order.paymentStatus] ?? order.paymentStatus}
-              </Badge>
-            </div>
+            <h2>{fa ? "پرداخت و رسیدها" : "Payment and receipts"}</h2>
             <dl className={styles.stack}>
               <div className={styles.factRow}>
                 <dt>{fa ? "مبلغ سفارش" : "Order total"}</dt>
@@ -217,11 +238,33 @@ export function OrderDetail({
                   <bdi>{formatPrice(order.totalAmount, order.currency, locale)}</bdi>
                 </dd>
               </div>
+              <div className={styles.factRow}>
+                <dt>{fa ? "وضعیت پرداخت" : "Payment status"}</dt>
+                <dd data-tone={orderStatusTone(order.paymentStatus)}>
+                  {statusMap[order.paymentStatus] ?? order.paymentStatus}
+                </dd>
+              </div>
               {order.paidAt && (
                 <div className={styles.factRow}>
                   <dt>{fa ? "زمان پرداخت" : "Paid at"}</dt>
                   <dd>
                     <time dateTime={order.paidAt}>{formatDate(order.paidAt, locale)}</time>
+                  </dd>
+                </div>
+              )}
+              {providerLabel && (
+                <div className={styles.factRow}>
+                  <dt>{fa ? "روش پرداخت" : "Method"}</dt>
+                  <dd>{providerLabel}</dd>
+                </div>
+              )}
+              {order.paymentRefId && order.paymentStatus === "PAID" && (
+                <div className={styles.factRow}>
+                  <dt>{fa ? "کد پیگیری" : "Tracking code"}</dt>
+                  <dd>
+                    <bdi dir="ltr" className="font-mono">
+                      {order.paymentRefId}
+                    </bdi>
                   </dd>
                 </div>
               )}

@@ -21,6 +21,17 @@ type Notice = {
   createdAt: string;
 };
 
+// One icon per message kind, read from the title (codes, delivery, support, renewals).
+function noticeIcon(title: string): string {
+  if (/کد|code/i.test(title))
+    return "M15 7a4 4 0 1 1-3.9 4.9L3 20v-3h3v-3h3l2.1-2.1A4 4 0 0 1 15 7Z M16 8h.01";
+  if (/تحویل|deliver/i.test(title)) return "M3 8h18v12H3z M3 8l3-4h12l3 4 M9 12h6";
+  if (/پشتیبانی|تیکت|support|ticket/i.test(title))
+    return "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z";
+  if (/تمدید|renew/i.test(title)) return "M12 7v5l3 2 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0";
+  return "M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8 M10 20a2 2 0 0 0 4 0";
+}
+
 function noticePath(href: string) {
   const path = safeReturnPath(href, "");
   return /^\/(?:fa|en)\/(?:products\/|dashboard(?:\/|$))/.test(path) ? path : null;
@@ -98,25 +109,38 @@ export function AccountNotifications({ locale, token }: { locale: Locale; token:
                 className={styles.notificationRow}
                 data-unread={!notice.readAt || undefined}
               >
+                <span className={styles.noticeIcon} aria-hidden="true">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d={noticeIcon(notice.title)} />
+                  </svg>
+                </span>
                 <div className="min-w-0">
                   <div className={styles.notificationHeading}>
                     <h3 className="font-bold">
+                      {!notice.readAt && <span className={styles.unreadDot} aria-hidden="true" />}
                       <bdi>{notice.title}</bdi>
+                      {!notice.readAt && (
+                        <span className="sr-only">{fa ? " (خوانده‌نشده)" : " (unread)"}</span>
+                      )}
                     </h3>
-                    {!notice.readAt && (
-                      <span className="text-xs font-semibold text-primary">
-                        {fa ? "خوانده‌نشده" : "Unread"}
-                      </span>
-                    )}
                   </div>
                   <p className="mt-1 break-words text-sm leading-7 text-muted">
                     <bdi>{notice.body}</bdi>
                   </p>
+                </div>
+                <div className={styles.noticeAside}>
                   <time className="text-xs text-muted" dateTime={notice.createdAt}>
                     {formatDate(notice.createdAt, locale)}
                   </time>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
                   {href && (
                     <Link prefetch={false} href={href} className={styles.action}>
                       {fa ? "مشاهده" : "View"}

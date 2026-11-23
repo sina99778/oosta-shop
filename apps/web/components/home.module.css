@@ -694,7 +694,8 @@
 
 /* ---------------- Telegram band ---------------- */
 .band {
-  padding-block: 1.5rem clamp(2.5rem, 6vw, 4.5rem);
+  /* The footer's own top margin is the gap below this band (Figma home). */
+  padding-block: 1.5rem 0;
 }
 .bandInner {
   display: flex;

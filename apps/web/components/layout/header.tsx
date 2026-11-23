@@ -98,10 +98,56 @@ export function Header({
     { href: `${base}/products`, label: dict.products },
     { href: `${base}/blog`, label: dict.blog },
     { href: `${base}/support`, label: dict.support },
-    ...(user ? [{ href: `${base}/dashboard`, label: dict.dashboard }] : []),
-    ...(user?.role === "USER" ? [{ href: inboxHref, label: fa ? "صندوق پیام" : "Inbox" }] : []),
     ...(user?.role === "ADMIN" ? [{ href: `${base}/admin`, label: dict.admin }] : []),
   ];
+  // The phone menu has no toolbar room, so it lists the account pages as links.
+  const mobileRoutes = [
+    ...routes,
+    ...(user ? [{ href: `${base}/dashboard`, label: dict.dashboard }] : []),
+    ...(user?.role === "USER" ? [{ href: inboxHref, label: fa ? "صندوق پیام" : "Inbox" }] : []),
+  ];
+
+  function inboxLink() {
+    if (user?.role !== "USER") return null;
+    return (
+      <Link
+        prefetch={false}
+        href={inboxHref}
+        className={`oosta-button ${styles.tool} ${styles.cartTool} ${styles.desktopOnly}`}
+        data-button-variant="outline"
+        aria-current={pathname === inboxHref ? "page" : undefined}
+        aria-label={
+          unreadCount
+            ? `${fa ? "صندوق پیام" : "Inbox"}، ${unreadLabel}`
+            : fa
+              ? "صندوق پیام"
+              : "Inbox"
+        }
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="m3.5 6.5 8.5 6 8.5-6" />
+        </svg>
+        {unreadCount && (
+          <span aria-hidden="true" className={styles.cartCount}>
+            {unreadCount}
+            {unread > 99 ? "+" : ""}
+          </span>
+        )}
+      </Link>
+    );
+  }
 
   function cartLink() {
     return (
@@ -141,8 +187,8 @@ export function Header({
     );
   }
 
-  function navigation() {
-    return routes.map(({ href, label }) => {
+  function navigation(list = routes) {
+    return list.map(({ href, label }) => {
       const active =
         pathname === href ||
         (href !== base &&
@@ -169,6 +215,39 @@ export function Header({
         </Link>
       );
     });
+  }
+
+  function accountButton() {
+    if (loading || !user) return accountActions();
+    const accountHref = `${base}/dashboard`;
+    return (
+      <Link
+        prefetch={false}
+        href={accountHref}
+        className={`oosta-button ${styles.accountAction}`}
+        data-button-variant="outline"
+        aria-current={
+          pathname === accountHref || pathname.startsWith(`${accountHref}/`) ? "page" : undefined
+        }
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" />
+        </svg>
+        {dict.dashboard}
+      </Link>
+    );
   }
 
   function accountActions() {
@@ -248,9 +327,10 @@ export function Header({
         </nav>
         <div className={styles.toolbar}>
           {cartLink()}
+          {inboxLink()}
           <ThemeToggle label={themeLabel} />
           <LocaleSwitcher current={locale} />
-          <div className={styles.desktopAccount}>{accountActions()}</div>
+          <div className={styles.desktopAccount}>{accountButton()}</div>
           <button
             type="button"
             ref={menuButton}
@@ -292,7 +372,7 @@ export function Header({
         className={styles.mobileNav}
       >
         <Container className={styles.mobileInner}>
-          <div className={styles.mobileLinks}>{navigation()}</div>
+          <div className={styles.mobileLinks}>{navigation(mobileRoutes)}</div>
           {!loading && <div className={styles.mobileAccount}>{accountActions()}</div>}
         </Container>
       </nav>

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
 import { QueryError } from "@/components/query-error";
-import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
@@ -140,11 +139,23 @@ export function AdminDashboard({ locale, dict }: { locale: Locale; dict: Diction
       <header className={styles.dashboardHeader}>
         <div>
           <h1>{fa ? "نمای کلی فروشگاه" : "Store overview"}</h1>
+          <p className={styles.today}>
+            {fa ? "امروز: " : "Today: "}
+            {new Intl.DateTimeFormat(fa ? "fa-IR" : "en-US", {
+              dateStyle: "long",
+              timeZone: "Asia/Tehran",
+            }).format(new Date())}
+          </p>
         </div>
-        <Link href={base + "/products/new"} className={styles.primaryLink}>
-          <span aria-hidden="true">+</span>
-          {fa ? "افزودن محصول" : "Add product"}
-        </Link>
+        <div className={styles.headerActions}>
+          <Link href={base + "/products/new"} className={styles.primaryLink}>
+            <span aria-hidden="true">+</span>
+            {fa ? "افزودن محصول" : "Add product"}
+          </Link>
+          <Link href={base + "/receipts"} className={styles.secondaryLink}>
+            {fa ? "باز کردن صف رسیدها" : "Open receipt queue"}
+          </Link>
+        </div>
       </header>
 
       {loading ? (
@@ -232,9 +243,12 @@ export function AdminDashboard({ locale, dict }: { locale: Locale; dict: Diction
                       <li key={product.id}>
                         <Link href={base + "/products/" + product.id}>
                           <span dir="auto">{product.name}</span>
-                          <Badge tone={product.stock === 0 ? "default" : "muted"}>
-                            {number.format(product.stock)}
-                          </Badge>
+                          <span
+                            className={styles.stockCount}
+                            data-level={product.stock <= 2 ? "low" : "warn"}
+                          >
+                            {number.format(product.stock)} {fa ? "عدد" : "left"}
+                          </span>
                         </Link>
                       </li>
                     ))}
@@ -251,11 +265,28 @@ export function AdminDashboard({ locale, dict }: { locale: Locale; dict: Diction
                   <ul className={styles.productList}>
                     {data.topProducts.map((product) => (
                       <li key={product.id}>
-                        <Link href={base + "/products/" + product.id}>
+                        <Link href={base + "/products/" + product.id} className={styles.topProduct}>
                           <span dir="auto">{product.name}</span>
                           <small>
                             {number.format(product.unitsSold)} {t.unitsSold}
                           </small>
+                          <span className={styles.topBar} aria-hidden="true">
+                            <span
+                              style={{
+                                width: `${Math.max(
+                                  6,
+                                  Math.round(
+                                    (product.unitsSold /
+                                      Math.max(
+                                        ...data.topProducts.map((item) => item.unitsSold),
+                                        1,
+                                      )) *
+                                      100,
+                                  ),
+                                )}%`,
+                              }}
+                            />
+                          </span>
                         </Link>
                       </li>
                     ))}

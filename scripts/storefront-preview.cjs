@@ -6,6 +6,20 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const root = path.resolve(__dirname, "..");
 const supplierVariants = process.argv.includes("--supplier-variants");
+// Opt-in design review of account/admin screens with a synthetic, read-only session.
+const previewRole = process.argv.includes("--admin")
+  ? "ADMIN"
+  : process.argv.includes("--signed-in")
+    ? "USER"
+    : null;
+const previewUser = previewRole && {
+  id: "preview-user",
+  name: previewRole === "ADMIN" ? "مدیر نمونه" : "سارا",
+  email: "preview@example.invalid",
+  phone: null,
+  role: previewRole,
+  recoveryEmailVerified: true,
+};
 const categories = [
   { id: "preview-ai", slug: "ai-accounts", name: "هوش مصنوعی", productCount: 2 },
   {
@@ -78,6 +92,62 @@ const sampleArticle = [
   "## جمع‌بندی و پیشنهاد",
   "برای انتخاب نهایی، کاربرد اصلی‌ات را مشخص کن.",
 ].join("\n");
+// Synthetic orders for the signed-in design preview (fake values only).
+const previewOrders = [
+  ["preview-order-1", 28799630, "PAID", ["ChatGPT Plus", "Spotify", "Windows 11 Pro"], 0],
+  ["preview-order-2", 15800000, "PAID", ["Claude Pro"], 11],
+  ["preview-order-3", 13900000, "PAID_PENDING_FULFILLMENT", ["Cursor Pro"], 20],
+  ["preview-order-4", 6900000, "PENDING", ["Canva Pro"], 34],
+  ["preview-order-5", 12900000, "FAILED", ["Midjourney"], 52],
+].map(([id, totalAmount, paymentStatus, items, days]) => ({
+  id,
+  totalAmount,
+  currency: "IRR",
+  paymentStatus,
+  itemCount: items.length,
+  firstProductName: items[0],
+  createdAt: new Date(Date.now() - days * 86400000).toISOString(),
+  paidAt: paymentStatus === "PAID" ? new Date(Date.now() - days * 86400000).toISOString() : null,
+  items,
+}));
+const previewOrderDetail = (order) => ({
+  id: order.id,
+  totalAmount: order.totalAmount,
+  currency: "IRR",
+  paymentStatus: order.paymentStatus,
+  paymentProvider: "zarinpal",
+  paymentRefId: "PREVIEW-REF",
+  createdAt: order.createdAt,
+  paidAt: order.paidAt,
+  receipts: [],
+  cardToCard: null,
+  items: order.items.map((name, index) => ({
+    id: `${order.id}-item-${index + 1}`,
+    product: { id: `preview-${index}`, name, slug: "chatgpt-plus", type: "ACCOUNT" },
+    plan: { id: `preview-plan-${index}`, label: "یک‌ماهه", variant: null, durationDays: 30 },
+    quantity: 1,
+    unitPrice: Math.round(order.totalAmount / order.items.length),
+    lineTotal: Math.round(order.totalAmount / order.items.length),
+    credentials:
+      order.paymentStatus === "PAID"
+        ? [
+            {
+              id: `${order.id}-cred-${index + 1}`,
+              type: "ACCOUNT",
+              accountEmail: "sample-account@example.invalid",
+              accountPassword: "sample-password",
+              licenseKey: null,
+              giftCardCode: null,
+              deliveryInstructions: "این اطلاعات نمونه است و به هیچ حسابی تعلق ندارد.",
+            },
+          ]
+        : [],
+    renewal:
+      order.paymentStatus === "PAID"
+        ? { estimatedEndAt: "2026-12-09T08:00:00Z", daysRemaining: 16, planId: null }
+        : null,
+  })),
+});
 const server = http.createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "http://127.0.0.1:3101");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
@@ -92,7 +162,8 @@ const server = http.createServer((req, res) => {
       .end(JSON.stringify({ error: { code: "PREVIEW_ONLY", message: "Read-only preview" } }));
   let body;
   // The preview has no accounts: answer as signed out so guest flows render.
-  if (url.pathname === "/auth/me")
+  if (url.pathname === "/auth/me" && previewUser) body = { user: previewUser };
+  else if (url.pathname === "/auth/me")
     return res
       .writeHead(401)
       .end(JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Signed out" } }));
@@ -208,13 +279,158 @@ const server = http.createServer((req, res) => {
           ],
         },
       };
-  } else if (url.pathname === "/pages") body = { pages: [] };
-  if (!body)
+  } else if (previewUser && url.pathname === "/cart/count") body = { count: 2 };
+  else if (previewUser && url.pathname === "/auth/notifications/count") body = { count: 2 };
+  else if (previewUser && url.pathname === "/auth/inbox") body = { welcomeGift: null };
+  else if (previewRole === "ADMIN" && url.pathname === "/admin/suppliers/manual/pending")
+    body = { enabled: true, count: 3 };
+  else if (previewRole === "ADMIN" && url.pathname === "/admin/stats")
+    body = {
+      currency: "IRR",
+      revenueTotal: 9100000000,
+      revenue30: 4820000000,
+      paidOrders: 312,
+      totalOrders: 340,
+      pendingReview: 4,
+      customers: 1284,
+      salesByDay: [14, 18, 12, 13, 9, 10, 8].map((count, index) => ({
+        day: new Date(Date.now() - (6 - index) * 86400000).toISOString().slice(0, 10),
+        count,
+        revenue: count * 140000000,
+      })),
+      topProducts: [
+        ["ChatGPT Plus", 128],
+        ["Claude Pro", 94],
+        ["Canva Pro", 61],
+        ["CapCut Pro", 42],
+      ].map(([name, unitsSold], index) => ({ id: `preview-top-${index}`, name, unitsSold })),
+      lowStock: [
+        ["Spotify Premium · ۳ ماهه", 2],
+        ["Windows 11 Pro", 5],
+        ["NordVPN · سالانه", 7],
+      ].map(([name, stock], index) => ({ id: `preview-low-${index}`, name, stock })),
+      recentOrders: previewOrders.slice(0, 4).map((order, index) => ({
+        id: order.id,
+        totalAmount: order.totalAmount,
+        currency: "IRR",
+        paymentStatus: order.paymentStatus,
+        itemCount: order.itemCount,
+        createdAt: order.createdAt,
+        user: { name: ["سارا م.", "علی ک.", "مهسا ر.", "رضا ا."][index], email: null, phone: null },
+      })),
+    };
+  else if (previewUser && url.pathname === "/auth/notifications")
+    body = {
+      unreadCount: 2,
+      notifications: [
+        ["کد تأیید ورود Claude", "کد ۶ رقمی نمونه — تا ۱۰ دقیقه معتبر است.", null, 2],
+        [
+          "تحویل سفارش انجام شد",
+          "اطلاعات ChatGPT Plus در گاوصندوق سفارش قرار گرفت.",
+          null,
+          60 * 24,
+        ],
+        [
+          "پاسخ پشتیبانی",
+          "پشتیبانی به تیکت «مشکل ورود» پاسخ داد.",
+          "2026-11-20T10:00:00Z",
+          60 * 72,
+        ],
+        [
+          "یادآوری تمدید",
+          "اشتراک Canva Pro تا ۱۶ روز دیگر تمام می‌شود.",
+          "2026-11-16T10:00:00Z",
+          60 * 24 * 7,
+        ],
+      ].map(([title, text, readAt, minutes], index) => ({
+        id: `preview-notice-${index + 1}`,
+        title,
+        body: text,
+        href: index === 2 ? "/fa/support/preview-ticket-1" : "/fa/dashboard/orders/preview-order-1",
+        readAt,
+        createdAt: new Date(Date.now() - minutes * 60000).toISOString(),
+      })),
+    };
+  else if (previewUser && url.pathname === "/auth/sessions")
+    body = {
+      currentTracked: true,
+      sessions: [
+        ["Chrome", "Windows", "85.185.x.x", 0, true],
+        ["Safari", "iOS", "5.122.x.x", 120, false],
+        ["Firefox", "Linux", null, 60 * 24 * 5, false],
+      ].map(([browser, os, ipPrefix, minutes, current], index) => ({
+        id: `preview-session-${index + 1}`,
+        browser,
+        os,
+        ipPrefix,
+        createdAt: "2026-11-15T08:00:00Z",
+        lastSeenAt: new Date(Date.now() - minutes * 60000).toISOString(),
+        current,
+      })),
+    };
+  else if (previewUser && url.pathname === "/orders")
+    body = { orders: previewOrders.map(({ items: _items, ...order }) => order) };
+  else if (previewUser && url.pathname.startsWith("/orders/")) {
+    const order = previewOrders.find((item) => item.id === url.pathname.split("/").pop());
+    if (order) body = { order: previewOrderDetail(order) };
+  } else if (previewUser && url.pathname === "/tickets")
+    body = {
+      tickets: [
+        ["مشکل ورود به Cursor Pro", "ANSWERED", "preview-order-3", 3],
+        ["درخواست تمدید زودتر Canva", "OPEN", "preview-order-4", 1],
+        ["فاکتور رسمی برای شرکت", "CLOSED", null, 4],
+      ].map(([subject, status, orderId, messageCount], index) => ({
+        id: `preview-ticket-${index + 1}`,
+        subject,
+        status,
+        orderId,
+        messageCount,
+        lastMessage: "پیام نمونه برای بازبینی طراحی.",
+        updatedAt: `2026-11-${String(22 - index * 4).padStart(2, "0")}T10:20:00Z`,
+      })),
+    };
+  else if (previewUser && url.pathname.startsWith("/tickets/"))
+    body = {
+      ticket: {
+        id: url.pathname.split("/").pop(),
+        subject: "مشکل ورود به Cursor Pro",
+        status: "ANSWERED",
+        createdAt: "2026-11-22T22:14:00Z",
+        updatedAt: "2026-11-23T10:20:00Z",
+        order: {
+          id: "preview-order-3",
+          createdAt: "2026-10-25T10:00:00Z",
+          totalAmount: 13900000,
+          currency: "IRR",
+          paymentStatus: "PAID",
+        },
+        messages: [
+          {
+            id: "preview-message-1",
+            body: "سلام، بعد از ورود پیام «Plan not active» نمایش داده می‌شود. (متن نمونه)",
+            isStaff: false,
+            createdAt: "2026-11-22T22:14:00Z",
+            attachment: { name: "screenshot-error.png", mime: "image/png", size: 215040 },
+          },
+          {
+            id: "preview-message-2",
+            body: "سلام، اشتراک روی حساب فعال شد؛ یک بار خارج و دوباره وارد شو. (متن نمونه)",
+            isStaff: true,
+            createdAt: "2026-11-23T10:20:00Z",
+            attachment: null,
+          },
+        ],
+      },
+    };
+  else if (url.pathname === "/pages") body = { pages: [] };
+  if (!body) {
+    if (previewUser) console.log(`[preview 404] ${req.method} ${url.pathname}${url.search}`);
     return res
       .writeHead(404)
       .end(
         JSON.stringify({ error: { code: "NOT_FOUND", message: "Preview endpoint unavailable" } }),
       );
+  }
   if (body.product?.quoteRequired) {
     body.product.quoteRequired = true;
     body.product.priceFrom = null;

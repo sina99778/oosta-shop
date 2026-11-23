@@ -55,7 +55,8 @@ export function HomeCatalog({
   const fa = locale === "fa";
   const browse = fa ? "همهٔ محصولات" : "All products";
   const catalogHref = `/${locale}/products`;
-  const visible = categories.filter((item) => item.productCount > 0);
+  // Two full rows of four (Figma home); the "all products" link covers the rest.
+  const visible = categories.filter((item) => item.productCount > 0).slice(0, 8);
   const labels = fa
     ? {
         from: "از",

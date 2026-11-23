@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth";
+import { useApi } from "@/lib/use-api";
 import { Container } from "@/components/ui/container";
 import type { Locale } from "@/lib/i18n";
 import type { ReactNode } from "react";
@@ -49,7 +50,13 @@ export function AccountFrame({
   children: ReactNode;
 }) {
   const fa = locale === "fa";
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
+  const customerToken = user?.role === "USER" ? token : null;
+  const { data: unreadData } = useApi<{ count: number }>(
+    customerToken ? "/auth/notifications/count" : null,
+    customerToken ?? undefined,
+  );
+  const unread = unreadData?.count ?? 0;
   const navigation = useRef<HTMLElement>(null);
   const initials = user?.name
     ?.trim()
@@ -85,6 +92,7 @@ export function AccountFrame({
               </div>
             </div>
           )}
+          <p className={styles.navHeading}>{fa ? "حساب اوستا" : "Oosta account"}</p>
           <nav
             ref={navigation}
             aria-label={fa ? "حساب کاربری" : "Customer account"}
@@ -115,7 +123,13 @@ export function AccountFrame({
                 >
                   <path d={icon} />
                 </svg>
-                {fa ? persian : english}
+                <span className={styles.navLabel}>{fa ? persian : english}</span>
+                {id === "inbox" && unread > 0 && (
+                  <span className={styles.navBadge}>
+                    {Math.min(unread, 99).toLocaleString(fa ? "fa-IR" : "en-US")}
+                    <span className="sr-only">{fa ? " پیام خوانده‌نشده" : " unread"}</span>
+                  </span>
+                )}
               </Link>
             ))}
           </nav>
@@ -143,7 +157,6 @@ export function AccountFrame({
         <div className={styles.main}>
           <header className={styles.hero}>
             <div>
-              <p className={styles.eyebrow}>{fa ? "حساب من" : "Oosta account"}</p>
               <h1>{title}</h1>
               {detail && <div className={styles.heroDetail}>{detail}</div>}
             </div>

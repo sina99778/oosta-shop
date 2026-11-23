@@ -92,6 +92,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.4rem;
   min-height: 44px;
   padding: 0.35rem 0.75rem;
   font-size: 0.85rem;
@@ -107,6 +108,10 @@
 }
 .cartTool {
   position: relative;
+}
+/* Inbox shortcut: desktop toolbar only; the phone menu lists it as a link. */
+.desktopOnly {
+  display: none;
 }
 .cartCount {
   position: absolute;
@@ -293,5 +298,8 @@
   .menuButton,
   .mobileNav {
     display: none;
+  }
+  .desktopOnly {
+    display: inline-grid;
   }
 }

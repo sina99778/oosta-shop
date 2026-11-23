@@ -100,71 +100,83 @@ export function AccountSecurity({ locale }: { locale: Locale }) {
       section="security"
       title={fa ? "امنیت حساب" : "Account security"}
       detail={
-        fa ? "ایمیل بازیابی، تغییر رمز و مدیریت نشست‌ها" : "Recovery email, password and sessions"
+        fa
+          ? "رمز عبور، ایمیل بازیابی و دستگاه‌های واردشده."
+          : "Password, recovery email and signed-in devices."
       }
     >
       <div className={styles.stack}>
-        <AccountRecoveryEmail locale={locale} />
-        <section className={styles.panel} aria-labelledby="change-password-title">
-          <h2 id="change-password-title" className="text-lg font-bold">
-            {fa ? "تغییر رمز عبور" : "Change password"}
-          </h2>
-          <form method="post" onSubmit={onChangePassword} className="mt-4 max-w-sm space-y-3">
-            <Field id="account-current-password" label={labels.current}>
-              <PasswordInput
-                id="account-current-password"
-                locale={locale}
-                label={labels.current}
-                value={current}
-                onChange={(e) => setCurrent(e.target.value)}
-                required
-                autoComplete="current-password"
-              />
-            </Field>
-            <Field id="account-new-password" label={labels.next}>
-              <PasswordInput
-                id="account-new-password"
-                locale={locale}
-                label={labels.next}
-                value={next}
-                onChange={(e) => setNext(e.target.value)}
-                required
-                minLength={8}
-                autoComplete="new-password"
-                aria-describedby={next ? "account-password-strength" : undefined}
-              />
-            </Field>
-            {next && (
-              <PasswordStrength id="account-password-strength" locale={locale} password={next} />
-            )}
-            <Field id="account-confirm-password" label={labels.confirm}>
-              <PasswordInput
-                id="account-confirm-password"
-                locale={locale}
-                label={labels.confirm}
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                required
-                minLength={8}
-                autoComplete="new-password"
-              />
-            </Field>
-            <Button type="submit" disabled={busy !== null}>
-              {busy === "password" ? <Spinner /> : null}
-              {fa ? "ذخیره رمز جدید" : "Save new password"}
-            </Button>
-            {message?.area === "password" && (
-              <p
-                role={message.tone === "error" ? "alert" : "status"}
-                className={
-                  message.tone === "error" ? "text-sm text-danger" : "text-sm text-success"
-                }
-              >
-                {message.text}
-              </p>
-            )}
-          </form>
-        </section>
+        <div className={styles.securityGrid}>
+          <section className={styles.panel} aria-labelledby="change-password-title">
+            <h2 id="change-password-title" className="text-lg font-bold">
+              {fa ? "تغییر رمز عبور" : "Change password"}
+            </h2>
+            <form method="post" onSubmit={onChangePassword} className="mt-4 space-y-3">
+              <Field id="account-current-password" label={labels.current}>
+                <PasswordInput
+                  id="account-current-password"
+                  locale={locale}
+                  label={labels.current}
+                  value={current}
+                  onChange={(e) => setCurrent(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                />
+              </Field>
+              <Field id="account-new-password" label={labels.next}>
+                <PasswordInput
+                  id="account-new-password"
+                  locale={locale}
+                  label={labels.next}
+                  value={next}
+                  onChange={(e) => setNext(e.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                  aria-describedby={next ? "account-password-strength" : undefined}
+                />
+              </Field>
+              {next && (
+                <PasswordStrength id="account-password-strength" locale={locale} password={next} />
+              )}
+              <Field id="account-confirm-password" label={labels.confirm}>
+                <PasswordInput
+                  id="account-confirm-password"
+                  locale={locale}
+                  label={labels.confirm}
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+              </Field>
+              <div className={styles.securityNote} role="note">
+                <strong>
+                  {fa
+                    ? "با تغییر رمز، همهٔ دستگاه‌های دیگر خارج می‌شوند."
+                    : "Changing your password signs out every other device."}
+                </strong>
+                <span>{fa ? "این دستگاه وارد باقی می‌ماند." : "This device stays signed in."}</span>
+              </div>
+              <Button type="submit" disabled={busy !== null}>
+                {busy === "password" ? <Spinner /> : null}
+                {fa ? "ذخیره رمز جدید" : "Save new password"}
+              </Button>
+              {message?.area === "password" && (
+                <p
+                  role={message.tone === "error" ? "alert" : "status"}
+                  className={
+                    message.tone === "error" ? "text-sm text-danger" : "text-sm text-success"
+                  }
+                >
+                  {message.text}
+                </p>
+              )}
+            </form>
+          </section>
+          <AccountRecoveryEmail locale={locale} />
+        </div>
 
         <AccountSessions locale={locale} />
       </div>
