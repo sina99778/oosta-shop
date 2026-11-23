@@ -45,6 +45,39 @@ const products = sampleProducts.map(([slug, name, type, categoryIndex, price, in
   ratingAverage: 0,
   ratingCount: 0,
 }));
+// Sample journal articles for local design review only (no real content or covers).
+const samplePosts = [
+  ["compare-assistants", "مقایسهٔ سه دستیار محبوب هوش مصنوعی برای کارهای روزمره", "مقایسه", 8],
+  ["canva-magic", "ساخت ارائه با Canva Magic در ۱۵ دقیقه", "آموزش", 7],
+  ["email-prompts", "۱۰ پرامپت آماده برای نوشتن ایمیل کاری", "پرامپت", 4],
+  ["before-buying", "قبل از خرید اشتراک هوش مصنوعی چه چیزهایی را چک کنیم؟", "راهنمای خرید", 6],
+].map(([slug, title, tag, readingMinutes], index) => ({
+  id: `preview-post-${index + 1}`,
+  slug,
+  title,
+  excerpt: "متن نمونه برای بازبینی طراحی مجله؛ این مقاله واقعی نیست.",
+  hasCover: false,
+  coverAlt: null,
+  tag,
+  readingMinutes,
+  publishedAt: `2026-11-${String(20 - index).padStart(2, "0")}T08:00:00Z`,
+  updatedAt: `2026-11-${String(20 - index).padStart(2, "0")}T08:00:00Z`,
+}));
+const sampleArticle = [
+  "این متن فقط برای بازبینی طراحی صفحهٔ مقاله در پیش‌نمایش محلی است.",
+  "",
+  "## چطور آزمودیم",
+  "برای هر کار یک پرامپت یکسان نوشتیم و خروجی‌ها را مقایسه کردیم.",
+  "",
+  "> پرامپت خوب نیمی از جواب خوب است؛ ابزار نیم دیگرش.",
+  "",
+  "## نوشتن و ویرایش",
+  "- Claude در لحن طبیعی فارسی قوی‌تر بود.",
+  "- ChatGPT در ساختاردهی سریع جلوتر بود.",
+  "",
+  "## جمع‌بندی و پیشنهاد",
+  "برای انتخاب نهایی، کاربرد اصلی‌ات را مشخص کن.",
+].join("\n");
 const server = http.createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "http://127.0.0.1:3101");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
@@ -148,8 +181,34 @@ const server = http.createServer((req, res) => {
     };
   } else if (url.pathname === "/payments/config")
     body = { online: false, cardToCard: false, card: null };
-  else if (url.pathname === "/blog") body = { posts: [] };
-  else if (url.pathname === "/pages") body = { pages: [] };
+  else if (url.pathname === "/blog") {
+    const tag = url.searchParams.get("tag");
+    body = {
+      posts: samplePosts.filter((post) => !tag || post.tag === tag),
+      tags: [...new Set(samplePosts.map((post) => post.tag))].map((name) => ({
+        tag: name,
+        count: samplePosts.filter((post) => post.tag === name).length,
+      })),
+    };
+  } else if (url.pathname.startsWith("/blog/")) {
+    const post = samplePosts.find((item) => item.slug === url.pathname.split("/").pop());
+    if (post)
+      body = {
+        post: {
+          ...post,
+          content: sampleArticle,
+          related: samplePosts.filter((item) => item.id !== post.id).slice(0, 3),
+          products: [
+            {
+              id: "preview-chatgpt-plus",
+              slug: "chatgpt-plus",
+              name: "ChatGPT Plus",
+              type: "AI_ACCOUNT",
+            },
+          ],
+        },
+      };
+  } else if (url.pathname === "/pages") body = { pages: [] };
   if (!body)
     return res
       .writeHead(404)

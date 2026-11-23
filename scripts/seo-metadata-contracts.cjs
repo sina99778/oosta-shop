@@ -113,7 +113,13 @@ Module._load = function (request, ...args) {
       path.resolve(__dirname, "../apps/web/components/markdown.tsx"),
       ...args,
     );
-  if (request.startsWith("@/components/") && request !== "@/components/related-content-links")
+  if (request.endsWith(".module.css"))
+    return new Proxy({}, { get: (_target, key) => (key === "__esModule" ? false : String(key)) });
+  // The article page renders its product links inside the real article layout.
+  if (
+    request.startsWith("@/components/") &&
+    !["@/components/related-content-links", "@/components/journal"].includes(request)
+  )
     return new Proxy({}, { get: (_target, key) => (key === "__esModule" ? false : stubComponent) });
   return originalLoad.call(this, request, ...args);
 };

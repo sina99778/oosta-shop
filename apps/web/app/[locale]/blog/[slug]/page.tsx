@@ -4,10 +4,10 @@ import { notFound } from "next/navigation";
 import { getDictionary } from "../../dictionaries";
 import { isLocale } from "@/lib/i18n";
 import { JournalArticle } from "@/components/journal";
-import { RelatedContentLinks } from "@/components/related-content-links";
 import { ARTICLE_PRODUCTS } from "@/lib/catalog-editorial";
 import { fetchJson, siteUrl } from "@/lib/seo";
 import { assetUrl } from "@/lib/api";
+import { getSiteSettings, telegramSupportHref } from "@/lib/settings";
 import type { BlogPostDetail, ProductDetail } from "@/lib/types";
 import {
   CONTENT_LOCALE,
@@ -68,13 +68,36 @@ export default async function BlogPostPage({
   // Products linked from the article body (resolved by the API) join the editorial list.
   const linked = (post.products ?? []).map((product) => product.slug);
   const productSlugs = [...new Set([...editorial, ...linked])].slice(0, 6);
-  const products = await Promise.all(
-    productSlugs.map((productSlug) =>
-      fetchJson<{ product: Pick<ProductDetail, "slug" | "name"> }>(
-        `/products/${encodeURIComponent(productSlug)}`,
+  const [products, settings] = await Promise.all([
+    Promise.all(
+      productSlugs.map((productSlug) =>
+        fetchJson<{ product: Pick<ProductDetail, "slug" | "name"> & Partial<ProductDetail> }>(
+          `/products/${encodeURIComponent(productSlug)}`,
+        ),
       ),
     ),
-  );
+    getSiteSettings().catch(() => null),
+  ]);
+  // Starting price: the cheapest listed, non-quote plan of each product.
+  const articleProducts = products.flatMap((result) => {
+    if (!result) return [];
+    const priced = (result.product.plans ?? []).filter(
+      (plan) =>
+        !plan.quoteRequired && plan.availability !== "OUT_OF_STOCK" && plan.effectivePrice > 0,
+    );
+    const cheapest = priced.reduce<(typeof priced)[number] | null>(
+      (min, plan) => (!min || plan.effectivePrice < min.effectivePrice ? plan : min),
+      null,
+    );
+    return [
+      {
+        slug: result.product.slug,
+        name: result.product.name,
+        fromPrice: cheapest?.effectivePrice ?? null,
+        currency: cheapest?.currency ?? "IRR",
+      },
+    ];
+  });
 
   const cover = post.hasCover ? new URL(assetUrl(`/blog-cover/${post.id}`), siteUrl()).href : null;
   const url = `${siteUrl()}/${CONTENT_LOCALE}/blog/${encodeURIComponent(post.slug)}`;
@@ -97,19 +120,13 @@ export default async function BlogPostPage({
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }} />
-      <JournalArticle post={post} locale={locale} back={dict.blog.back} />
-      <RelatedContentLinks
-        title={locale === "fa" ? "محصولات مرتبط" : "Related products"}
-        links={products.flatMap((result) =>
-          result
-            ? [
-                {
-                  href: `/${locale}/products/${encodeURIComponent(result.product.slug)}`,
-                  label: result.product.name,
-                },
-              ]
-            : [],
-        )}
+      <JournalArticle
+        post={post}
+        locale={locale}
+        back={dict.blog.back}
+        products={articleProducts}
+        supportHref={settings ? telegramSupportHref(settings) : ""}
+        url={url}
       />
     </>
   );

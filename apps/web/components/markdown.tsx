@@ -129,6 +129,27 @@ const HEADINGS: Array<{ prefix: string; cls: string; tag: "h3" | "h4" | "h5" | "
   { prefix: "# ", cls: "mt-4 mb-1 text-xl font-bold", tag: "h3" },
 ];
 
+/** Anchor id for the n-th (1-based) top-level "## " section of an article. */
+export const sectionId = (n: number) => `section-${n}`;
+
+/** Table of contents for an article: its "## " sections, in order, as plain text. */
+export function markdownOutline(text: string): { id: string; title: string }[] {
+  return text
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("## ") && !line.startsWith("### "))
+    .map((line, index) => ({
+      id: sectionId(index + 1),
+      title: line
+        .slice(3)
+        .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+        .replace(/[*_`]/g, "")
+        .trim(),
+    }))
+    .filter((item) => item.title);
+}
+
 export function Markdown({
   text,
   className,
@@ -144,6 +165,7 @@ export function Markdown({
   const blocks: ReactNode[] = [];
   let list: string[] = [];
   let listType: "ul" | "ol" = "ul";
+  let sections = 0;
 
   const flushList = () => {
     if (list.length === 0) return;
@@ -214,8 +236,13 @@ export function Markdown({
         headingOffset === 0
           ? (`h${Math.max(2, heading.prefix.trim().length)}` as "h2" | "h3" | "h4" | "h5" | "h6")
           : heading.tag;
+      // Article sections get ids so the table of contents can link to them.
+      const id =
+        headingOffset === 0 && heading.prefix === "## " && !preview
+          ? sectionId(++sections)
+          : undefined;
       blocks.push(
-        <Tag key={`h-${idx}`} className={heading.cls}>
+        <Tag key={`h-${idx}`} id={id} className={heading.cls}>
           {inline(line.slice(heading.prefix.length), `h-${idx}`, preview)}
         </Tag>,
       );
