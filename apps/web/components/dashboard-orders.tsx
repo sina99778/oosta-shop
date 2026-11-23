@@ -15,6 +15,7 @@ import type { OrderSummary, WelcomeGift } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
 
 const followUpStates = ["PENDING", "PENDING_REVIEW", "PAID_PENDING_FULFILLMENT", "REJECTED"];
+const failedStates = ["FAILED", "REJECTED", "REFUNDED", "EXPIRED"];
 
 export function orderStatusTone(status: string): "success" | "muted" | "danger" {
   if (status === "PAID") return "success";
@@ -31,10 +32,24 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
   const d = dict.dashboard;
   const statusMap = d.status as Record<string, string>;
   const fa = locale === "fa";
-  const [filter, setFilter] = useState<"all" | "active">("all");
+  const [filter, setFilter] = useState<"all" | "paid" | "active" | "failed">("all");
   const orders = data?.orders ?? [];
   const followUp = orders.filter((order) => followUpStates.includes(order.paymentStatus));
-  const visible = filter === "active" ? followUp : orders;
+  const paidOrders = orders.filter((order) => order.paymentStatus === "PAID");
+  const failedOrders = orders.filter((order) => failedStates.includes(order.paymentStatus));
+  const hasReviewPending = orders.some(
+    (order) =>
+      order.paymentStatus === "PENDING_REVIEW" ||
+      order.paymentStatus === "PAID_PENDING_FULFILLMENT",
+  );
+  const visible =
+    filter === "active"
+      ? followUp
+      : filter === "paid"
+        ? paidOrders
+        : filter === "failed"
+          ? failedOrders
+          : orders;
   const {
     data: inbox,
     loading: inboxLoading,
@@ -71,7 +86,9 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
     <AccountFrame
       locale={locale}
       section="overview"
-      title={fa ? "حساب من" : "My account"}
+      title={
+        user ? (fa ? `سلام، ${user.name}` : `Hi, ${user.name}`) : fa ? "حساب من" : "My account"
+      }
       detail={
         user && (
           <div className={styles.identity}>
@@ -131,6 +148,15 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
           </div>
         </dl>
       )}
+      {hasReviewPending && (
+        <div className={styles.pendingBanner} role="status">
+          <p>
+            {fa
+              ? "رسید یا سفارش شما در حال بررسی و آماده‌سازی است — پس از تأیید، اطلاعات تحویل به‌صورت خودکار در جزئیات سفارش ثبت می‌شود."
+              : "Your receipt or order is currently under review — once confirmed, delivery details appear automatically inside the order view."}
+          </p>
+        </div>
+      )}
       <section
         id="account-orders"
         className={styles.purchaseSection}
@@ -187,15 +213,35 @@ export function DashboardOrders({ locale, dict }: { locale: Locale; dict: Dictio
               </button>
               <button
                 type="button"
+                aria-pressed={filter === "paid"}
+                onClick={() => setFilter("paid")}
+              >
+                {d.status.PAID} · {paidOrders.length.toLocaleString(locale)}
+              </button>
+              <button
+                type="button"
                 aria-pressed={filter === "active"}
                 onClick={() => setFilter("active")}
               >
                 {fa ? "در حال پیگیری" : "In progress"} · {followUp.length.toLocaleString(locale)}
               </button>
+              <button
+                type="button"
+                aria-pressed={filter === "failed"}
+                onClick={() => setFilter("failed")}
+              >
+                {d.status.FAILED} · {failedOrders.length.toLocaleString(locale)}
+              </button>
             </div>
             {visible.length === 0 && (
               <p className={styles.panel}>
-                {fa ? "سفارش در حال پیگیری نداری." : "No orders in progress."}
+                {filter === "active"
+                  ? fa
+                    ? "سفارش در حال پیگیری نداری."
+                    : "No orders in progress."
+                  : fa
+                    ? "سفارشی در این وضعیت نداری."
+                    : "No orders match this status."}
               </p>
             )}
             {visible.map((order) => (

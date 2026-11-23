@@ -1,5 +1,48 @@
 .shell {
-  /* The storefront's brand pair, deepened for a long-session work surface. */
+  /* Light work canvas beside the dark navy brand sidebar (Figma "07 — پنل مدیریت"). */
+  --c-bg: #f6f8fa;
+  --c-surface: #edf2f5;
+  --c-card: #ffffff;
+  --c-fg: #0f1f30;
+  --c-muted: #566b7d;
+  --c-border: #dce5ec;
+  --c-primary: #126b7a;
+  --c-primary-hover: #0e5663;
+  --c-on-primary: #ffffff;
+  --c-accent: #126b7a;
+  --c-mint-soft: #e4f7ef;
+  --c-warn: #b45309;
+  --color-background: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-card: var(--c-card);
+  --color-foreground: var(--c-fg);
+  --color-muted: var(--c-muted);
+  --color-border: var(--c-border);
+  --color-primary: var(--c-primary);
+  --color-primary-hover: var(--c-primary-hover);
+  --color-primary-foreground: var(--c-on-primary);
+  --color-accent: var(--c-accent);
+  --color-success: #15803d;
+  --color-danger: #dc2626;
+  --shadow-card: 0 2px 10px -6px rgb(15 31 48 / 12%);
+  --shadow-glow: none;
+  --nav-bg: var(--c-navy);
+  --nav-surface: #172738;
+  --nav-fg: #eaf2f6;
+  --nav-muted: #9eb3c4;
+  --nav-border: #23384e;
+  --nav-active-bg: rgb(183 236 216 / 12%);
+  --nav-active-fg: var(--c-mint);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-items: start;
+  min-height: 100dvh;
+  background: var(--c-bg);
+  color: var(--c-fg);
+  color-scheme: light;
+}
+:global(.dark) .shell {
   --c-bg: #0b1520;
   --c-surface: #172738;
   --c-card: #111e2d;
@@ -12,27 +55,9 @@
   --c-accent: var(--c-mint);
   --c-mint-soft: color-mix(in srgb, var(--c-mint) 12%, var(--c-card));
   --c-warn: #ffd18a;
-  --color-background: var(--c-bg);
-  --color-surface: var(--c-surface);
-  --color-card: var(--c-card);
-  --color-foreground: var(--c-fg);
-  --color-muted: var(--c-muted);
-  --color-border: var(--c-border);
-  --color-primary: var(--c-primary);
-  --color-primary-hover: var(--c-primary-hover);
-  --color-primary-foreground: var(--c-on-primary);
-  --color-accent: var(--c-accent);
   --color-success: #8fe2aa;
   --color-danger: #ff9d9d;
   --shadow-card: none;
-  --shadow-glow: none;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto minmax(0, 1fr);
-  align-items: start;
-  min-height: 100dvh;
-  background: var(--c-bg);
-  color: var(--c-fg);
   color-scheme: dark;
 }
 /* Estedad's tabular figures widen the Persian thousands separator (٬) to a digit-wide gap
@@ -54,8 +79,9 @@
   justify-content: space-between;
   gap: 12px;
   padding-inline: 16px;
-  border-bottom: 1px solid var(--c-border);
-  background: color-mix(in srgb, var(--c-navy) 92%, transparent);
+  border-bottom: 1px solid var(--nav-border);
+  background: color-mix(in srgb, var(--nav-bg) 95%, transparent);
+  color: var(--nav-fg);
   backdrop-filter: blur(10px);
   box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--c-mint) 28%, transparent);
 }
@@ -72,6 +98,7 @@
 .brand {
   font-size: 1rem;
   font-weight: 750;
+  color: var(--nav-fg);
 }
 .topActions {
   display: flex;
@@ -81,12 +108,12 @@
 .logout {
   min-height: 44px;
   padding-inline: 8px;
-  color: var(--c-muted);
+  color: var(--nav-muted);
   font-size: 0.8125rem;
   cursor: pointer;
 }
 .logout:hover {
-  color: var(--c-fg);
+  color: var(--nav-fg);
 }
 .brand img {
   width: 38px;
@@ -100,18 +127,23 @@
   font-weight: 650;
 }
 .storeLink {
-  border: 1px solid var(--c-border);
+  color: var(--nav-active-fg);
+  border: 1px solid var(--nav-border);
   border-radius: 8px;
   padding-inline: 12px;
 }
-.storeLink:hover,
+.storeLink:hover {
+  background: var(--nav-surface);
+  color: #ffffff;
+}
 .inlineLink:hover {
   color: var(--c-primary-hover);
 }
 .sidebar {
   min-width: 0;
-  border-bottom: 1px solid var(--c-border);
-  background: var(--c-navy);
+  border-bottom: 1px solid var(--nav-border);
+  background: var(--nav-bg);
+  color: var(--nav-fg);
 }
 .menuToggle {
   display: flex;
@@ -120,6 +152,7 @@
   min-height: 48px;
   gap: 12px;
   padding-inline: 16px;
+  color: var(--nav-fg);
   cursor: pointer;
   text-align: start;
   font-size: 0.875rem;
@@ -131,12 +164,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--c-primary);
+  color: var(--nav-active-fg);
   font-weight: 550;
 }
 .chevron {
   font-size: 1.125rem;
-  color: var(--c-muted);
+  color: var(--nav-muted);
 }
 .navigation {
   display: none;
@@ -152,7 +185,7 @@
 .navGroup p {
   margin: 0 0 4px;
   padding-inline: 12px;
-  color: var(--c-muted);
+  color: var(--nav-muted);
   font-size: 0.8125rem;
 }
 .navGroup a {
@@ -163,15 +196,15 @@
   border-radius: 6px;
   padding: 4px 10px;
   font-size: 0.875rem;
-  color: var(--c-fg);
+  color: var(--nav-fg);
 }
 .navGroup a:hover {
-  background: var(--c-surface);
+  background: var(--nav-surface);
 }
 .navGroup a[aria-current="page"] {
-  border-inline-start-color: var(--c-primary);
-  background: var(--c-mint-soft);
-  color: var(--c-primary);
+  border-inline-start-color: var(--nav-active-fg);
+  background: var(--nav-active-bg);
+  color: var(--nav-active-fg);
   font-weight: 700;
 }
 .content {
@@ -392,13 +425,16 @@
   max-width: 64px;
   min-height: 3px;
   border-radius: 4px 4px 0 0;
+  background: color-mix(in srgb, var(--c-primary) 26%, var(--c-mint));
+}
+:global(.dark) .bar {
   background: color-mix(in srgb, var(--c-mint) 55%, var(--c-card));
 }
 .bar[data-today="true"] {
   background: var(--c-primary);
 }
 .bar[data-empty="true"] {
-  background: color-mix(in srgb, var(--c-muted) 35%, var(--c-card));
+  background: color-mix(in srgb, var(--c-muted) 25%, var(--c-card));
 }
 .axis {
   display: grid;
@@ -484,6 +520,10 @@
   background: color-mix(in srgb, var(--c-warn) 12%, var(--c-card));
 }
 .statusPill[data-tone="failed"] {
+  color: #991b1b;
+  background: #fdecec;
+}
+:global(.dark) .statusPill[data-tone="failed"] {
   color: #ffc0c0;
   background: #39282f;
 }
@@ -572,7 +612,7 @@
     max-height: calc(100dvh - 64px);
     overflow-y: auto;
     border-bottom: 0;
-    border-inline-end: 1px solid var(--c-border);
+    border-inline-end: 1px solid var(--nav-border);
   }
   .menuToggle {
     display: none;

@@ -1,7 +1,17 @@
+/* Product page layout (Figma "Shop / صفحهٔ محصول"): main column with the
+   product intro and variant picker, sticky purchase card beside it. */
 .overview {
   display: grid;
-  gap: 1rem;
-  grid-template-areas: "intro" "purchase" "media" "support";
+  gap: 1.25rem;
+  grid-template-areas: "intro" "purchase" "choose" "support";
+}
+
+.choose {
+  grid-area: choose;
+}
+
+.support {
+  grid-area: support;
 }
 
 .intro {
@@ -9,89 +19,246 @@
   min-width: 0;
 }
 
-.media {
-  grid-area: media;
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.tile {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 5.5rem;
+  height: 5.5rem;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  background: var(--c-mint-soft, #dff7ec);
+  color: var(--c-navy);
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.tile[data-kind="image"] {
+  background: var(--c-navy);
+}
+
+.tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+:global(.dark) .tile[data-kind="mark"] {
+  background: #1d3b3a;
+  color: #c9f3e2;
+}
+
+.headText {
+  display: grid;
+  gap: 0.375rem;
   min-width: 0;
 }
 
-.overview .purchase {
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.75rem, 3.4vw, 2.375rem);
+  font-weight: 800;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.rating {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--c-muted);
+}
+
+.rating > span:first-child {
+  color: #b45309;
+  letter-spacing: 0.08em;
+}
+
+:global(.dark) .rating > span:first-child {
+  color: #fbbf24;
+}
+
+.lead {
+  margin-top: 1rem;
+  color: var(--c-muted);
+  font-size: 1rem;
+  line-height: 1.9;
+}
+
+.thumbs {
+  margin-top: 0.875rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.thumbs button {
+  width: 3.5rem;
+  height: 3.5rem;
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: 0.75rem;
+  background: var(--c-surface);
+}
+
+.thumbs button[aria-pressed="true"] {
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 2px var(--c-primary);
+}
+
+.thumbs img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.choose {
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card, 1.25rem);
+  background: var(--c-card);
+  padding: 1.5rem;
+  min-width: 0;
+}
+
+.choose > h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.125rem;
+  font-weight: 750;
+}
+
+.termsBox {
+  margin-top: 1rem;
+  border: 1px solid var(--c-border);
+  border-radius: 0.875rem;
+  background: var(--c-surface);
+}
+
+.support {
+  margin-top: 0;
+  border: 1px solid color-mix(in srgb, var(--c-mint) 55%, var(--c-border));
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--c-mint) 12%, var(--c-card));
+  padding: 0.875rem 1.125rem;
+}
+
+.support > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--c-fg);
+}
+
+.support svg {
+  flex: none;
+  color: var(--c-primary);
+}
+
+.purchase {
   grid-area: purchase;
   min-width: 0;
   align-self: start;
 }
 
-.overview .support {
-  grid-area: support;
-  margin-top: 0;
+.purchaseCard {
+  display: grid;
+  gap: 0;
 }
 
-.withoutGallery {
-  grid-template-areas: "intro" "purchase" "support";
-}
-
-.title {
+.purchaseHead {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--c-muted);
 }
 
-.title .mark {
-  width: 2.75rem;
-  height: 2.75rem;
+.ready {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-mint) 22%, transparent);
+  color: var(--c-primary);
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
-.mark svg {
-  width: 1.625rem;
-  height: 1.625rem;
+.ready::before {
+  content: "";
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: currentColor;
 }
 
-.terms {
-  margin-top: 1rem;
-  border-inline-start: 3px solid var(--c-mint);
-  padding-inline-start: 0.75rem;
+.purchaseTitle {
+  margin: 0.625rem 0 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.purchaseBadges {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.oldPrice {
+  color: var(--c-muted);
   font-size: 0.875rem;
-  line-height: 1.85;
+  text-decoration: line-through;
 }
 
-@media (min-width: 56rem) {
-  .overview {
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-    column-gap: clamp(1.5rem, 4vw, 3rem);
-    align-items: start;
-  }
-
-  .withGallery {
-    grid-template-areas: "intro media" "purchase media" "support media";
-  }
-
-  .withoutGallery {
-    grid-template-areas: "intro purchase" "support purchase";
-    grid-template-rows: auto 1fr;
-  }
-}
-
-.change {
-  margin-top: 1.25rem;
-  border-top: 1px solid var(--c-border);
-  padding-top: 1rem;
+.price {
+  margin: 0.75rem 0 0;
+  font-size: clamp(1.75rem, 3vw, 2.125rem);
+  font-weight: 800;
+  line-height: 1.3;
 }
 
 .trustSummary {
-  margin-top: 1rem;
+  margin: 1.25rem 0 0;
   display: grid;
-  gap: 0.625rem;
   border: 1px solid var(--c-border);
-  border-inline-start: 3px solid var(--c-mint);
-  border-radius: 0.75rem;
+  border-radius: 0.875rem;
   background: var(--c-surface);
-  padding: 0.875rem 1rem;
   font-size: 0.875rem;
   line-height: 1.65;
 }
 
 .trustSummaryRow {
   display: grid;
-  gap: 0.125rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.75rem;
+  padding: 0.75rem 0.875rem;
+}
+
+.trustSummaryRow + .trustSummaryRow {
+  border-top: 1px solid var(--c-border);
+}
+
+.trustSummaryRow svg {
+  grid-row: span 2;
+  margin-top: 0.25rem;
+  color: var(--c-primary);
 }
 
 .trustSummaryRow dt {
@@ -103,6 +270,7 @@
 .trustSummaryRow dd {
   margin: 0;
   color: var(--c-fg);
+  font-weight: 650;
   overflow-wrap: anywhere;
 }
 
@@ -117,6 +285,286 @@
   outline: 2px solid var(--c-primary);
   outline-offset: 2px;
   border-radius: 0.25rem;
+}
+
+.buy {
+  margin-top: 1.25rem;
+}
+
+.buy button {
+  width: 100%;
+}
+
+.purchaseNote {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.8;
+  color: var(--c-muted);
+}
+
+@media (min-width: 56rem) {
+  .overview {
+    grid-template-columns: minmax(0, 1fr) minmax(19rem, 23.5rem);
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas: "intro purchase" "choose purchase" "support purchase";
+    column-gap: clamp(1.5rem, 3vw, 2.25rem);
+    align-items: start;
+  }
+
+  .purchase {
+    position: sticky;
+    top: 5.5rem;
+  }
+}
+
+/* Tabs */
+.tablist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.tablist [role="tab"] {
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  padding: 0.75rem 1rem;
+  font-size: 0.9375rem;
+  color: var(--c-muted);
+  transition: color 0.15s ease;
+}
+
+.tablist [role="tab"]:hover {
+  color: var(--c-fg);
+}
+
+.tablist [role="tab"][aria-selected="true"] {
+  border-bottom-color: var(--c-primary);
+  color: var(--c-fg);
+  font-weight: 750;
+}
+
+.panel {
+  padding-block: 1.75rem;
+}
+
+.descGrid {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.desc {
+  min-width: 0;
+  max-width: 52rem;
+}
+
+.specsCard {
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card, 1.25rem);
+  background: var(--c-card);
+  overflow: hidden;
+  align-self: start;
+}
+
+.specsCard > h2 {
+  margin: 0;
+  background: var(--c-surface);
+  padding: 0.875rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.specs {
+  margin: 0;
+}
+
+.specs > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.875rem;
+}
+
+.specs > div + div {
+  border-top: 1px solid var(--c-border);
+}
+
+.specs dt {
+  color: var(--c-muted);
+}
+
+.specs dd {
+  margin: 0;
+  font-weight: 650;
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+
+.specsOnly {
+  max-width: 36rem;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-card, 1.25rem);
+  background: var(--c-card);
+  overflow: hidden;
+}
+
+.reviewsGrid {
+  display: grid;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.reviewList {
+  display: grid;
+  gap: 0.875rem;
+  min-width: 0;
+}
+
+.review {
+  border: 1px solid var(--c-border);
+  border-radius: 1rem;
+  background: var(--c-card);
+  padding: 1rem 1.125rem;
+}
+
+.review > p {
+  margin-top: 0.625rem;
+  font-size: 0.875rem;
+  line-height: 1.9;
+}
+
+.reviewHead {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: var(--c-surface);
+  font-weight: 750;
+}
+
+.reviewWho {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.6;
+}
+
+.reviewWho small {
+  font-size: 0.75rem;
+  color: var(--c-muted);
+}
+
+.pending {
+  justify-self: start;
+  border-radius: 0.375rem;
+  background: rgb(245 158 11 / 0.12);
+  padding: 0 0.375rem;
+  font-size: 0.75rem;
+  color: #92400e;
+}
+
+:global(.dark) .pending {
+  color: #fcd34d;
+}
+
+.reviewStars {
+  flex: none;
+  color: #b45309;
+  letter-spacing: 0.06em;
+}
+
+:global(.dark) .reviewStars {
+  color: #fbbf24;
+}
+
+.reviewForm h3 {
+  font-size: 1.0625rem;
+  font-weight: 750;
+}
+
+.ratePick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--c-muted);
+}
+
+.ratePick button {
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--c-border);
+}
+
+.ratePick button[data-on="true"] {
+  color: #b45309;
+}
+
+:global(.dark) .ratePick button[data-on="true"] {
+  color: #fbbf24;
+}
+
+.related {
+  margin-top: 3rem;
+}
+
+.related > h2 {
+  margin-bottom: 1.25rem;
+  font-size: clamp(1.375rem, 2.6vw, 1.75rem);
+  font-weight: 800;
+}
+
+.relatedGrid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+}
+
+@media (min-width: 56rem) {
+  .withSpecs {
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 23.5rem);
+    column-gap: 2.25rem;
+  }
+
+  .reviewsGrid {
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 23.5rem);
+    column-gap: 2.25rem;
+  }
+
+  .reviewForm {
+    position: sticky;
+    top: 5.5rem;
+  }
+}
+
+@media (max-width: 40rem) {
+  .tile {
+    width: 4rem;
+    height: 4rem;
+    border-radius: 1rem;
+    font-size: 1.25rem;
+  }
+
+  .choose {
+    padding: 1.125rem;
+  }
+
+  .support {
+    padding: 0.75rem 0.875rem;
+  }
 }
 
 .mobileBuyBar {

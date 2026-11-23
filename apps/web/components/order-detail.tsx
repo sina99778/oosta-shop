@@ -127,7 +127,7 @@ export function OrderDetail({
               {fa ? "اقلام و اطلاعات تحویل" : "Items and delivery"}
             </h2>
             {order.items.map((item) => (
-              <Card key={item.id}>
+              <Card key={item.id} className={styles.vaultCard}>
                 <div className={styles.factRow}>
                   <div>
                     <p className="font-semibold">{item.product.name}</p>
@@ -156,7 +156,23 @@ export function OrderDetail({
                 )}
 
                 <div className="mt-4">
-                  <p className="mb-2 text-sm font-medium">{d.vault}</p>
+                  <div className={styles.vaultHead}>
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.9"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <rect x="4" y="10" width="16" height="11" rx="2" />
+                      <path d="M8 10V7a4 4 0 1 1 8 0v3" />
+                    </svg>
+                    <span>{d.vault}</span>
+                  </div>
                   {item.credentials.length === 0 ? (
                     <p className="text-sm text-muted">{d.noCredentials}</p>
                   ) : (

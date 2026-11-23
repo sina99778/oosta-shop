@@ -14,10 +14,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { Markdown } from "@/components/markdown";
-import { ProductCard } from "@/components/product-card";
+import { ProductCard, monogram } from "@/components/product-card";
 import { IndicativePriceLabel } from "./indicative-price";
 import { ProductPurchaseAction } from "./product-purchase-action";
-import { ProductMark } from "@/components/product-mark";
 import { VariantSelector } from "./variant-selector";
 import { SupplierQuotePanel } from "./supplier-quote-panel";
 import { StockAlertButton } from "./stock-alert-button";
@@ -221,6 +220,22 @@ export function ProductDetailView({
     />
   );
 
+  const specsTable =
+    product.specs.length === 0 ? (
+      <p className="text-muted">{t.noSpecs}</p>
+    ) : (
+      <dl className={layout.specs}>
+        {product.specs.map((s, i) => (
+          <div key={i}>
+            <dt>{s.label}</dt>
+            <dd>
+              <bdi>{s.value}</bdi>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    );
+
   return (
     <Container className={styles.detail}>
       {/* Breadcrumb */}
@@ -244,82 +259,236 @@ export function ProductDetailView({
         </span>
       </nav>
 
-      <div
-        className={cn(
-          layout.overview,
-          images.length > 0 ? layout.withGallery : layout.withoutGallery,
-        )}
-      >
-        {/* Gallery */}
-        {images.length > 0 && (
-          <div className={layout.media}>
-            <div className={styles.gallery}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={images[activeImage] ?? images[0]}
-                fetchPriority="high"
-                alt={product.name}
-                className="h-full w-full object-contain"
-              />
-            </div>
-            {images.length > 1 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {images.map((src, i) => (
-                  <button
-                    key={i}
-                    aria-label={`${product.name} — ${numbers.format(i + 1)}`}
-                    aria-pressed={activeImage === i}
-                    onClick={() => setActiveImage(i)}
-                    className={cn(
-                      "size-16 overflow-hidden rounded-lg border",
-                      i === activeImage ? "border-primary" : "border-border",
-                    )}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt="" className="h-full w-full object-cover" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
+      <div className={layout.overview}>
         {/* Info */}
         <div className={cn(layout.intro, styles.detailInfo)}>
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <Badge tone="muted">{product.category.name}</Badge>
-            {product.isFeatured && <Badge tone="primary">{t.featured}</Badge>}
-            {plan?.onSale && (
-              <Badge tone="sale">
-                {new Intl.NumberFormat(localeFa ? "fa-IR" : "en-US", { style: "percent" }).format(
-                  plan.discountPercent / 100,
-                )}{" "}
-                {t.off}
-              </Badge>
-            )}
+          <div className={layout.head}>
+            <div className={layout.tile} data-kind={images.length ? "image" : "mark"}>
+              {images.length ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={images[activeImage] ?? images[0]}
+                  fetchPriority="high"
+                  alt={product.name}
+                />
+              ) : (
+                <span aria-hidden="true">{monogram(product.name)}</span>
+              )}
+            </div>
+            <div className={layout.headText}>
+              <div className={layout.chips}>
+                <Badge tone="muted">{product.category.name}</Badge>
+                {product.isFeatured && <Badge tone="primary">{t.featured}</Badge>}
+                {plan?.onSale && (
+                  <Badge tone="sale">
+                    {new Intl.NumberFormat(localeFa ? "fa-IR" : "en-US", {
+                      style: "percent",
+                    }).format(plan.discountPercent / 100)}{" "}
+                    {t.off}
+                  </Badge>
+                )}
+              </div>
+              <h1 className={layout.title}>
+                <bdi>{product.name}</bdi>
+              </h1>
+              {product.rating.count > 0 && (
+                <p className={layout.rating}>
+                  <span aria-hidden="true">{stars(product.rating.average)}</span>{" "}
+                  <span>
+                    {numbers.format(product.rating.average)} ·{" "}
+                    {numbers.format(product.rating.count)} {t.reviewsCount}
+                  </span>
+                </p>
+              )}
+            </div>
           </div>
-          <h1 className={layout.title}>
-            {!images.length && <ProductMark type={product.type} className={layout.mark} />}
-            <bdi>{product.name}</bdi>
-          </h1>
 
-          {product.rating.count > 0 && (
-            <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
-              {stars(product.rating.average)}{" "}
-              <span className="text-muted">
-                {numbers.format(product.rating.average)} · {numbers.format(product.rating.count)}{" "}
-                {t.reviewsCount}
-              </span>
-            </p>
-          )}
+          {product.shortDescription && <p className={layout.lead}>{product.shortDescription}</p>}
 
-          {product.shortDescription && (
-            <p className="mt-3 text-muted">{product.shortDescription}</p>
+          {images.length > 1 && (
+            <div className={layout.thumbs}>
+              {images.map((src, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  aria-label={`${product.name} — ${numbers.format(i + 1)}`}
+                  aria-pressed={activeImage === i}
+                  onClick={() => setActiveImage(i)}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt="" />
+                </button>
+              ))}
+            </div>
           )}
         </div>
-        {/* Plans */}
-        <Card className={cn(layout.purchase, styles.planCard)}>
-          <h2 className="font-semibold">{t.perPlan}</h2>
+
+        {/* Purchase summary */}
+        <aside className={layout.purchase} aria-labelledby="purchase-title">
+          <Card className={cn(layout.purchaseCard, styles.planCard)}>
+            <div className={layout.purchaseHead}>
+              <span>{localeFa ? "پلن انتخاب‌شده" : "Selected plan"}</span>
+              {plan && canBuy && (
+                <span className={layout.ready}>
+                  {localeFa ? "آمادهٔ خرید" : "Ready to purchase"}
+                </span>
+              )}
+            </div>
+            <h2 id="purchase-title" className={layout.purchaseTitle}>
+              {plan ? (
+                <bdi>{planDisplayLabel(plan.label, localeFa)}</bdi>
+              ) : localeFa ? (
+                "هنوز پلنی انتخاب نشده"
+              ) : (
+                "No plan selected yet"
+              )}
+            </h2>
+            {plan && (
+              <div className={layout.purchaseBadges} aria-live="polite">
+                <Badge tone={availabilityOf(plan) === "LOCAL_STOCK" ? "success" : "muted"}>
+                  {availabilityLabel(plan, locale)}
+                </Badge>
+                {plan.onSale && !plan.quoteRequired && (
+                  <span className={layout.oldPrice}>
+                    {formatPrice(plan.price, plan.currency, locale)}
+                  </span>
+                )}
+              </div>
+            )}
+            {/* Price */}
+            {(supplierCart || plan?.supplierStockUnconfirmed) && (
+              <div className="mt-2" aria-live="polite">
+                <IndicativePriceLabel
+                  price={supplierCart ? plan.indicativePrice : null}
+                  locale={locale}
+                />
+              </div>
+            )}
+            {plan && !plan.quoteRequired && (
+              <p className={cn(layout.price, styles.detailPrice)}>
+                <bdi>{formatPrice(plan.effectivePrice, plan.currency, locale)}</bdi>
+              </p>
+            )}
+
+            {trustSummary && (
+              <dl
+                className={layout.trustSummary}
+                aria-label={
+                  localeFa ? "خلاصهٔ ضمانت و تحویل پلن" : "Plan warranty and delivery summary"
+                }
+              >
+                <div className={layout.trustSummaryRow}>
+                  <ClockIcon />
+                  <dt>{localeFa ? "دسترسی و مدت" : "Access & term"}</dt>
+                  <dd>{trustSummary.access}</dd>
+                </div>
+                <div className={layout.trustSummaryRow}>
+                  <BoltIcon />
+                  <dt>{localeFa ? "روش تحویل" : "Delivery"}</dt>
+                  <dd>{trustSummary.delivery}</dd>
+                </div>
+                <div className={layout.trustSummaryRow}>
+                  <ShieldIcon />
+                  <dt>{localeFa ? "ضمانت" : "Warranty"}</dt>
+                  <dd>
+                    <span>{trustSummary.warranty}</span>
+                    {" · "}
+                    <Link href={`/${locale}/p/return-policy`}>
+                      {localeFa ? "شرایط ضمانت" : "Warranty terms"}
+                    </Link>
+                  </dd>
+                </div>
+                <div className={layout.trustSummaryRow}>
+                  <ChatIcon />
+                  <dt>{localeFa ? "پشتیبانی" : "Support"}</dt>
+                  <dd>
+                    <Link href={`/${locale}/p/contact`}>
+                      {localeFa ? "راه‌های تماس و پیگیری سفارش" : "Contact & order support"}
+                    </Link>
+                    {supportHref && (
+                      <>
+                        {" · "}
+                        <a href={supportHref} target="_blank" rel="noopener noreferrer">
+                          {localeFa ? "تلگرام پیش از خرید" : "Pre-sale Telegram"}
+                        </a>
+                      </>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            )}
+
+            {plan && availabilityOf(plan) === "OUT_OF_STOCK" && user?.role !== "ADMIN" && (
+              <StockAlertButton
+                key={`alert:${plan.id}:${token ?? ""}`}
+                planId={plan.id}
+                locale={locale}
+                loginPath={loginPath}
+                token={user?.role === "USER" ? token : null}
+                purchaseSummary={purchaseSummary}
+              />
+            )}
+            {plan?.quoteRequired && availabilityOf(plan) === "ON_REQUEST" && (
+              <SupplierQuotePanel
+                key={`quote:${plan.id}:${JSON.stringify(plan.variant)}:${token ?? "anonymous"}`}
+                plan={plan}
+                token={token}
+                locale={locale}
+                loginPath={loginPath}
+              />
+            )}
+            {plan && availabilityOf(plan) === "LOCAL_STOCK" && plan.availableStock <= 5 && (
+              <p className="mt-3 text-sm text-danger">
+                {plan.availableStock.toLocaleString(locale)} {t.left}
+              </p>
+            )}
+            {(canBuy || supplierCart) && (
+              <div className={layout.buy}>
+                <ProductPurchaseAction
+                  key={`buy:${plan?.id ?? ""}`}
+                  locale={locale}
+                  summary={purchaseSummary}
+                  feedback={
+                    buyError && (
+                      <p role="alert" className="text-sm text-danger">
+                        {buyError}
+                      </p>
+                    )
+                  }
+                >
+                  <Button
+                    type="button"
+                    size="lg"
+                    disabled={buying || authLoading}
+                    onClick={addToCart}
+                  >
+                    {buying ? <Spinner /> : null}
+                    {localeFa ? "افزودن به سبد خرید" : "Add to cart"}
+                  </Button>
+                </ProductPurchaseAction>
+              </div>
+            )}
+            {supplierCart && (
+              <p className={layout.purchaseNote}>
+                {localeFa
+                  ? "قیمت و موجودی تأمین‌کننده پیش از پرداخت در فاکتور دوباره بررسی می‌شود."
+                  : "We’ll recheck supplier price and stock on the invoice before payment."}
+              </p>
+            )}
+
+            {plan && !plan.quoteRequired && availabilityOf(plan) === "LOCAL_STOCK" && !canBuy && (
+              <p role="status" className={layout.purchaseNote}>
+                {localeFa
+                  ? "خرید این پلن فعلاً فعال نیست."
+                  : "Checkout is currently unavailable for this plan."}
+              </p>
+            )}
+          </Card>
+        </aside>
+
+        {/* Plan picker */}
+        <section className={layout.choose} aria-labelledby="plan-choose-title">
+          <h2 id="plan-choose-title">{t.perPlan}</h2>
           {staleSelection && (
             <p role="alert" className="mt-3 text-sm text-danger">
               {localeFa
@@ -327,158 +496,9 @@ export function ProductDetailView({
                 : "Your previous plan is unavailable. Please choose a plan again."}
             </p>
           )}
-          {plan && (
-            <div className={layout.terms}>
-              <p className="font-semibold">
-                <bdi>{planDisplayLabel(plan.label, localeFa)}</bdi>
-              </p>
-            </div>
-          )}
-          {/* Price */}
-          {(supplierCart || plan?.supplierStockUnconfirmed) && (
-            <div className="mt-2" aria-live="polite">
-              <IndicativePriceLabel
-                price={supplierCart ? plan.indicativePrice : null}
-                locale={locale}
-              />
-            </div>
-          )}
-          {plan && !plan.quoteRequired && (
-            <div className={cn("mt-2 flex flex-wrap items-end gap-3", styles.detailPrice)}>
-              <span className="text-3xl font-bold">
-                {formatPrice(plan.effectivePrice, plan.currency, locale)}
-              </span>
-              {plan.onSale && (
-                <span className="pb-1 text-lg text-muted line-through">
-                  {formatPrice(plan.price, plan.currency, locale)}
-                </span>
-              )}
-            </div>
-          )}
-
-          {plan && (
-            <div className="mt-4 flex flex-wrap items-center gap-2" aria-live="polite">
-              <Badge tone={availabilityOf(plan) === "LOCAL_STOCK" ? "success" : "muted"}>
-                {availabilityLabel(plan, locale)}
-              </Badge>
-              {canBuy && (
-                <span className="text-sm text-primary">
-                  {localeFa ? "آمادهٔ خرید" : "Ready to purchase"}
-                </span>
-              )}
-            </div>
-          )}
-          {plan && availabilityOf(plan) === "OUT_OF_STOCK" && user?.role !== "ADMIN" && (
-            <StockAlertButton
-              key={`alert:${plan.id}:${token ?? ""}`}
-              planId={plan.id}
-              locale={locale}
-              loginPath={loginPath}
-              token={user?.role === "USER" ? token : null}
-              purchaseSummary={purchaseSummary}
-            />
-          )}
-          {plan?.quoteRequired && availabilityOf(plan) === "ON_REQUEST" && (
-            <SupplierQuotePanel
-              key={`quote:${plan.id}:${JSON.stringify(plan.variant)}:${token ?? "anonymous"}`}
-              plan={plan}
-              token={token}
-              locale={locale}
-              loginPath={loginPath}
-            />
-          )}
-          {plan && availabilityOf(plan) === "LOCAL_STOCK" && plan.availableStock <= 5 && (
-            <p className="mt-3 text-sm text-danger">
-              {plan.availableStock.toLocaleString(locale)} {t.left}
-            </p>
-          )}
-          {(canBuy || supplierCart) && (
-            <ProductPurchaseAction
-              key={`buy:${plan?.id ?? ""}`}
-              locale={locale}
-              summary={purchaseSummary}
-              feedback={
-                buyError && (
-                  <p role="alert" className="text-sm text-danger">
-                    {buyError}
-                  </p>
-                )
-              }
-            >
-              <Button type="button" size="lg" disabled={buying || authLoading} onClick={addToCart}>
-                {buying ? <Spinner /> : null}
-                {localeFa ? "افزودن به سبد خرید" : "Add to cart"}
-              </Button>
-            </ProductPurchaseAction>
-          )}
-          {supplierCart && (
-            <p className="mt-2 text-sm text-muted">
-              {localeFa
-                ? "قیمت و موجودی تأمین‌کننده پیش از پرداخت در فاکتور دوباره بررسی می‌شود."
-                : "We’ll recheck supplier price and stock on the invoice before payment."}
-            </p>
-          )}
-
-          {plan && !plan.quoteRequired && availabilityOf(plan) === "LOCAL_STOCK" && !canBuy && (
-            <p role="status" className="mt-3 text-sm text-muted">
-              {localeFa
-                ? "خرید این پلن فعلاً فعال نیست."
-                : "Checkout is currently unavailable for this plan."}
-            </p>
-          )}
-          {trustSummary && (
-            <dl
-              className={layout.trustSummary}
-              aria-label={
-                localeFa ? "خلاصهٔ ضمانت و تحویل پلن" : "Plan warranty and delivery summary"
-              }
-            >
-              <div className={layout.trustSummaryRow}>
-                <dt>{localeFa ? "ضمانت" : "Warranty"}</dt>
-                <dd>
-                  <span>{trustSummary.warranty}</span>
-                  {" · "}
-                  <Link href={`/${locale}/p/return-policy`}>
-                    {localeFa ? "شرایط ضمانت" : "Warranty terms"}
-                  </Link>
-                </dd>
-              </div>
-              <div className={layout.trustSummaryRow}>
-                <dt>{localeFa ? "روش تحویل" : "Delivery"}</dt>
-                <dd>{trustSummary.delivery}</dd>
-              </div>
-              <div className={layout.trustSummaryRow}>
-                <dt>{localeFa ? "دسترسی و مدت" : "Access & term"}</dt>
-                <dd>{trustSummary.access}</dd>
-              </div>
-              <div className={layout.trustSummaryRow}>
-                <dt>{localeFa ? "پشتیبانی" : "Support"}</dt>
-                <dd>
-                  <Link href={`/${locale}/p/contact`}>
-                    {localeFa ? "راه‌های تماس و پیگیری سفارش" : "Contact & order support"}
-                  </Link>
-                  {supportHref && (
-                    <>
-                      {" · "}
-                      <a href={supportHref} target="_blank" rel="noopener noreferrer">
-                        {localeFa ? "تلگرام پیش از خرید" : "Pre-sale Telegram"}
-                      </a>
-                    </>
-                  )}
-                </dd>
-              </div>
-            </dl>
-          )}
-          {product.plans.length > 0 && (
-            <div className={plan ? layout.change : undefined}>
-              {plan && (
-                <h3 className="text-sm font-semibold">{localeFa ? "تغییر پلن" : "Change plan"}</h3>
-              )}
-              {planPicker}
-            </div>
-          )}
+          {product.plans.length > 0 && planPicker}
           {plan && (plan.activationTerms || plan.variant) && (
-            <details key={`terms:${plan.id}`} className="mt-4 rounded-xl border border-border">
+            <details key={`terms:${plan.id}`} className={layout.termsBox}>
               <summary className="oosta-disclosure min-h-12 p-4 text-sm font-medium">
                 {plan.activationTerms
                   ? locale === "fa"
@@ -523,9 +543,11 @@ export function ProductDetailView({
               </div>
             </details>
           )}
-        </Card>
+        </section>
+
         <div className={cn(layout.support, styles.supportNote)}>
           <span>
+            <InfoIcon />
             {unavailable
               ? localeFa
                 ? "این گزینه فعلاً ناموجود است."
@@ -549,7 +571,7 @@ export function ProductDetailView({
 
       {/* Tabs */}
       <div className={styles.detailTabs}>
-        <div role="tablist" aria-label={product.name} className="flex gap-1 border-b border-border">
+        <div role="tablist" aria-label={product.name} className={layout.tablist}>
           {(
             [
               ["description", t.tabDescription],
@@ -581,12 +603,6 @@ export function ProductDetailView({
                 document.getElementById(`product-tab-${keys[next]}`)?.focus();
               }}
               onClick={() => setTab(key)}
-              className={cn(
-                "border-b-2 px-4 py-3 text-sm transition-colors",
-                tab === key
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted hover:text-foreground",
-              )}
             >
               {label}
             </button>
@@ -597,67 +613,64 @@ export function ProductDetailView({
           role="tabpanel"
           id="product-panel"
           aria-labelledby={`product-tab-${tab}`}
-          className="py-6"
+          className={layout.panel}
         >
           {tab === "description" && (
-            <Markdown
-              text={product.description}
-              headingOffset={0}
-              className="max-w-4xl text-muted [&_p]:leading-8"
-            />
+            <div className={cn(layout.descGrid, product.specs.length > 0 && layout.withSpecs)}>
+              <Markdown
+                text={product.description}
+                headingOffset={0}
+                className={cn("text-muted [&_p]:leading-8", layout.desc)}
+              />
+              {product.specs.length > 0 && (
+                <aside className={layout.specsCard} aria-labelledby="specs-aside-title">
+                  <h2 id="specs-aside-title">{t.tabSpecs}</h2>
+                  {specsTable}
+                </aside>
+              )}
+            </div>
           )}
 
-          {tab === "specs" &&
-            (product.specs.length === 0 ? (
-              <p className="text-muted">{t.noSpecs}</p>
-            ) : (
-              <div className="max-w-xl overflow-hidden rounded-lg border border-border">
-                {product.specs.map((s, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      "flex justify-between gap-4 px-4 py-2.5 text-sm",
-                      i % 2 === 0 ? "bg-surface" : "",
-                    )}
-                  >
-                    <span className="text-muted">{s.label}</span>
-                    <span className="font-medium">{s.value}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
+          {tab === "specs" && <div className={layout.specsOnly}>{specsTable}</div>}
 
           {tab === "reviews" && (
-            <div className="space-y-6">
-              {reviewsList.length === 0 ? (
-                <p className="text-muted">{t.noReviews}</p>
-              ) : (
-                <div className="space-y-4">
-                  {reviewsList.map((r) => (
-                    <div key={r.id} className="border-b border-border pb-4">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium flex items-center gap-2">
-                          {r.userName}
-                          {r.isPendingLocal && (
-                            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-normal text-amber-800 dark:text-amber-300">
-                              {dict.admin.reviews.pending}
-                            </span>
-                          )}
+            <div className={layout.reviewsGrid}>
+              <div className={layout.reviewList}>
+                {reviewsList.length === 0 ? (
+                  <p className="text-muted">{t.noReviews}</p>
+                ) : (
+                  reviewsList.map((r) => (
+                    <article key={r.id} className={layout.review}>
+                      <div className={layout.reviewHead}>
+                        <span className={layout.avatar} aria-hidden="true">
+                          {Array.from(r.userName.trim())[0] ?? "?"}
                         </span>
-                        <span className="text-xs text-muted">
-                          {formatDate(r.createdAt, locale)}
+                        <span className={layout.reviewWho}>
+                          <strong>
+                            <bdi>{r.userName}</bdi>
+                          </strong>
+                          {r.isPendingLocal && (
+                            <span className={layout.pending}>{dict.admin.reviews.pending}</span>
+                          )}
+                          <small>{formatDate(r.createdAt, locale)}</small>
+                        </span>
+                        <span
+                          className={layout.reviewStars}
+                          role="img"
+                          aria-label={`${numbers.format(r.rating)} / ${numbers.format(5)}`}
+                        >
+                          {stars(r.rating)}
                         </span>
                       </div>
-                      <p className="text-amber-700 dark:text-amber-400">{stars(r.rating)}</p>
-                      {r.comment && <p className="mt-1 text-sm">{r.comment}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
+                      {r.comment && <p>{r.comment}</p>}
+                    </article>
+                  ))
+                )}
+              </div>
 
               {/* Write a review */}
-              <Card className="max-w-xl">
-                <h3 className="font-semibold">{t.writeReview}</h3>
+              <Card className={layout.reviewForm}>
+                <h3>{t.writeReview}</h3>
                 {!user ? (
                   <Link
                     href={loginPath}
@@ -667,9 +680,9 @@ export function ProductDetailView({
                   </Link>
                 ) : (
                   <div className="mt-3 space-y-3">
-                    <div>
-                      <label className="mb-1 block text-sm text-muted">{t.yourRating}</label>
-                      <div className="flex gap-1 text-2xl">
+                    <div className={layout.ratePick}>
+                      <span id="review-rating-label">{t.yourRating}</span>
+                      <div role="group" aria-labelledby="review-rating-label">
                         {[1, 2, 3, 4, 5].map((n) => (
                           <button
                             key={n}
@@ -677,9 +690,7 @@ export function ProductDetailView({
                             aria-pressed={n === rating}
                             type="button"
                             onClick={() => setRating(n)}
-                            className={
-                              n <= rating ? "text-amber-700 dark:text-amber-400" : "text-muted"
-                            }
+                            data-on={n <= rating}
                           >
                             ★
                           </button>
@@ -690,6 +701,7 @@ export function ProductDetailView({
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
                       rows={3}
+                      aria-label={t.yourComment}
                       placeholder={t.yourComment}
                       className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
                     />
@@ -707,15 +719,69 @@ export function ProductDetailView({
 
       {/* Related products */}
       {product.related.length > 0 && (
-        <div className="mt-10">
-          <h2 className="mb-4 text-xl font-bold">{t.related}</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className={layout.related} aria-labelledby="related-title">
+          <h2 id="related-title">{t.related}</h2>
+          <div className={layout.relatedGrid}>
             {product.related.map((rp) => (
               <ProductCard key={rp.id} product={rp} locale={locale} labels={cardLabels} />
             ))}
           </div>
-        </div>
+        </section>
       )}
     </Container>
+  );
+}
+
+const iconProps = {
+  width: 18,
+  height: 18,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  "aria-hidden": true,
+};
+
+function ClockIcon() {
+  return (
+    <svg {...iconProps}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+function BoltIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M13 3 5 14h6l-1 7 8-11h-6l1-7Z" />
+    </svg>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M12 3 5 6v6c0 4 3 7 7 9 4-2 7-5 7-9V6l-7-3Z" />
+    </svg>
+  );
+}
+
+function ChatIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" />
+    </svg>
+  );
+}
+
+function InfoIcon() {
+  return (
+    <svg {...iconProps}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5M12 8h.01" />
+    </svg>
   );
 }

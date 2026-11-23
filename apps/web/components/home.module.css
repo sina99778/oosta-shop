@@ -455,10 +455,6 @@
   align-items: center;
   padding-block: clamp(3rem, 7vw, 5.5rem);
 }
-/* Copy reads first at every width (right-hand column on desktop, above the mock on phones). */
-.labCopy {
-  order: -1;
-}
 .labCopy h2 {
   font-size: clamp(1.7rem, 3vw, 2.75rem);
   font-weight: 800;
@@ -470,10 +466,14 @@
   line-height: 1.85;
   margin-block-end: 1.25rem;
 }
+.labCopy small {
+  color: var(--c-muted);
+}
 .labMock {
   display: grid;
+  min-width: 0;
   gap: 0.9rem;
-  padding: 1.5rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
   border-radius: 1.25rem;
   border: 1px solid var(--c-border);
   background: var(--c-card);
@@ -487,29 +487,15 @@
   font-size: 0.875rem;
   font-weight: 700;
 }
-.labBar i {
-  display: inline-flex;
-  gap: 0.35rem;
-}
-.labBar i::before,
-.labBar i::after,
-.labBar b {
-  content: "";
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 50%;
-  background: var(--c-border);
-}
 .labMock label {
   color: var(--c-muted);
   font-size: 0.8125rem;
   font-weight: 650;
 }
-.labMock textarea {
+.labMock :is(textarea, input, select) {
+  min-width: 0;
   width: 100%;
-  min-height: 4.75rem;
-  resize: vertical;
-  padding: 0.85rem 1rem;
+  padding: 0.6rem 0.75rem;
   border-radius: 0.75rem;
   border: 1px solid var(--c-border);
   background: var(--c-surface);
@@ -517,14 +503,18 @@
   font-size: 1rem;
   line-height: 1.8;
 }
-.labArrow {
-  justify-self: center;
-  padding: 0.3rem 0.85rem;
-  border-radius: 999px;
-  background: var(--navy);
-  color: var(--mint);
-  font-size: 0.8125rem;
-  font-weight: 700;
+.labMock textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+.labOptions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: 0.75rem;
+}
+.labOptions label {
+  display: grid;
+  gap: 0.35rem;
 }
 .labOut {
   display: grid;
@@ -532,22 +522,24 @@
   margin: 0;
   padding: 1rem 1.1rem;
   border-radius: 0.75rem;
-  background: var(--c-success-bg);
-  border: 1.5px solid var(--mint);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
 }
 .labOut div {
-  display: flex;
-  gap: 0.5rem;
+  display: grid;
+  gap: 0.15rem;
   line-height: 1.8;
 }
 .labOut dt {
-  flex: none;
   color: var(--c-primary);
+  font-size: 0.875rem;
   font-weight: 750;
 }
 .labOut dd {
   margin: 0;
   color: var(--c-fg);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 .labActions {
   display: flex;
@@ -555,9 +547,16 @@
   justify-content: space-between;
   gap: 0.75rem;
 }
-.labActions small {
+.labActions h3 {
+  font-weight: 750;
+}
+.labNotice,
+.labEmpty {
   color: var(--c-muted);
   font-size: 0.8125rem;
+}
+.labNotice:empty {
+  display: none;
 }
 
 /* ---------------- Journal ---------------- */

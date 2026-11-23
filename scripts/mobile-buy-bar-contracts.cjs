@@ -11,13 +11,16 @@ require.extensions[".css"] = (module) => {
 
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
-const control = {};
+let anchorBottom = 900;
+const control = { getBoundingClientRect: () => ({ bottom: anchorBottom }) };
 let browserRender = false;
 let pastAction = false;
 let subscribe;
 let updateVisibility;
 let observed;
 let disconnects = 0;
+let scrollListener;
+let scrollFrame;
 const media = {
   matches: true,
   addEventListener: (event, listener) => {
@@ -48,6 +51,21 @@ Module._load = function (request, ...args) {
 
 const { ProductPurchaseAction } = require("../apps/web/components/product-purchase-action.tsx");
 globalThis.window = {
+  addEventListener: (event, listener) => {
+    assert.equal(event, "scroll");
+    scrollListener = listener;
+  },
+  removeEventListener: (event) => {
+    assert.equal(event, "scroll");
+    scrollListener = undefined;
+  },
+  requestAnimationFrame: (callback) => {
+    scrollFrame = callback;
+    return 1;
+  },
+  cancelAnimationFrame: () => {
+    scrollFrame = undefined;
+  },
   matchMedia: (query) => {
     assert.match(query, /max-width/);
     return media;
@@ -87,6 +105,10 @@ assert.equal(observed, control);
 
 updateVisibility(900, false);
 assert.ok(!sticky(), "A CTA initially below the fold must not trigger the bar");
+anchorBottom = -500;
+scrollListener?.();
+scrollFrame?.();
+assert.ok(sticky(), "A scroll jump past a below-fold CTA must reveal the bar");
 updateVisibility(40, true);
 assert.ok(!sticky());
 updateVisibility(-1, false);
@@ -106,4 +128,5 @@ assert.equal(observed, undefined);
 unsubscribe();
 assert.ok(disconnects >= 2);
 assert.equal(media.listener, undefined);
+assert.equal(scrollListener, undefined);
 console.log("PASS: mobile purchase observer, SSR, desktop resizing, shared action and error placement");

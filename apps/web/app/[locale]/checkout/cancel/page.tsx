@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { getDictionary } from "../../dictionaries";
 import { isLocale } from "@/lib/i18n";
 import { Container } from "@/components/ui/container";
-import { Card } from "@/components/ui/card";
+import { XIcon } from "@/components/checkout-ui";
+import styles from "@/components/checkout.module.css";
 
 export default async function CheckoutCancelPage({
   params,
@@ -13,24 +14,32 @@ export default async function CheckoutCancelPage({
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const dict = await getDictionary(locale);
+  const fa = locale === "fa";
 
   return (
-    <Container className="flex justify-center py-20">
-      <Card className="w-full max-w-md text-center">
-        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-danger/15 text-2xl text-danger">
-          ✕
-        </div>
-        <h1 className="text-xl font-bold">{dict.checkout.failTitle}</h1>
-        <p className="mt-2 text-muted">{dict.checkout.failBody}</p>
-        <div className="mt-6 flex justify-center">
+    <Container className={styles.page}>
+      <section className={styles.result} data-tone="danger">
+        <span className={styles.resultIcon} aria-hidden="true">
+          <XIcon size={34} />
+        </span>
+        <h1>{dict.checkout.failTitle}</h1>
+        <p>{dict.checkout.failBody}</p>
+        <div className={styles.resultActions}>
+          <Link
+            href={`/${locale}/cart`}
+            className="oosta-button inline-flex min-h-11 items-center px-5"
+          >
+            {fa ? "تلاش دوباره از سبد خرید" : "Try again from cart"}
+          </Link>
           <Link
             href={`/${locale}/products`}
-            className="inline-flex h-10 items-center rounded-lg border border-border px-4 text-sm hover:bg-surface"
+            className="oosta-button inline-flex min-h-11 items-center px-5"
+            data-button-variant="outline"
           >
             {dict.checkout.backToStore}
           </Link>
         </div>
-      </Card>
+      </section>
     </Container>
   );
 }

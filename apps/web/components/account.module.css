@@ -1,8 +1,23 @@
 .shell {
-  max-width: 70rem;
-  padding-block: clamp(1.5rem, 4vw, 3rem) clamp(3rem, 7vw, 6rem);
+  max-width: 75rem;
+  padding-block: clamp(1.5rem, 4vw, 2.75rem) clamp(3rem, 7vw, 5.5rem);
 }
-/* Account sections as one segmented control: the current one is the navy/mint brand pair. */
+.layout {
+  display: grid;
+  gap: 1.5rem;
+  align-items: start;
+}
+.main {
+  min-width: 0;
+}
+.sideCard {
+  display: contents;
+}
+.sideProfile,
+.sideFoot {
+  display: none;
+}
+/* Account sections as one segmented control on mobile; sidebar nav on desktop. */
 .nav {
   display: inline-flex;
   flex-wrap: nowrap;
@@ -11,10 +26,102 @@
   gap: 0.25rem;
   max-width: 100%;
   padding: 0.25rem;
-  margin-block-end: 1rem;
+  margin-block-end: 0.25rem;
   border: 1px solid var(--c-border);
   border-radius: 0.9rem;
   background: var(--c-surface);
+}
+@media (min-width: 60rem) {
+  .layout {
+    grid-template-columns: minmax(14.5rem, 17.25rem) minmax(0, 1fr);
+    gap: 1.75rem;
+  }
+  .sideCard {
+    position: sticky;
+    top: 5.5rem;
+    display: grid;
+    gap: 0.9rem;
+    padding: 1.15rem;
+    border: 1px solid var(--c-border);
+    border-radius: 1.1rem;
+    background: var(--c-card);
+    box-shadow: var(--shadow-card);
+  }
+  .sideProfile {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-bottom: 0.9rem;
+    border-bottom: 1px solid var(--c-border);
+  }
+  .sideAvatar {
+    display: grid;
+    place-items: center;
+    inline-size: 2.65rem;
+    block-size: 2.65rem;
+    flex: none;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--c-mint) 55%, var(--c-card));
+    color: var(--c-navy);
+    font-size: 0.95rem;
+    font-weight: 850;
+  }
+  :global(.dark) .sideAvatar {
+    background: #1b3d3c;
+    color: var(--c-mint);
+  }
+  .sideMeta {
+    display: grid;
+    min-width: 0;
+    gap: 0.1rem;
+  }
+  .sideMeta strong {
+    font-size: 0.9375rem;
+    font-weight: 800;
+    color: var(--c-fg);
+    overflow-wrap: anywhere;
+  }
+  .sideMeta span {
+    font-size: 0.78rem;
+    color: var(--c-muted);
+    overflow-wrap: anywhere;
+  }
+  .nav {
+    display: grid;
+    width: 100%;
+    overflow: visible;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    gap: 0.25rem;
+  }
+  .nav a {
+    justify-content: flex-start;
+    width: 100%;
+    padding-inline: 0.85rem;
+  }
+  .sideFoot {
+    display: block;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--c-border);
+  }
+  .sideLogout {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    min-height: 44px;
+    padding-inline: 0.85rem;
+    border-radius: 0.65rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--c-danger-text);
+    transition: background-color 0.15s;
+  }
+  .sideLogout:hover {
+    background: color-mix(in srgb, var(--color-danger) 8%, var(--c-card));
+  }
 }
 .nav a,
 .action {
@@ -37,12 +144,13 @@
     background-color 0.15s,
     color 0.15s;
 }
-.nav a:focus-visible {
+.nav a:focus-visible,
+.sideLogout:focus-visible {
   outline: 2px solid var(--c-primary);
   outline-offset: -2px;
 }
 .nav a:hover {
-  background: var(--c-card);
+  background: var(--c-surface);
   color: var(--c-fg);
 }
 .nav a[aria-current] {
@@ -68,74 +176,53 @@
   outline: 2px solid var(--c-primary);
   outline-offset: 2px;
 }
-/* Same brand stage as the sign-in panel: navy, a mint glow and a fading grid. */
+/* Clean light-surface account header (Figma "05 — حساب کاربری") */
 .hero {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 1rem 1.5rem;
-  padding: clamp(1.25rem, 4vw, 2.25rem);
-  margin-block-end: 1.35rem;
+  padding: clamp(1.15rem, 3vw, 1.75rem);
+  margin-block-end: 1.25rem;
+  border: 1px solid var(--c-border);
   border-radius: 1.1rem;
-  border-block-end: 3px solid var(--c-mint);
-  background:
-    radial-gradient(
-      70% 140% at 0% 0%,
-      color-mix(in srgb, var(--c-mint) 16%, transparent),
-      transparent 62%
-    ),
-    var(--c-navy);
-  color: #e9f2f6;
-  box-shadow: 0 26px 60px -46px color-mix(in srgb, var(--c-navy) 90%, transparent);
-}
-.hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--c-mint) 8%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--c-mint) 8%, transparent) 1px, transparent 1px);
-  background-size: 28px 28px;
-  mask-image: linear-gradient(to bottom, #000, transparent 80%);
+  background: var(--c-card);
+  color: var(--c-fg);
+  box-shadow: var(--shadow-card);
 }
 .hero > div {
   min-width: 0;
 }
 .eyebrow {
-  margin-block-end: 0.35rem;
-  color: var(--c-mint);
+  margin-block-end: 0.3rem;
+  color: var(--c-primary);
   font-size: 0.8125rem;
-  font-weight: 650;
+  font-weight: 700;
 }
 .hero h1 {
-  font-size: clamp(1.65rem, 4vw, 2.5rem);
+  font-size: clamp(1.5rem, 3.2vw, 2.1rem);
   font-weight: 850;
-  line-height: 1.45;
-  color: #f6fafb;
+  line-height: 1.4;
+  color: var(--c-fg);
   overflow-wrap: anywhere;
 }
 .heroDetail {
-  color: #c3d1da;
+  color: var(--c-muted);
   margin-block-start: 0.35rem;
   font-size: 0.9rem;
 }
 .hero .action {
-  border-color: transparent;
-  background: var(--c-mint);
-  color: var(--c-navy);
-  box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--c-mint) 70%, transparent);
+  border-color: color-mix(in srgb, var(--c-primary) 82%, var(--c-navy));
+  background: var(--c-primary);
+  color: var(--c-on-primary);
 }
 .hero .action:hover {
-  background: #d3f5e8;
-  color: var(--c-navy);
+  background: var(--c-primary-hover);
+  color: var(--c-on-primary);
 }
 .hero .action:focus-visible {
-  outline-color: var(--c-mint);
+  outline-color: var(--c-primary);
 }
 .stack {
   display: grid;
@@ -162,24 +249,61 @@
   font-weight: 800;
   font-size: 1.15rem;
 }
+.vaultCard {
+  border-color: color-mix(in srgb, var(--c-primary) 26%, var(--c-border));
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--c-mint) 14%, var(--c-card)),
+    var(--c-card) 42%
+  );
+}
+:global(.dark) .vaultCard {
+  background: var(--c-card);
+}
+.vaultHead {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.65rem;
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: var(--c-primary);
+}
+.pendingBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin-block-start: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 0.85rem;
+  border: 1px solid #f0b46b;
+  background: var(--c-warning-bg, #fef3e2);
+  color: var(--c-fg);
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
 .identity {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.75rem;
-  margin-block-start: 0.65rem;
+  margin-block-start: 0.5rem;
 }
 .avatar {
   display: grid;
   place-items: center;
-  inline-size: 3rem;
-  block-size: 3rem;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
   flex: none;
   border-radius: 0.85rem;
-  background: var(--c-mint);
+  background: color-mix(in srgb, var(--c-mint) 55%, var(--c-card));
   color: var(--c-navy);
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 850;
+}
+:global(.dark) .avatar {
+  background: #1b3d3c;
+  color: var(--c-mint);
 }
 .identityText {
   display: grid;
@@ -187,45 +311,50 @@
   overflow-wrap: anywhere;
 }
 .identityText strong {
-  color: #f6fafb;
+  color: var(--c-fg);
 }
 .verifiedBadge {
-  background: color-mix(in srgb, var(--c-mint) 18%, var(--c-navy));
-  color: var(--c-mint);
+  background: var(--c-success-bg, #e7f6ec);
+  color: var(--c-primary);
 }
 .verifyLink {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  padding-inline: 0.7rem;
+  padding-inline: 0.8rem;
   border-radius: 0.55rem;
-  background: #3a3121;
-  color: #ffe1a0;
+  border: 1px solid #f0b46b;
+  background: var(--c-warning-bg, #fef3e2);
+  color: var(--c-warning, #b45309);
+  font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 0.2em;
 }
 .metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(0.4rem, 2vw, 0.85rem);
+  gap: clamp(0.5rem, 2vw, 0.9rem);
 }
 .metrics > div,
 .resend {
   min-width: 0;
   border: 1px solid var(--c-border);
-  border-radius: 0.7rem;
-  background: var(--c-surface);
+  border-radius: 0.85rem;
+  background: var(--c-card);
 }
 .metrics > div {
-  padding: clamp(0.45rem, 2vw, 0.95rem);
+  padding: clamp(0.65rem, 2vw, 1.05rem);
   overflow-wrap: anywhere;
+  box-shadow: var(--shadow-card);
 }
 .metrics dt {
   color: var(--c-muted);
-  font-size: clamp(0.73rem, 2.5vw, 0.875rem);
+  font-size: clamp(0.75rem, 2.2vw, 0.875rem);
 }
 .metrics dd {
-  font-weight: 800;
+  margin-top: 0.25rem;
+  font-size: clamp(1rem, 2.5vw, 1.35rem);
+  font-weight: 850;
 }
 .metrics a,
 .emptyGift {

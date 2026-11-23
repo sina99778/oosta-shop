@@ -601,6 +601,35 @@ export async function getOrder(id: string) {
   };
 }
 
+export async function getOrderDeliveryCodes(id: string) {
+  const order = await prisma.order.findUnique({
+    where: { id },
+    select: {
+      paymentStatus: true,
+      items: {
+        select: {
+          id: true,
+          fulfilledItems: {
+            where: { status: "SOLD" },
+            orderBy: { id: "asc" },
+            select: { id: true, licenseKey: true, giftCardCode: true, deliveryInstructions: true },
+          },
+        },
+      },
+    },
+  });
+  if (!order) throw new AppError(404, "NOT_FOUND", "Order not found");
+  if (order.paymentStatus !== "PAID") {
+    throw new AppError(409, "ORDER_NOT_PAID", "Delivery codes are available after payment");
+  }
+  return order.items.map(({ id, fulfilledItems }) => ({
+    id,
+    codes: fulfilledItems.filter(
+      (item) => item.licenseKey || item.giftCardCode || item.deliveryInstructions,
+    ),
+  }));
+}
+
 // ---------------- Card-to-card receipts ----------------
 // Receipts are never deleted; this is the review queue + permanent history.
 

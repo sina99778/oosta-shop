@@ -43,6 +43,78 @@
 .brand {
   align-self: flex-start;
 }
+.artWrap {
+  display: flex;
+  justify-content: center;
+}
+.art {
+  width: 9rem;
+  height: 9rem;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid color-mix(in srgb, var(--c-mint) 36%, transparent);
+  box-shadow: 0 18px 40px -20px rgb(0 0 0 / 55%);
+}
+.shell[data-mode="recovery"] {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 28rem;
+}
+.shell[data-mode="recovery"] .form {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+.recoveryIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin-bottom: 0.9rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--c-mint) 48%, var(--c-card));
+  color: var(--c-primary);
+}
+.recoveryIcon[data-tone="danger"] {
+  background: color-mix(in srgb, var(--color-danger) 12%, var(--c-card));
+  color: var(--c-danger-text);
+}
+:global(.dark) .recoveryIcon {
+  background: #1b3d3c;
+  color: var(--c-mint);
+}
+:global(.dark) .recoveryIcon[data-tone="danger"] {
+  background: var(--c-danger-bg);
+  color: var(--c-danger-text);
+}
+.recoveryForm {
+  width: 100%;
+  text-align: start;
+}
+.recoveryNote {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 0.85rem;
+  border: 1px solid #f0b46b;
+  background: color-mix(in srgb, #f59e0b 10%, var(--c-card));
+  font-size: 0.8125rem;
+  line-height: 1.75;
+  color: var(--c-fg);
+}
+.recoverySuccess {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--c-primary) 35%, var(--c-border));
+  background: color-mix(in srgb, var(--c-mint) 26%, var(--c-card));
+  font-size: 0.875rem;
+  line-height: 1.8;
+  color: var(--c-fg);
+}
+:global(.dark) .recoverySuccess {
+  background: #16342a;
+}
 .offer {
   padding: 1rem;
   border: 1px solid color-mix(in srgb, var(--c-mint) 28%, transparent);
@@ -211,6 +283,7 @@
     border-block-end: 3px solid var(--c-mint);
   }
   /* On phones the panel is a short brand band; the form stays first in reach. */
+  .artWrap,
   .points {
     display: none;
   }

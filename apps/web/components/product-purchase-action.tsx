@@ -39,19 +39,38 @@ export function ProductPurchaseAction({
           entry.boundingClientRect.bottom <= (entry.rootBounds?.top ?? 0),
       );
     });
+    let frame: number | undefined;
+    const checkScroll = () => {
+      if (frame !== undefined) return;
+      // A scroll jump can cross the viewport without changing intersection state.
+      frame = window.requestAnimationFrame(() => {
+        frame = undefined;
+        setPastAction(media.matches && target.getBoundingClientRect().bottom <= 0);
+      });
+    };
+    const stopScrollCheck = () => {
+      window.removeEventListener("scroll", checkScroll);
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      frame = undefined;
+    };
     const onViewportChange = () => {
-      if (media.matches) observer.observe(target);
-      else {
+      if (media.matches) {
+        observer.observe(target);
+        window.addEventListener("scroll", checkScroll, { passive: true });
+        checkScroll();
+      } else {
         observer.disconnect();
+        stopScrollCheck();
         setPastAction(false);
       }
     };
 
-    if (media.matches) observer.observe(target);
+    if (media.matches) onViewportChange();
     media.addEventListener("change", onViewportChange);
     return () => {
       media.removeEventListener("change", onViewportChange);
       observer.disconnect();
+      stopScrollCheck();
     };
   }, [enabled]);
 

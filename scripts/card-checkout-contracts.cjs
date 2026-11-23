@@ -33,6 +33,8 @@ const fixture = {
 };
 const load = Module._load;
 Module._load = function (request, ...args) {
+  if (request.endsWith(".module.css"))
+    return { __esModule: true, default: new Proxy({}, { get: (_, key) => String(key) }) };
   if (request === "next/link")
     return ({ href, children, ...props }) => React.createElement("a", { ...props, href }, children);
   if (request === "react") return { ...React, useEffect: (callback) => effects.push(callback) };

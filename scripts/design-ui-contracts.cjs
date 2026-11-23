@@ -54,7 +54,30 @@ const { AccountSessions } = require("../apps/web/components/account-sessions.tsx
 const { ticketImageError } = require("../apps/web/components/tickets/ticket-attachment.tsx");
 const { looksPromotional } = require("../apps/web/components/admin/admin-reviews.tsx");
 const { readExtraFilters } = require("../apps/web/components/products-browser.tsx");
+const { buildPrompt } = require("../apps/web/lib/prompt-lab.ts");
+const { PromptLab } = require("../apps/web/components/prompt-lab.tsx");
 Module._load = originalLoad;
+
+assert.equal(buildPrompt("   ", "extra", "auto", "fa"), null);
+const request = "یه ایمیل کوتاه بنویس\nجلسهٔ چهارشنبه را عقب بنداز";
+const email = buildPrompt(request, "خطاب به مدیر پروژه، بدون عذرخواهی", "auto", "fa");
+assert.equal(email.kind, "email");
+assert.equal(email.entries[1].value, request);
+assert(email.entries.some((entry) => entry.value.includes("خطاب به مدیر پروژه، بدون عذرخواهی")));
+assert(email.entries.some((entry) => entry.value.includes("موضوع ایمیل")));
+const code = buildPrompt("Debug this TypeScript function", "Keep its public API", "auto", "en");
+assert.equal(code.kind, "code");
+assert(code.entries.some((entry) => entry.value.includes("tests")));
+const research = buildPrompt("Compare the best options", "", "auto", "en");
+assert.equal(research.kind, "research");
+assert(research.entries.some((entry) => entry.value.includes("sources")));
+assert.equal(buildPrompt("پرامپت ساخت تصویر یک کوه", "", "auto", "fa").kind, "image");
+assert.equal(buildPrompt("یک کپشن برای اینستاگرام بنویس", "", "auto", "fa").kind, "writing");
+assert.equal(buildPrompt("ایمیل بنویس", "", "general", "fa").kind, "general");
+const labHtml = renderToStaticMarkup(React.createElement(PromptLab, { locale: "fa" }));
+assert.match(labHtml, /id="lab-kind"/);
+assert.match(labHtml, /<button[^>]*disabled[^>]*>کپی پرامپت<\/button>/);
+assert(!labHtml.includes("حداکثر ۱۵۰ کلمه"));
 
 // ---------------- Plan comparison ----------------
 const plan = (id, availability, price, extra = {}) => ({

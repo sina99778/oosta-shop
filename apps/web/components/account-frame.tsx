@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
+import { useAuth } from "@/lib/auth";
 import { Container } from "@/components/ui/container";
 import type { Locale } from "@/lib/i18n";
 import type { ReactNode } from "react";
@@ -48,7 +49,14 @@ export function AccountFrame({
   children: ReactNode;
 }) {
   const fa = locale === "fa";
+  const { user, logout } = useAuth();
   const navigation = useRef<HTMLElement>(null);
+  const initials = user?.name
+    ?.trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => Array.from(part)[0])
+    .join("");
   useEffect(() => {
     const nav = navigation.current;
     const current = nav?.querySelector("[aria-current]");
@@ -60,49 +68,90 @@ export function AccountFrame({
   }, [section]);
   return (
     <Container className={styles.shell}>
-      <nav
-        ref={navigation}
-        aria-label={fa ? "حساب کاربری" : "Customer account"}
-        className={styles.nav}
-      >
-        {sections.map(([id, path, persian, english, icon]) => (
-          <Link
-            key={id}
-            href={`/${locale}${path}`}
-            aria-current={
-              id === section
-                ? "page"
-                : id === "overview" && section === "orders"
-                  ? "location"
-                  : undefined
-            }
+      <div className={styles.layout}>
+        <aside className={styles.sideCard}>
+          {user && (
+            <div className={styles.sideProfile}>
+              <span className={styles.sideAvatar} aria-hidden="true">
+                {initials || "•"}
+              </span>
+              <div className={styles.sideMeta}>
+                <strong>
+                  <bdi>{user.name}</bdi>
+                </strong>
+                <span>
+                  <bdi>{user.email ?? user.phone ?? ""}</bdi>
+                </span>
+              </div>
+            </div>
+          )}
+          <nav
+            ref={navigation}
+            aria-label={fa ? "حساب کاربری" : "Customer account"}
+            className={styles.nav}
           >
-            <svg
-              aria-hidden="true"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.65"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d={icon} />
-            </svg>
-            {fa ? persian : english}
-          </Link>
-        ))}
-      </nav>
-      <header className={styles.hero}>
-        <div>
-          <p className={styles.eyebrow}>{fa ? "حساب اوستا" : "Oosta account"}</p>
-          <h1>{title}</h1>
-          {detail && <div className={styles.heroDetail}>{detail}</div>}
+            {sections.map(([id, path, persian, english, icon]) => (
+              <Link
+                key={id}
+                href={`/${locale}${path}`}
+                aria-current={
+                  id === section
+                    ? "page"
+                    : id === "overview" && section === "orders"
+                      ? "location"
+                      : undefined
+                }
+              >
+                <svg
+                  aria-hidden="true"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.65"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d={icon} />
+                </svg>
+                {fa ? persian : english}
+              </Link>
+            ))}
+          </nav>
+          {logout && (
+            <div className={styles.sideFoot}>
+              <button type="button" className={styles.sideLogout} onClick={() => void logout()}>
+                <svg
+                  aria-hidden="true"
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+                </svg>
+                {fa ? "خروج" : "Sign out"}
+              </button>
+            </div>
+          )}
+        </aside>
+        <div className={styles.main}>
+          <header className={styles.hero}>
+            <div>
+              <p className={styles.eyebrow}>{fa ? "حساب من" : "Oosta account"}</p>
+              <h1>{title}</h1>
+              {detail && <div className={styles.heroDetail}>{detail}</div>}
+            </div>
+            {action}
+          </header>
+          {children}
         </div>
-        {action}
-      </header>
-      {children}
+      </div>
     </Container>
   );
 }

@@ -14,7 +14,7 @@ import { uploadReceipt } from "../src/modules/orders/orders.service";
 import { readBluInvoice } from "../src/modules/orders/blu-invoice";
 import { pendingBluQaReceipts } from "../src/modules/orders/blu-qa-poll";
 import { prisma } from "../src/lib/prisma";
-import { approveReceipt, rejectReceipt } from "../src/modules/admin/admin.service";
+import { approveReceipt, createApiKey, rejectReceipt } from "../src/modules/admin/admin.service";
 import { queueOrderEmail, sendNextOrderEmail } from "../src/lib/mailer";
 import { recordSupplierFunding, refundManualSupplier } from "../src/modules/suppliers/manual-admin";
 import { variantKey, variantSchema } from "../src/modules/suppliers/variant";
@@ -1329,6 +1329,57 @@ async function main() {
   });
   assert.equal(bystander.statusCode, 404);
   assert(!bystander.body.includes("Synthetic-only-1"));
+  const syntheticCode = "SYNTHETIC-REDEMPTION-CODE";
+  await prisma.inventoryItem.updateMany({
+    where: { orderItem: { orderId }, status: "SOLD" },
+    data: { deliveryInstructions: syntheticCode },
+  });
+  const deliveryPath = "/admin" + orderURL + "/delivery-codes";
+  const adminHeaders = {
+    authorization: "Bearer " + signAccessToken({ sub: manualAdmin.id, role: "ADMIN" }),
+  };
+  const adminSummary = await inject(manualApp, {
+    method: "GET",
+    url: "/admin" + orderURL,
+    headers: adminHeaders,
+  });
+  assert.equal(adminSummary.statusCode, 200);
+  assert(!adminSummary.body.includes(syntheticCode));
+  const readDeliveryCodes = (url: string, headers = adminHeaders) =>
+    inject(manualApp, { method: "GET", url, headers });
+  const codes = await readDeliveryCodes(deliveryPath);
+  assert.equal(codes.statusCode, 200);
+  assert.match(String(codes.headers["cache-control"]), /private.*no-store/);
+  assert.deepEqual(
+    codes.json().items[0].codes.map(
+      ({ deliveryInstructions }: { deliveryInstructions: string }) => deliveryInstructions,
+    ),
+    [syntheticCode],
+  );
+  assert(!codes.body.includes("Synthetic-only-1"));
+  assert(!codes.body.includes("synthetic@example.invalid"));
+  assert.equal((await readDeliveryCodes(deliveryPath, { authorization: "" })).statusCode, 401);
+  const programmaticKey = await createApiKey(manualAdmin.id, "Synthetic admin key");
+  assert.equal(
+    (await readDeliveryCodes(deliveryPath, { authorization: "Bearer " + programmaticKey.key }))
+      .statusCode,
+    403,
+  );
+  assert.equal(
+    (await readDeliveryCodes(deliveryPath, {
+      authorization: "Bearer " + signAccessToken({ sub: m.user.id, role: "USER" }),
+    })).statusCode,
+    403,
+  );
+  const pendingCodeOrder = await prisma.order.create({
+    data: { userId: m.user.id, totalAmount: 10000, currency: "IRR", paymentStatus: "PENDING" },
+  });
+  assert.equal(
+    (await readDeliveryCodes(`/admin/orders/${pendingCodeOrder.id}/delivery-codes`)).statusCode,
+    409,
+  );
+  assert.equal((await readDeliveryCodes("/admin/orders/unknown/delivery-codes")).statusCode, 404);
+  console.log("PASS: administrator delivery codes stay private and require a paid order");
   console.log(
     "PASS: supplier Telegram wallet/shortfall, cap and currency gates, expiring approval, current admin role, duplicate tap and owner-only delivery",
   );

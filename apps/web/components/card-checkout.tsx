@@ -16,6 +16,16 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { formatDate, formatPrice } from "@/lib/format";
+import {
+  AlertIcon,
+  CheckIcon,
+  ClockIcon,
+  LineTile,
+  LockIcon,
+  RefreshIcon,
+} from "@/components/checkout-ui";
+import { Wordmark } from "@/components/wordmark";
+import styles from "./checkout.module.css";
 import type { Locale } from "@/lib/i18n";
 import type { OrderDetail } from "@/lib/types";
 import type { Dictionary } from "@/app/[locale]/dictionaries";
@@ -119,25 +129,33 @@ export function CardCheckout({
 
   if (loading)
     return (
-      <Container className="py-24 text-center">
-        <span role="status">
+      <Container className={styles.page}>
+        <div className={styles.result} role="status">
           <Spinner className="size-6" />
-          <span className="sr-only">{dict.common.loading}</span>
-        </span>
+          <p>{dict.common.loading}</p>
+        </div>
       </Container>
     );
   if (!data)
     return (
-      <Container className="py-24 text-center">
-        <p role="alert" className="mb-4 text-muted">
-          {apiErrorMessage(error, locale, dict.common.somethingWrong)}
-        </p>
-        <Button variant="outline" onClick={refetch}>
-          {t.retry}
-        </Button>
+      <Container className={styles.page}>
+        <section className={styles.result} data-tone="danger">
+          <span className={styles.resultIcon} aria-hidden="true">
+            <AlertIcon size={32} />
+          </span>
+          <p role="alert">{apiErrorMessage(error, locale, dict.common.somethingWrong)}</p>
+          <div className={styles.resultActions}>
+            <Button variant="outline" onClick={refetch}>
+              {t.retry}
+            </Button>
+          </div>
+        </section>
       </Container>
     );
 
+  const fa = locale === "fa";
+  const formatNum = new Intl.NumberFormat(fa ? "fa-IR" : "en-US");
+  const stepNum = (n: number) => (fa ? formatNum.format(n) : String(n).padStart(2, "0"));
   const order = data.order;
   const reviewing = order.paymentStatus === "PENDING_REVIEW";
   const paid = order.paymentStatus === "PAID";
@@ -241,373 +259,413 @@ export function CardCheckout({
   }
 
   return (
-    <Container className="max-w-6xl py-8 sm:py-12">
-      <Link
-        href={orderUrl}
-        className="text-sm text-muted underline-offset-4 hover:text-foreground hover:underline"
-      >
-        {t.back}
-      </Link>
-      <header className="mt-6 flex flex-wrap items-end justify-between gap-5">
-        <div>
-          <p className="mb-2 text-sm text-primary">{t.deskTitle}</p>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{t.title}</h1>
-          <p className="mt-3 text-sm leading-7 text-muted">
-            {transfer ? t.deskIntro : t.statusIntro}
-          </p>
+    <Container className={styles.page}>
+      <section className={styles.deskStage}>
+        <div className={styles.deskStageCopy}>
+          <Link href={orderUrl} className={styles.deskBack}>
+            {t.back}
+          </Link>
+          <p className={styles.deskEyebrow}>{t.deskTitle}</p>
+          <h1>{transfer ? t.deskIntro : t.title}</h1>
+          <p className={styles.deskStageSub}>{transfer ? t.instructions : t.statusIntro}</p>
         </div>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-muted">
+        <div className={styles.deskMeta}>
+          {deadline && (
+            <span className={styles.deskDeadline}>
+              <ClockIcon size={16} />
+              <span>
+                {t.invoiceDeadline} <time dateTime={deadline}>{formatDate(deadline, locale)}</time>
+              </span>
+            </span>
+          )}
+          <span className={styles.deskDeadline}>
             {dict.dashboard.orderNo} <bdi className="font-mono">#{order.id.slice(-8)}</bdi>
           </span>
           <Badge tone={paid ? "success" : "muted"}>
             {statusMap[order.paymentStatus] ?? order.paymentStatus}
           </Badge>
         </div>
-      </header>
-      {error && (
-        <div role="alert" className="mt-5 flex flex-wrap items-center gap-3 text-sm text-muted">
-          <p>{apiErrorMessage(error, locale, dict.common.somethingWrong)}</p>
-          <Button variant="outline" onClick={refetch}>
-            {t.retry}
-          </Button>
-        </div>
-      )}
-      {order.manualSupplier && (
-        <p className="mt-5 rounded-xl border border-border bg-card px-4 py-3 text-sm">
-          {locale === "fa"
-            ? "تحویل پس از بررسی رسید و تهیهٔ محصول توسط فروشگاه انجام می‌شود."
-            : "Delivery follows receipt review and sourcing by the store."}
-          {order.manualSupplier.deliveryHours
-            ? locale === "fa"
-              ? ` زمان معمول تهیه حدود ${order.manualSupplier.deliveryHours.toLocaleString("fa-IR")} ساعت پس از تأیید رسید است.`
-              : ` Typical sourcing time is about ${order.manualSupplier.deliveryHours} hours after approval.`
-            : null}
-        </p>
-      )}
-      {invoice?.qaOnly && (
-        <p role="status" className="mt-5 rounded-xl border border-border bg-card px-4 py-3 text-sm">
-          {invoice.privateStockQa
-            ? locale === "fa"
-              ? "این سفارش خصوصی برای آزمون کارت‌به‌کارت و تحویل کالا است. پس از واریز، رسید و شمارهٔ پیگیری را ثبت کن."
-              : "This private order tests bank transfer and product delivery. Upload the receipt and tracking number after transfer."
-            : t.qaInvoice}
-        </p>
-      )}
-      <ol aria-label={t.title} className="my-8 grid grid-cols-3 border-y border-border py-5">
-        {[t.transferStep, t.receiptStep, t.reviewStep].map((label, i) => (
-          <li
-            key={label}
-            aria-current={editable && step === i + 1 ? "step" : undefined}
-            className="flex flex-col items-center gap-2 text-center text-xs sm:flex-row sm:justify-center sm:gap-3 sm:text-sm"
-          >
-            <span
-              className={`flex size-7 items-center justify-center rounded-full border font-mono ${step > i + 1 ? "border-primary bg-primary text-primary-foreground" : step === i + 1 && editable ? "border-primary text-primary" : "border-border text-muted"}`}
+      </section>
+
+      <ol aria-label={t.title} className={styles.steps}>
+        {[t.transferStep, t.receiptStep, t.reviewStep].map((label, i) => {
+          const itemStep = i + 1;
+          const done = step > itemStep;
+          const current = editable && step === itemStep;
+          return (
+            <li
+              key={label}
+              data-state={done ? "done" : current ? "current" : "next"}
+              aria-current={current ? "step" : undefined}
             >
-              {step > i + 1 ? (
-                <Mark kind="check" className="size-4" />
-              ) : (
-                String(i + 1).padStart(2, "0")
-              )}
-            </span>
-            <span className={step >= i + 1 ? "text-foreground" : "text-muted"}>{label}</span>
-          </li>
-        ))}
+              <span className={styles.stepDot} aria-hidden="true">
+                {done ? <CheckIcon size={14} /> : stepNum(itemStep)}
+              </span>
+              <span className={styles.stepLabel}>{label}</span>
+            </li>
+          );
+        })}
       </ol>
-      {(reviewing || paid || awaiting || !editable) && (
-        <section
-          role="status"
-          className="mb-6 flex items-start gap-4 rounded-2xl border border-border bg-card p-6 sm:p-8"
-        >
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Mark kind={paid ? "check" : "clock"} />
-          </span>
-          <div>
-            <h2 className="text-xl font-semibold">
-              {paid
-                ? t.approved
-                : reviewing
-                  ? t.sent
-                  : awaiting
-                    ? statusMap[order.paymentStatus]
-                    : t.closedTitle}
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-7 text-muted">
-              {reviewing ? t.reviewNote : awaiting ? t.noRepay : t.closedBody}
+
+      <div className={styles.notices}>
+        {error && (
+          <div className={styles.notice} data-tone="danger" role="alert">
+            <AlertIcon size={18} />
+            <p>{apiErrorMessage(error, locale, dict.common.somethingWrong)}</p>
+            <Button variant="outline" size="sm" onClick={refetch}>
+              {t.retry}
+            </Button>
+          </div>
+        )}
+        {order.manualSupplier && (
+          <div className={styles.notice}>
+            <ClockIcon size={18} />
+            <p>
+              {fa
+                ? "تحویل پس از بررسی رسید و تهیهٔ محصول توسط فروشگاه انجام می‌شود."
+                : "Delivery follows receipt review and sourcing by the store."}
+              {order.manualSupplier.deliveryHours
+                ? fa
+                  ? ` زمان معمول تهیه حدود ${order.manualSupplier.deliveryHours.toLocaleString("fa-IR")} ساعت پس از تأیید رسید است.`
+                  : ` Typical sourcing time is about ${order.manualSupplier.deliveryHours} hours after approval.`
+                : null}
             </p>
-            <Link
-              href={orderUrl}
-              className="mt-3 inline-block text-sm font-medium text-primary underline underline-offset-4"
-            >
+          </div>
+        )}
+        {invoice?.qaOnly && (
+          <div className={styles.notice} role="status">
+            <AlertIcon size={18} />
+            <p>
+              {invoice.privateStockQa
+                ? fa
+                  ? "این سفارش خصوصی برای آزمون کارت‌به‌کارت و تحویل کالا است. پس از واریز، رسید و شمارهٔ پیگیری را ثبت کن."
+                  : "This private order tests bank transfer and product delivery. Upload the receipt and tracking number after transfer."
+                : t.qaInvoice}
+            </p>
+          </div>
+        )}
+        {(reviewing || paid || awaiting || !editable) && (
+          <div
+            role="status"
+            className={styles.notice}
+            data-tone={paid ? undefined : awaiting ? "warn" : undefined}
+          >
+            <Mark kind={paid ? "check" : "clock"} className="text-primary" />
+            <p>
+              <strong>
+                {paid
+                  ? t.approved
+                  : reviewing
+                    ? t.sent
+                    : awaiting
+                      ? statusMap[order.paymentStatus]
+                      : t.closedTitle}
+              </strong>{" "}
+              — {reviewing ? t.reviewNote : awaiting ? t.noRepay : t.closedBody}
+            </p>
+            <Link href={orderUrl} className={styles.textLink}>
               {t.viewOrder}
             </Link>
           </div>
-        </section>
-      )}
-      {editable && !reviewing && invoiceExpired && (
-        <p role="status" className="mb-5 rounded-xl border border-border bg-card px-4 py-3 text-sm">
-          {t.invoiceExpired}
-        </p>
-      )}
-      {latestRejected && (
-        <div
-          role="status"
-          className="mb-5 rounded-xl border border-danger/30 bg-danger/5 p-4 text-sm"
-        >
-          <p className="font-medium text-danger">{t.rejected}</p>
-          {order.receipts[0].reviewerNote && (
-            <p className="mt-2 break-words leading-6 text-muted">
-              {order.receipts[0].reviewerNote}
+        )}
+        {editable && !reviewing && invoiceExpired && (
+          <div role="status" className={styles.notice} data-tone="warn">
+            <ClockIcon size={18} />
+            <p>{t.invoiceExpired}</p>
+          </div>
+        )}
+        {latestRejected && (
+          <div role="status" className={styles.notice} data-tone="danger">
+            <AlertIcon size={18} />
+            <p>
+              <strong className="text-danger">{t.rejected}</strong>
+              {order.receipts[0].reviewerNote ? ` — ${order.receipts[0].reviewerNote}` : null}
             </p>
-          )}
-        </div>
-      )}
-      <div
-        className={`grid items-start gap-6 ${transfer || canUpload ? "lg:grid-cols-[1fr_1.05fr]" : ""}`}
-      >
-        {transfer && (
-          <section className="min-w-0 space-y-5" aria-label={t.destination}>
-            <div className="relative isolate overflow-hidden rounded-3xl bg-[#102e3a] p-6 text-[#eff8f5] sm:p-8">
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute -end-24 -top-16 size-80 rounded-full border border-white/10 after:absolute after:inset-5 after:rounded-full after:border after:border-white/10"
-              />
-              <div className="relative flex items-center justify-between gap-4">
-                <span className="text-sm text-[#c5d9d9]">{t.destination}</span>
-                <span dir="ltr" className="font-mono text-lg font-medium tracking-tight">
-                  oosta<span className="text-[#86e1c6]">/</span>AI
-                </span>
-              </div>
-              {card ? (
-                <>
-                  <div
-                    className="my-8 h-7 w-10 rounded-lg border border-[#86e1c6]/60 bg-[#86e1c6]/10"
-                    aria-hidden="true"
-                  >
-                    <div className="mx-auto h-full w-4 border-x border-[#86e1c6]/40" />
-                  </div>
-                  <p className="mb-2 text-xs text-[#c5d9d9]">{t.cardNumber}</p>
-                  <p
-                    dir="ltr"
-                    className="relative select-all whitespace-nowrap text-start font-mono text-[clamp(1.1rem,4.6vw,1.8rem)] leading-relaxed tracking-[.04em] tabular-nums"
-                  >
-                    {displayNumber}
-                  </p>
-                  <div className="relative mt-8 flex flex-wrap justify-between gap-4 border-t border-white/15 pt-5">
-                    <div>
-                      <p className="text-xs text-[#c5d9d9]">{t.cardHolder}</p>
-                      <p className="mt-2 break-words text-sm">{card.holder || "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-[#c5d9d9]">{t.bank}</p>
-                      <p className="mt-2 text-sm">{card.bank || "—"}</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => copyValue("card")}
-                    disabled={copying}
-                    aria-busy={copying}
-                    className="relative mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#a6efd6] px-4 text-sm font-medium text-[#102e3a] transition-colors hover:bg-[#c2f7e5] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
-                  >
-                    <Mark kind={copied === "card" ? "check" : "copy"} />
-                    {copied === "card" ? t.copied : t.copy}
-                  </button>
-                  <p
-                    aria-live="polite"
-                    className="relative mt-2 min-h-5 text-center text-xs text-[#c5d9d9]"
-                  >
-                    {copyMessage}
-                  </p>
-                </>
-              ) : (
-                <p role="alert" className="relative py-12 text-sm leading-7">
-                  {t.cardUnavailable}
-                </p>
-              )}
+          </div>
+        )}
+      </div>
+
+      <div className={styles.deskGrid}>
+        <aside className={styles.deskAside} aria-label={t.summary}>
+          <section className={styles.amountCard}>
+            <div className={styles.amountCardHead}>
+              <p className={styles.amountLabel}>{t.amount}</p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={copying}
+                onClick={() => copyValue("amount")}
+              >
+                <Mark kind={copied === "amount" ? "check" : "copy"} className="size-4" />
+                {copied === "amount"
+                  ? t.copied
+                  : fa
+                    ? "کپی مبلغ به " + (order.currency === "IRR" ? "ریال" : "تومان")
+                    : "Copy transfer amount"}
+              </Button>
             </div>
-            <div className="rounded-2xl border border-primary/30 bg-card p-6 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm font-medium text-primary">{t.amount}</p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={copying}
-                  onClick={() => copyValue("amount")}
-                >
-                  <Mark kind={copied === "amount" ? "check" : "copy"} />
-                  {copied === "amount"
-                    ? t.copied
-                    : locale === "fa"
-                      ? "کپی مبلغ به " + (order.currency === "IRR" ? "ریال" : "تومان")
-                      : "Copy transfer amount"}
-                </Button>
-              </div>
-              <p className="mt-3 text-3xl font-semibold tracking-tight tabular-nums">
-                {formatPrice(order.totalAmount, order.currency, locale)}
-              </p>
-              <p className="mt-2 text-xs leading-6 text-muted">{t.amountNote}</p>
-              {!invoice && deadline && (
-                <p className="mt-3 text-xs text-muted">
-                  {t.invoiceDeadline}{" "}
-                  <time dateTime={deadline}>{formatDate(deadline, locale)}</time>
-                </p>
-              )}
-              {invoice && (
-                <dl className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
-                  <div className="flex flex-wrap justify-between gap-x-3">
-                    <dt className="text-muted">{t.invoiceBase}</dt>
-                    <dd>{formatPrice(invoice.baseAmount, order.currency, locale)}</dd>
-                  </div>
-                  <div className="flex flex-wrap justify-between gap-x-3">
-                    <dt className="text-muted">{t.invoiceDiscount}</dt>
-                    <dd>{formatPrice(invoice.discount, order.currency, locale)}</dd>
-                  </div>
-                  <div className="flex flex-wrap justify-between gap-x-3">
-                    <dt className="text-muted">{t.invoiceDeadline}</dt>
+            <p className={styles.amountValue}>
+              {formatPrice(order.totalAmount, order.currency, locale)}
+            </p>
+            <p className={styles.amountNote}>{t.amountNote}</p>
+            {(invoice || deadline) && (
+              <dl className={styles.amountBreakdown}>
+                {invoice && (
+                  <>
+                    <div>
+                      <dt>{t.invoiceBase}</dt>
+                      <dd>{formatPrice(invoice.baseAmount, order.currency, locale)}</dd>
+                    </div>
+                    <div>
+                      <dt>{t.invoiceDiscount}</dt>
+                      <dd>{formatPrice(invoice.discount, order.currency, locale)}</dd>
+                    </div>
+                  </>
+                )}
+                {deadline && (
+                  <div>
+                    <dt>{t.invoiceDeadline}</dt>
                     <dd>
-                      <time dateTime={invoice.expiresAt}>
-                        {formatDate(invoice.expiresAt, locale)}
-                      </time>
+                      <time dateTime={deadline}>{formatDate(deadline, locale)}</time>
                     </dd>
                   </div>
-                </dl>
-              )}
-            </div>
-            <p className="px-1 text-xs leading-6 text-muted">{t.transferNote}</p>
-          </section>
-        )}
-        {canUpload && (
-          <section className="min-w-0 rounded-3xl border border-border bg-card p-6 sm:p-8">
-            <div className="mb-6 flex items-start gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border text-primary">
-                <Mark kind="upload" />
-              </span>
-              <div>
-                <h2 className="text-xl font-semibold">{t.uploadTitle}</h2>
-                <p className="mt-1 text-xs leading-6 text-muted">{t.receiptNote}</p>
-              </div>
-            </div>
-            <form onSubmit={submit}>
-              <fieldset disabled={busy} className="min-w-0 space-y-5">
-                <ReceiptPicker file={file} onSelect={selectFile} t={t} busy={busy} />
-                <div>
-                  <label htmlFor="receipt-reference" className="mb-2 block text-sm">
-                    {trackingRequired
-                      ? locale === "fa"
-                        ? "شمارهٔ پیگیری بانکی (الزامی)"
-                        : "Bank tracking number (required)"
-                      : t.reference}
-                  </label>
-                  <Input
-                    id="receipt-reference"
-                    required={trackingRequired}
-                    inputMode={trackingRequired ? "numeric" : "text"}
-                    maxLength={trackingRequired ? 30 : 200}
-                    value={reference}
-                    onChange={(event) => setReference(event.target.value)}
-                    aria-describedby="reference-hint"
-                  />
-                  <p id="reference-hint" className="mt-2 text-xs leading-6 text-muted">
-                    {trackingRequired ? t.bluReferenceRequired : t.referenceHint}
-                  </p>
-                </div>
-                {formError && (
-                  <p
-                    id="receipt-error"
-                    role="alert"
-                    className="rounded-xl border border-danger/30 bg-danger/5 p-3 text-sm leading-6 text-danger"
-                  >
-                    {formError}
-                  </p>
                 )}
-                <Button type="submit" className="min-h-12 w-full" disabled={busy} aria-busy={busy}>
-                  {busy ? (
-                    <>
-                      <Spinner />
-                      {t.uploading}
-                    </>
-                  ) : (
-                    <>
-                      <Mark kind="upload" />
-                      {t.submit}
-                    </>
-                  )}
-                </Button>
-              </fieldset>
-            </form>
+              </dl>
+            )}
           </section>
-        )}
-      </div>
-      {reviewing && !additional && (
-        <Button variant="outline" className="mb-6" onClick={() => setAdditional(true)}>
-          {t.anotherReceipt}
-        </Button>
-      )}
-      <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_1.05fr]">
-        <section>
-          <h2 className="mb-4 text-sm font-medium">{t.summary}</h2>
-          <div className="divide-y divide-border">
-            {order.items.map((item) => (
-              <div key={item.id} className="flex items-start justify-between gap-4 py-3 text-sm">
-                <div>
-                  <p>{item.product.name}</p>
-                  <p className="mt-1 text-xs text-muted">
-                    <bdi>{planDisplayLabel(item.plan.label, locale === "fa")}</bdi> ·{" "}
-                    {item.quantity}
-                  </p>
-                </div>
-                <span className="shrink-0 tabular-nums">
-                  {formatPrice(item.lineTotal, order.currency, locale)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-        {order.receipts.length > 0 && (
-          <section>
-            <h2 className="mb-4 text-sm font-medium">{t.yourReceipts}</h2>
-            <ol className="space-y-3">
-              {order.receipts.map((receipt) => (
-                <li
-                  key={receipt.id}
-                  className="flex items-start justify-between gap-3 rounded-xl border border-border px-4 py-3"
-                >
-                  <div className="min-w-0 text-xs leading-6">
+
+          <section className={styles.card}>
+            <div className={styles.cardHead}>
+              <h2>{t.summary}</h2>
+              <span className={styles.invoiceNo}>
+                <span>{dict.dashboard.orderNo}</span>
+                <strong dir="ltr">#{order.id.slice(-8)}</strong>
+              </span>
+            </div>
+            <ul className={styles.lines}>
+              {order.items.map((item) => (
+                <li key={item.id} className={styles.line}>
+                  <LineTile name={item.product.name} />
+                  <div className={styles.lineInfo}>
+                    <h3>{item.product.name}</h3>
                     <p>
-                      {t.uploadedOn} {formatDate(receipt.createdAt, locale)}
+                      <bdi>{planDisplayLabel(item.plan.label, fa)}</bdi> · ×
+                      {formatNum.format(item.quantity)}
                     </p>
-                    {receipt.reference && (
-                      <p className="break-words text-muted">{receipt.reference}</p>
-                    )}
                   </div>
-                  <Badge
-                    tone={
-                      receipt.status === "APPROVED"
-                        ? "success"
-                        : receipt.status === "REJECTED"
-                          ? "danger"
-                          : "muted"
-                    }
-                  >
-                    {
-                      dict.admin.receipts[
-                        receipt.status.toLowerCase() as "pending" | "approved" | "rejected"
-                      ]
-                    }
-                  </Badge>
+                  <span className={styles.linePrice}>
+                    {formatPrice(item.lineTotal, order.currency, locale)}
+                  </span>
                 </li>
               ))}
-            </ol>
+            </ul>
+            <p className={styles.secure}>
+              <LockIcon size={15} />
+              <span>{t.transferNote}</span>
+            </p>
           </section>
-        )}
-      </div>
-      <div className="mt-8 border-t border-border pt-6">
-        <Button variant="outline" onClick={refetch} disabled={busy}>
-          <Mark kind="clock" />
-          {t.refresh}
-        </Button>
+        </aside>
+
+        <div className={styles.deskMain}>
+          {transfer && (
+            <section className={styles.card} aria-label={t.destination}>
+              <div className={styles.deskStepHead}>
+                <div className={styles.deskStepTitle}>
+                  <span className={styles.deskStepBadge} aria-hidden="true">
+                    {stepNum(1)}
+                  </span>
+                  <div>
+                    <h2>{t.transferStep}</h2>
+                    <p>{t.destination}</p>
+                  </div>
+                </div>
+              </div>
+              <div className={styles.bankCard}>
+                <div className={styles.bankCardGlow} aria-hidden="true" />
+                <div className={styles.bankCardTop}>
+                  <span className="text-xs text-[#c5d9d9]">{t.destination}</span>
+                  <Wordmark className="scale-90" />
+                </div>
+                {card ? (
+                  <>
+                    <div className={styles.bankCardChip} aria-hidden="true" />
+                    <p className={styles.bankCardLabel}>{t.cardNumber}</p>
+                    <p dir="ltr" className={styles.bankCardNumber}>
+                      {displayNumber}
+                    </p>
+                    <div className={styles.bankCardMeta}>
+                      <div>
+                        <p className={styles.bankCardLabel}>{t.cardHolder}</p>
+                        <p className="text-sm font-semibold">{card.holder || "—"}</p>
+                      </div>
+                      <div>
+                        <p className={styles.bankCardLabel}>{t.bank}</p>
+                        <p className="text-sm font-semibold">{card.bank || "—"}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => copyValue("card")}
+                      disabled={copying}
+                      aria-busy={copying}
+                      className={styles.bankCardCopy}
+                    >
+                      <Mark kind={copied === "card" ? "check" : "copy"} className="size-4" />
+                      {copied === "card" ? t.copied : t.copy}
+                    </button>
+                    <p
+                      aria-live="polite"
+                      className="mt-2 min-h-5 text-center text-xs text-[#c5d9d9]"
+                    >
+                      {copyMessage}
+                    </p>
+                  </>
+                ) : (
+                  <p role="alert" className="py-10 text-sm leading-7">
+                    {t.cardUnavailable}
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
+
+          {canUpload && (
+            <section className={styles.card}>
+              <div className={styles.deskStepHead}>
+                <div className={styles.deskStepTitle}>
+                  <span className={styles.deskStepBadge} aria-hidden="true">
+                    {stepNum(2)}
+                  </span>
+                  <div>
+                    <h2>{t.uploadTitle}</h2>
+                    <p>{t.receiptNote}</p>
+                  </div>
+                </div>
+              </div>
+              <form onSubmit={submit}>
+                <fieldset disabled={busy} className="min-w-0 space-y-5">
+                  <ReceiptPicker file={file} onSelect={selectFile} t={t} busy={busy} />
+                  <div>
+                    <label htmlFor="receipt-reference" className="mb-2 block text-sm font-semibold">
+                      {trackingRequired
+                        ? fa
+                          ? "شمارهٔ پیگیری بانکی (الزامی)"
+                          : "Bank tracking number (required)"
+                        : t.reference}
+                    </label>
+                    <Input
+                      id="receipt-reference"
+                      required={trackingRequired}
+                      inputMode={trackingRequired ? "numeric" : "text"}
+                      maxLength={trackingRequired ? 30 : 200}
+                      value={reference}
+                      onChange={(event) => setReference(event.target.value)}
+                      aria-describedby="reference-hint"
+                    />
+                    <p id="reference-hint" className="mt-2 text-xs leading-6 text-muted">
+                      {trackingRequired ? t.bluReferenceRequired : t.referenceHint}
+                    </p>
+                  </div>
+                  {formError && (
+                    <p
+                      id="receipt-error"
+                      role="alert"
+                      className="rounded-xl border border-danger/30 bg-danger/5 p-3 text-sm leading-6 text-danger"
+                    >
+                      {formError}
+                    </p>
+                  )}
+                  <Button
+                    type="submit"
+                    className="min-h-12 w-full"
+                    disabled={busy}
+                    aria-busy={busy}
+                  >
+                    {busy ? (
+                      <>
+                        <Spinner />
+                        {t.uploading}
+                      </>
+                    ) : (
+                      <>
+                        <Mark kind="upload" className="size-4" />
+                        {t.submit}
+                      </>
+                    )}
+                  </Button>
+                </fieldset>
+              </form>
+            </section>
+          )}
+
+          <section className={styles.card}>
+            <div className={styles.deskStepHead}>
+              <div className={styles.deskStepTitle}>
+                <span className={styles.deskStepBadge} aria-hidden="true">
+                  {stepNum(3)}
+                </span>
+                <div>
+                  <h2>{t.reviewStep}</h2>
+                  <p>{order.receipts.length > 0 ? t.yourReceipts : t.statusIntro}</p>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={refetch} disabled={busy}>
+                <RefreshIcon size={15} />
+                {t.refresh}
+              </Button>
+            </div>
+            {order.receipts.length > 0 ? (
+              <ol className="space-y-3">
+                {order.receipts.map((receipt) => (
+                  <li
+                    key={receipt.id}
+                    className="flex items-start justify-between gap-3 rounded-xl border border-border px-4 py-3"
+                  >
+                    <div className="min-w-0 text-xs leading-6">
+                      <p className="font-medium">
+                        {t.uploadedOn} {formatDate(receipt.createdAt, locale)}
+                      </p>
+                      {receipt.reference && (
+                        <p className="break-words text-muted" dir="auto">
+                          {receipt.reference}
+                        </p>
+                      )}
+                    </div>
+                    <Badge
+                      tone={
+                        receipt.status === "APPROVED"
+                          ? "success"
+                          : receipt.status === "REJECTED"
+                            ? "danger"
+                            : "muted"
+                      }
+                    >
+                      {
+                        dict.admin.receipts[
+                          receipt.status.toLowerCase() as "pending" | "approved" | "rejected"
+                        ]
+                      }
+                    </Badge>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-sm text-muted">
+                {fa
+                  ? "پس از ارسال رسید، وضعیت بررسی خودکار یا دستی اینجا نمایش داده می‌شود."
+                  : "After submitting a receipt, its verification status appears here."}
+              </p>
+            )}
+            {reviewing && !additional && (
+              <div className="mt-4">
+                <Button variant="outline" onClick={() => setAdditional(true)}>
+                  {t.anotherReceipt}
+                </Button>
+              </div>
+            )}
+          </section>
+        </div>
       </div>
     </Container>
   );

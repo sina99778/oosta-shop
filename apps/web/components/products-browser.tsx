@@ -114,10 +114,6 @@ export async function ProductsBrowser({
     ["AUTOMATIC", fa ? "خودکار و آنی" : "Automatic"],
     ["MANUAL", fa ? "دستی" : "Manual"],
   ];
-  const selectedCategory = categories?.categories.find((item) => item.slug === category);
-  const categoryName = selectedCategory
-    ? (categoryLabels[selectedCategory.slug] ?? selectedCategory.name)
-    : category || (fa ? "همهٔ محصولات" : "All products");
   return (
     <div className={styles.shop}>
       <section className={styles.intro} aria-labelledby="shop-title">
@@ -135,13 +131,6 @@ export async function ProductsBrowser({
               ? "بگو برای چه کاری نیازش داری؛ پلن‌ها را از نظر قیمت، مدت، ضمانت و شیوهٔ تحویل کنار هم ببین."
               : "Start from what you need, then compare plans by price, duration, warranty and delivery."}
           </p>
-        </div>
-      </section>
-      <div className={styles.content}>
-        <section
-          className={styles.directoryControls}
-          aria-label={fa ? "پالایش محصولات" : "Find and sort products"}
-        >
           <ProductSearchForm locale={locale} className={styles.searchForm}>
             {category && <input type="hidden" name="category" value={category} />}
             {access && <input type="hidden" name="access" value={access} />}
@@ -174,46 +163,38 @@ export async function ProductsBrowser({
               {fa ? "اعمال" : "Apply"}
             </Button>
           </ProductSearchForm>
-          {sort.startsWith("price_") && (
-            <p className="mb-4 text-sm text-muted">
-              {fa
-                ? "مرتب‌سازی بر اساس قیمت‌های مشخص است؛ محصولات نیازمند استعلام در انتها قرار می‌گیرند."
-                : "Listed prices are sorted first. Products priced on request appear last."}
-            </p>
-          )}
-          <details className={styles.categoryDisclosure}>
-            <summary className="oosta-disclosure">
-              <span>{fa ? "دسته‌بندی محصولات" : "Product categories"}</span>
-              <strong>{categoryName}</strong>
-            </summary>
-            <nav
-              className={styles.categories}
-              aria-label={fa ? "دسته‌بندی محصولات" : "Product categories"}
+          <nav
+            className={styles.categoryChips}
+            aria-label={fa ? "دسته‌بندی محصولات" : "Product categories"}
+          >
+            <Link
+              prefetch={false}
+              href={catalogHref("")}
+              aria-current={!category ? "page" : undefined}
             >
-              <Link
-                prefetch={false}
-                href={catalogHref("")}
-                aria-current={!category ? "page" : undefined}
-              >
-                {dict.common.all}
-              </Link>
-              {categories?.categories
-                .filter((c) => c.productCount > 0 || c.slug === category)
-                .map((c) => (
-                  <Link
-                    prefetch={false}
-                    key={c.id}
-                    href={catalogHref(c.slug)}
-                    aria-current={category === c.slug ? "page" : undefined}
-                  >
-                    <span>{categoryLabels[c.slug] ?? c.name}</span>
-                    <span className={styles.categoryCount}>
-                      {c.productCount.toLocaleString(locale)}
-                    </span>
-                  </Link>
-                ))}
-            </nav>
-          </details>
+              {dict.common.all}
+            </Link>
+            {categories?.categories
+              .filter((c) => c.productCount > 0 || c.slug === category)
+              .map((c) => (
+                <Link
+                  prefetch={false}
+                  key={c.id}
+                  href={catalogHref(c.slug)}
+                  aria-current={category === c.slug ? "page" : undefined}
+                >
+                  <span>{categoryLabels[c.slug] ?? c.name}</span>
+                  <span className={styles.categoryCount}>
+                    {c.productCount.toLocaleString(locale)}
+                  </span>
+                </Link>
+              ))}
+          </nav>
+        </div>
+      </section>
+      <div className={styles.content}>
+        <aside className={styles.sidebar} aria-labelledby="filters-title">
+          <h2 id="filters-title">{fa ? "پالایش محصولات" : "Refine products"}</h2>
           <form
             method="get"
             action={`/${locale}/products`}
@@ -259,84 +240,93 @@ export async function ProductsBrowser({
               {fa ? "اعمال فیلترها" : "Apply filters"}
             </Button>
           </form>
-        </section>
-        <div className={styles.results} aria-live="polite">
-          <span>
-            {products &&
-              `${products.pagination.total.toLocaleString(locale)} ${dict.products.results}`}
-            {products && term && (
-              <>
-                {" "}
-                · <bdi>{term}</bdi>
-              </>
+        </aside>
+        <div className={styles.main}>
+          {sort.startsWith("price_") && (
+            <p className="mb-4 text-sm text-muted">
+              {fa
+                ? "مرتب‌سازی بر اساس قیمت‌های مشخص است؛ محصولات نیازمند استعلام در انتها قرار می‌گیرند."
+                : "Listed prices are sorted first. Products priced on request appear last."}
+            </p>
+          )}
+          <div className={styles.results} aria-live="polite">
+            <span>
+              {products &&
+                `${products.pagination.total.toLocaleString(locale)} ${dict.products.results}`}
+              {products && term && (
+                <>
+                  {" "}
+                  · <bdi>{term}</bdi>
+                </>
+              )}
+            </span>
+            {(term || category || sort !== "recommended" || filtered) && (
+              <Link prefetch={false} href={`/${locale}/products`}>
+                {fa ? "پاک کردن فیلترها" : "Clear filters"} ×
+              </Link>
             )}
-          </span>
-          {(term || category || sort !== "recommended" || filtered) && (
-            <Link prefetch={false} href={`/${locale}/products`}>
-              {fa ? "پاک کردن فیلترها" : "Clear filters"} ×
-            </Link>
+          </div>
+          {!products ? (
+            <div className={styles.empty}>
+              <h2>{dict.common.somethingWrong}</h2>
+              <a href={catalogHref(category, page)}>{dict.common.retry}</a>
+            </div>
+          ) : products.items.length ? (
+            <>
+              <div className={styles.productGrid}>
+                {products.items.map((product, index) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    locale={locale}
+                    labels={labels}
+                    priority={index < 3}
+                  />
+                ))}
+              </div>
+              {products.pagination.totalPages > 1 && (
+                <nav
+                  className={styles.pagination}
+                  aria-label={fa ? "صفحه‌بندی محصولات" : "Product pages"}
+                >
+                  {page > 1 && (
+                    <Link prefetch={false} href={catalogHref(category, page - 1)} rel="prev">
+                      {dict.common.previous}
+                    </Link>
+                  )}
+                  <span>
+                    {dict.common.page} {page.toLocaleString(locale)} /{" "}
+                    {products.pagination.totalPages.toLocaleString(locale)}
+                  </span>
+                  {page < products.pagination.totalPages && (
+                    <Link prefetch={false} href={catalogHref(category, page + 1)} rel="next">
+                      {dict.common.next}
+                    </Link>
+                  )}
+                </nav>
+              )}
+            </>
+          ) : page > 1 && products.pagination.total > 0 ? (
+            <div className={styles.empty}>
+              <h2>{fa ? "این صفحه دیگر در دسترس نیست." : "This page is no longer available."}</h2>
+              <Link prefetch={false} href={catalogHref()}>
+                {fa ? "بازگشت به صفحهٔ اول نتایج" : "Return to the first page"}
+              </Link>
+            </div>
+          ) : (
+            <div className={styles.empty}>
+              <h2>{dict.products.empty}</h2>
+              <p>
+                {fa
+                  ? "نام کوتاه‌تری امتحان کن یا دسته‌بندی را تغییر بده."
+                  : "Try a shorter name or a different category."}
+              </p>
+              <Link prefetch={false} href={`/${locale}/products`}>
+                {fa ? "نمایش همهٔ محصولات ←" : "Browse all products →"}
+              </Link>
+            </div>
           )}
         </div>
-        {!products ? (
-          <div className={styles.empty}>
-            <h2>{dict.common.somethingWrong}</h2>
-            <a href={catalogHref(category, page)}>{dict.common.retry}</a>
-          </div>
-        ) : products.items.length ? (
-          <>
-            <div className={styles.productGrid}>
-              {products.items.map((product, index) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  locale={locale}
-                  labels={labels}
-                  priority={index < 3}
-                />
-              ))}
-            </div>
-            {products.pagination.totalPages > 1 && (
-              <nav
-                className={styles.pagination}
-                aria-label={fa ? "صفحه‌بندی محصولات" : "Product pages"}
-              >
-                {page > 1 && (
-                  <Link prefetch={false} href={catalogHref(category, page - 1)} rel="prev">
-                    {dict.common.previous}
-                  </Link>
-                )}
-                <span>
-                  {dict.common.page} {page.toLocaleString(locale)} /{" "}
-                  {products.pagination.totalPages.toLocaleString(locale)}
-                </span>
-                {page < products.pagination.totalPages && (
-                  <Link prefetch={false} href={catalogHref(category, page + 1)} rel="next">
-                    {dict.common.next}
-                  </Link>
-                )}
-              </nav>
-            )}
-          </>
-        ) : page > 1 && products.pagination.total > 0 ? (
-          <div className={styles.empty}>
-            <h2>{fa ? "این صفحه دیگر در دسترس نیست." : "This page is no longer available."}</h2>
-            <Link prefetch={false} href={catalogHref()}>
-              {fa ? "بازگشت به صفحهٔ اول نتایج" : "Return to the first page"}
-            </Link>
-          </div>
-        ) : (
-          <div className={styles.empty}>
-            <h2>{dict.products.empty}</h2>
-            <p>
-              {fa
-                ? "نام کوتاه‌تری امتحان کن یا دسته‌بندی را تغییر بده."
-                : "Try a shorter name or a different category."}
-            </p>
-            <Link prefetch={false} href={`/${locale}/products`}>
-              {fa ? "نمایش همهٔ محصولات ←" : "Browse all products →"}
-            </Link>
-          </div>
-        )}
         <aside className={styles.help}>
           <div>
             <h2>{fa ? "هنوز بین چند ابزار مرددی؟" : "Still deciding between tools?"}</h2>

@@ -584,7 +584,9 @@ assert.match(
   requestOnly,
   /href="\/en\/login\?next=%2Fen%2Fproducts%2Ffixture%3Fplan%3Dfixture-manual"/,
 );
-assert.match(guest, /<h1[^>]*><span[^>]*data-kind="ACCOUNT"/);
+// Imageless products get the Figma monogram tile beside the title, hidden from assistive tech.
+assert.match(guest, /data-kind="mark"><span aria-hidden="true">FI<\/span>/);
+assert.match(guest, /<h1[^>]*><bdi>Fixture<\/bdi><\/h1>/);
 signedIn = true;
 const home = renderToStaticMarkup(
   React.createElement(HomeCatalog, {
@@ -600,7 +602,7 @@ const home = renderToStaticMarkup(
 );
 assert(home.includes("قیمت با استعلام"));
 assert(home.includes("موجود نزد تأمین‌کننده"));
-assert(home.includes("مشاهدهٔ پلن‌ها"));
+assert(home.includes("انتخاب پلن"), "Purchasable cards invite choosing a plan");
 assert.match(home, /href="\/fa\/products\?category=fixture"/);
 assert.doesNotMatch(home, /<select[^>]+name="sort"/);
 assert(!home.includes("Empty category"));
@@ -861,11 +863,12 @@ async function checkHomepage() {
   });
   const params = { q: "  ChatGPT  ", sort: "available", category: "fixture", page: "2" };
   const catalog = renderToStaticMarkup(await ProductsBrowser({ locale: "fa", dict, params }));
-  assert.match(catalog, /<details[^>]*>.*<summary/s);
-  assert(
-    !catalog.includes("<details open"),
-    "Keep the category disclosure collapsed on first render",
+  assert.match(
+    catalog,
+    /<nav[^>]*aria-label="دسته‌بندی محصولات"[^>]*>.*aria-current="page"/s,
+    "Category chips stay visible and mark the current category",
   );
+  assert.match(catalog, /<aside[^>]*aria-labelledby="filters-title"/);
   assert(catalog.includes("دسته‌بندی محصولات"));
   assert.match(catalog, /<button[^>]*type="submit"[^>]*>اعمال<\/button>/);
   assert.match(catalog, /<select[^>]+name="sort"/);
@@ -887,11 +890,12 @@ async function checkHomepage() {
   );
   // Summary, price and the main action come before the plan picker once a plan is chosen.
   assert(
-    detailSource.indexOf("layout.terms") < detailSource.indexOf("layout.change"),
+    detailSource.indexOf("className={layout.purchase}") <
+      detailSource.indexOf("className={layout.choose}"),
     "Show the selected plan summary above the plan picker",
   );
   assert(detailSource.indexOf("onClick={addToCart}") > 0);
-  assert(detailSource.indexOf("onClick={addToCart}") < detailSource.indexOf("layout.change"));
+  assert(detailSource.indexOf("onClick={addToCart}") < detailSource.indexOf("className={layout.choose}"));
   assert(
     !detailSource.includes("href={`/${locale}/support`}"),
     "Pre-purchase help must not need login",

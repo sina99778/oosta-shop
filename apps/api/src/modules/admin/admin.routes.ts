@@ -125,6 +125,11 @@ adminRouter.get(
 // Orders overview
 adminRouter.get("/orders", validate({ query: schemas.ordersQuerySchema }), ctrl.listOrders);
 adminRouter.get("/orders/:id", validate({ params: schemas.idParamSchema }), ctrl.getOrder);
+adminRouter.get(
+  "/orders/:id/delivery-codes",
+  validate({ params: schemas.idParamSchema }),
+  ctrl.getOrderDeliveryCodes,
+);
 
 // Card-to-card receipts (review queue + permanent history)
 adminRouter.get("/receipts", validate({ query: schemas.receiptsQuerySchema }), ctrl.listReceipts);

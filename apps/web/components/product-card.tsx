@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ProductMark } from "@/components/product-mark";
 import { formatPrice } from "@/lib/format";
 import { productImageUrl } from "@/lib/api";
 import { availabilityOf, availabilityLabel } from "@/lib/product-availability";
@@ -15,6 +14,17 @@ export type ProductCardLabels = {
   off: string;
   left: string;
 };
+// Two-letter tile text when a product has no image, e.g. "Claude Pro" → "CP".
+export function monogram(name: string): string {
+  const words = name
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const letters = words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? "").slice(0, 2);
+  return letters.toUpperCase();
+}
+
 export function ProductCard({
   product,
   locale,
@@ -46,43 +56,61 @@ export function ProductCard({
       className={styles.cardLink}
       aria-label={`${fa ? "مشاهدهٔ محصول" : "View product"} ${product.name}`}
     >
-      <article className={styles.productCard}>
-        <div className={styles.cardVisual} data-kind={product.type}>
-          {image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={image}
-              alt=""
-              loading={priority ? "eager" : "lazy"}
-              decoding="async"
-              fetchPriority={priority ? "high" : "low"}
-            />
-          ) : (
-            <ProductMark type={product.type} className={styles.cardMark} />
-          )}
-          {availability === "LOCAL_STOCK" && product.discountPercent > 0 && (
-            <span className={styles.sale}>
-              {product.discountPercent.toLocaleString(fa ? "fa" : "en")}% {labels.off}
-            </span>
-          )}
-        </div>
-        <div className={styles.cardBody}>
-          <span className={styles.stockBadge} data-stock={availability}>
-            {availabilityLabel(product, locale)}
+      <article className={styles.productCard} data-stock={availability}>
+        <div className={styles.cardTop}>
+          <span className={styles.cardTile} data-kind={product.type}>
+            {image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={image}
+                alt=""
+                loading={priority ? "eager" : "lazy"}
+                decoding="async"
+                fetchPriority={priority ? "high" : "low"}
+              />
+            ) : (
+              <span aria-hidden="true">{monogram(product.name)}</span>
+            )}
           </span>
-          <p className={styles.cardMeta}>
-            {categoryNames[product.category.slug] ?? product.category.name}
+          <span className={styles.cardBadges}>
+            <span className={styles.stockBadge} data-stock={availability}>
+              {availabilityLabel(product, locale)}
+            </span>
+            {product.isFeatured && <span className={styles.featured}>{labels.featured}</span>}
+            {availability === "LOCAL_STOCK" && product.discountPercent > 0 && (
+              <span className={styles.sale}>
+                {product.discountPercent.toLocaleString(fa ? "fa" : "en")}% {labels.off}
+              </span>
+            )}
+          </span>
+        </div>
+        <h3>
+          <bdi>{product.name}</bdi>
+        </h3>
+        <p className={styles.cardMeta}>
+          {categoryNames[product.category.slug] ?? product.category.name}
+          {product.pricePlanId && product.priceDurationDays != null
+            ? fa
+              ? ` · ${product.priceDurationDays.toLocaleString("fa")} روز`
+              : ` · ${product.priceDurationDays} ${product.priceDurationDays === 1 ? "day" : "days"}`
+            : product.pricePlanId && availability === "LOCAL_STOCK"
+              ? fa
+                ? " · بدون انقضا"
+                : " · No expiry"
+              : ""}
+        </p>
+        {product.ratingCount > 0 && (
+          <p className={styles.rating} aria-label={`${product.ratingAverage} / 5`}>
+            ★ {product.ratingAverage.toLocaleString(fa ? "fa" : "en")}{" "}
+            <span>({product.ratingCount.toLocaleString(fa ? "fa" : "en")})</span>
           </p>
-          <h3>
-            <bdi>{product.name}</bdi>
-          </h3>
-          {product.isFeatured && <span className={styles.featured}>{labels.featured}</span>}
-          {product.ratingCount > 0 && (
-            <p className={styles.rating} aria-label={`${product.ratingAverage} / 5`}>
-              ★ {product.ratingAverage.toLocaleString(fa ? "fa" : "en")}{" "}
-              <span>({product.ratingCount.toLocaleString(fa ? "fa" : "en")})</span>
-            </p>
-          )}
+        )}
+        {product.lowStock && (
+          <p className={styles.lowStock}>
+            {product.availableStock.toLocaleString(fa ? "fa" : "en")} {labels.left}
+          </p>
+        )}
+        <div className={styles.cardFoot}>
           <div className={styles.cardPrice}>
             {availability === "SUPPLIER_STOCK" && (
               <IndicativePriceLabel price={product.indicativePriceFrom} locale={locale} from />
@@ -90,11 +118,6 @@ export function ProductCard({
             {(availability === "ON_REQUEST" ||
               (availability === "OUT_OF_STOCK" && product.supplierStockUnconfirmed)) && (
               <small>{fa ? "قیمت با استعلام" : "Price on request"}</small>
-            )}
-            {product.lowStock && (
-              <p className={styles.lowStock}>
-                {product.availableStock.toLocaleString(fa ? "fa" : "en")} {labels.left}
-              </p>
             )}
             {availability === "LOCAL_STOCK" && product.priceFrom !== null && (
               <>
@@ -109,24 +132,18 @@ export function ProductCard({
                 <strong>
                   <bdi>{formatPrice(product.priceFrom, product.currency, locale)}</bdi>
                 </strong>
-                {product.pricePlanId && (
-                  <small>
-                    {product.priceDurationDays == null
-                      ? fa
-                        ? "بدون انقضا"
-                        : "No expiry"
-                      : fa
-                        ? `${product.priceDurationDays.toLocaleString("fa")} روز`
-                        : `${product.priceDurationDays} ${product.priceDurationDays === 1 ? "day" : "days"}`}
-                  </small>
-                )}
               </>
             )}
-            <span className={styles.cardAction}>
-              {fa ? "مشاهدهٔ پلن‌ها" : "View plans"}
-              <span aria-hidden="true">{fa ? "←" : "→"}</span>
-            </span>
           </div>
+          <span className={styles.cardAction}>
+            {availability === "OUT_OF_STOCK"
+              ? fa
+                ? "مشاهدهٔ پلن‌ها"
+                : "View plans"
+              : fa
+                ? "انتخاب پلن"
+                : "Choose a plan"}
+          </span>
         </div>
       </article>
     </Link>

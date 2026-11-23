@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/use-api";
 import { QueryError } from "@/components/query-error";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
@@ -13,6 +15,13 @@ import type { Dictionary } from "@/app/[locale]/dictionaries";
 import { AdminReceipts } from "./admin-receipts";
 import { ManualSupplierJobs } from "./manual-supplier-jobs";
 import styles from "./admin.module.css";
+
+type DeliveryCode = {
+  id: string;
+  licenseKey: string | null;
+  giftCardCode: string | null;
+  deliveryInstructions: string | null;
+};
 
 export function AdminOrderDetailView({
   locale,
@@ -53,6 +62,9 @@ export function AdminOrderDetailView({
       ) : order ? (
         <>
           <OrderFacts order={order} locale={locale} dict={dict} />
+          {token && order.paymentStatus === "PAID" && order.items.some((item) => item.fulfilledCount > 0) && (
+            <OrderDeliveryCodes key={order.id} order={order} token={token} locale={locale} dict={dict} />
+          )}
           <ManualSupplierJobs
             key={order.id + ":" + order.paymentStatus}
             locale={locale}
@@ -70,6 +82,79 @@ export function AdminOrderDetailView({
         </>
       ) : null}
     </div>
+  );
+}
+
+function OrderDeliveryCodes({
+  order,
+  token,
+  locale,
+  dict,
+}: {
+  order: AdminOrderDetail;
+  token: string;
+  locale: Locale;
+  dict: Dictionary;
+}) {
+  const [visible, setVisible] = useState(false);
+  const fa = locale === "fa";
+  const { data, loading, error, refetch } = useApi<{ items: { id: string; codes: DeliveryCode[] }[] }>(
+    visible ? `/admin/orders/${order.id}/delivery-codes` : null,
+    token,
+  );
+  const items = data?.items.filter((item) => item.codes.length > 0) ?? [];
+
+  return (
+    <section className={styles.panel} aria-labelledby="order-delivery-codes">
+      <header className={styles.panelHeader}>
+        <h2 id="order-delivery-codes">{fa ? "کد و راهنمای تحویل" : "Delivery codes and instructions"}</h2>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-expanded={visible}
+          aria-controls="order-delivery-codes-content"
+          onClick={() => setVisible(!visible)}
+        >
+          {visible ? (fa ? "پنهان کردن" : "Hide") : fa ? "نمایش کد تحویل" : "Show delivery codes"}
+        </Button>
+      </header>
+      <div id="order-delivery-codes-content" hidden={!visible}>
+        {visible && (loading ? (
+          <p role="status">{dict.common.loading}</p>
+        ) : error ? (
+          <QueryError message={dict.common.somethingWrong} onRetry={refetch} />
+        ) : items.length ? (
+          <ul className="grid gap-3">
+            {items.map(({ id, codes }) => (
+              <li key={id} className={styles.receipt}>
+                <h3 className="mb-2 font-bold" dir="auto">
+                  {order.items.find((item) => item.id === id)?.product.name}
+                </h3>
+                {codes.map((code) => (
+                  <dl key={code.id} className="grid gap-2">
+                    {[
+                      [fa ? "کد فعال‌سازی" : "License key", code.licenseKey],
+                      [fa ? "کد هدیه" : "Gift card code", code.giftCardCode],
+                      [fa ? "متن تحویل" : "Delivery note", code.deliveryInstructions],
+                    ].map(([label, value]) => value && (
+                      <div key={label}>
+                        <dt className="text-sm">{label}</dt>
+                        <dd dir="auto" className="select-all whitespace-pre-wrap [overflow-wrap:anywhere]">
+                          {value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                ))}
+              </li>
+            ))}
+          </ul>
+        ) : data ? (
+          <p role="status">{fa ? "کد یا راهنمای تحویلی برای این سفارش ثبت نشده است." : "No delivery code or note was recorded."}</p>
+        ) : null)}
+      </div>
+    </section>
   );
 }
 

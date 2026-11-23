@@ -10,6 +10,8 @@ import type { IndicativePrice } from "@/lib/types";
 import { useApi } from "@/lib/use-api";
 import { IndicativePriceLabel } from "./indicative-price";
 import { Button } from "./ui/button";
+import { AlertIcon, LineTile, TrashIcon } from "./checkout-ui";
+import styles from "./checkout.module.css";
 
 type PublicPlan = {
   planId: string;
@@ -44,23 +46,22 @@ export function GuestCartItems({ locale, signedIn }: { locale: Locale; signedIn:
     };
   }, [hasEntries, refetch]);
 
-  if (!hasEntries)
-    return signedIn ? null : (
-      <p className="rounded-2xl border border-border bg-card p-5">
-        {fa ? "سبد خریدت خالی است." : "Your cart is empty."}
-      </p>
-    );
+  if (!hasEntries) return null;
   const available = new Map(data?.items.map((plan) => [plan.planId, plan]));
   return (
-    <section className="space-y-3" aria-label={fa ? "سبد مهمان" : "Guest cart"}>
+    <div aria-label={signedIn ? undefined : fa ? "سبد مهمان" : "Guest cart"}>
       {signedIn && (
-        <h2 className="text-xl font-semibold">
+        <h2 className="text-lg font-bold">
           {fa ? "اقلام باقی‌مانده در این مرورگر" : "Items remaining in this browser"}
         </h2>
       )}
-      {loading && <p role="status">{fa ? "در حال بررسی اقلام سبد…" : "Checking your items…"}</p>}
+      {loading && (
+        <p role="status" className="mt-3 text-sm text-muted">
+          {fa ? "در حال بررسی اقلام سبد…" : "Checking your items…"}
+        </p>
+      )}
       {error && (
-        <p role="alert" className="flex flex-wrap items-center gap-3">
+        <p role="alert" className="mt-3 flex flex-wrap items-center gap-3 text-sm">
           {fa ? "خواندن قیمت و موجودی ممکن نشد." : "Price and availability could not be loaded."}
           <Button type="button" variant="outline" onClick={refetch}>
             {fa ? "تلاش دوباره" : "Retry"}
@@ -68,96 +69,88 @@ export function GuestCartItems({ locale, signedIn }: { locale: Locale; signedIn:
         </p>
       )}
       {removeError && (
-        <p role="alert">
+        <p role="alert" className="mt-3 text-sm">
           {fa
             ? "تغییر سبد در این مرورگر ذخیره نشد."
             : "Changes could not be saved in this browser."}
         </p>
       )}
-      {entries.map(({ planId, addedAt }) => {
-        const plan = available.get(planId);
-        const expiry = new Date(addedAt + guestCartLifetime).toISOString();
-        return (
-          <article key={planId} className="rounded-2xl border border-border bg-card p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              {plan ? (
-                <div>
-                  <Link
-                    className="font-semibold text-primary"
-                    href={{
-                      pathname: `/${locale}/products/${plan.slug}`,
-                      query: { plan: planId },
-                    }}
-                  >
-                    <bdi>{plan.product}</bdi>
-                  </Link>
-                  <p className="mt-1 break-words text-sm text-muted">
-                    <bdi>{planDisplayLabel(plan.label, fa)}</bdi>
+      <ul className={styles.lines}>
+        {entries.map(({ planId, addedAt }) => {
+          const plan = available.get(planId);
+          const expiry = new Date(addedAt + guestCartLifetime).toISOString();
+          const name = plan?.product ?? (fa ? "پلن ذخیره‌شده" : "Saved plan");
+          return (
+            <li key={planId} className={styles.line}>
+              <LineTile name={name} />
+              <div className={styles.lineInfo}>
+                {plan ? (
+                  <>
+                    <Link
+                      href={{
+                        pathname: `/${locale}/products/${plan.slug}`,
+                        query: { plan: planId },
+                      }}
+                    >
+                      <bdi>{plan.product}</bdi>
+                    </Link>
+                    <p>
+                      <bdi>{planDisplayLabel(plan.label, fa)}</bdi>
+                    </p>
+                  </>
+                ) : (
+                  <h3>
+                    {data
+                      ? fa
+                        ? "این پلن دیگر در فروشگاه فعال نیست."
+                        : "This plan is no longer listed."
+                      : name}
+                  </h3>
+                )}
+                {plan?.availability === "OUT_OF_STOCK" && (
+                  <p className={styles.lineAlert}>
+                    <AlertIcon size={14} />
+                    {fa ? "در حال حاضر ناموجود است." : "Currently unavailable."}
                   </p>
-                </div>
-              ) : (
-                <p>
-                  {data
-                    ? fa
-                      ? "این پلن دیگر در فروشگاه فعال نیست."
-                      : "This plan is no longer listed."
-                    : fa
-                      ? "پلن ذخیره‌شده"
-                      : "Saved plan"}
-                </p>
-              )}
-              {plan?.amount != null && (
-                <p className="font-semibold tabular-nums">
-                  {formatPrice(plan.amount, plan.currency, locale)}
-                </p>
-              )}
-              {plan && ["SUPPLIER_STOCK", "ON_REQUEST"].includes(plan.availability) && (
-                <div>
-                  <IndicativePriceLabel price={plan.indicativePrice} locale={locale} />
-                </div>
-              )}
-            </div>
-            {plan?.availability === "OUT_OF_STOCK" && (
-              <p className="mt-2 text-sm text-muted">
-                {fa ? "در حال حاضر ناموجود است." : "Currently unavailable."}
-              </p>
-            )}
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-muted">
-                {fa ? "مهلت سبد" : "Cart expires"} ·{" "}
-                <time dateTime={expiry}>
-                  {formatDate(expiry, locale)}
-                </time>
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  try {
-                    removeGuestCartItem(planId, addedAt);
-                    setRemoveError(false);
-                  } catch {
-                    setRemoveError(true);
-                  }
-                }}
-              >
-                {fa ? "حذف از سبد" : "Remove"}
-              </Button>
-            </div>
-          </article>
-        );
-      })}
-      {!signedIn && (
-        <Link
-          className="oosta-button inline-flex min-h-11 items-center px-5"
-          href={{
-            pathname: `/${locale}/login`,
-            query: { next: `/${locale}/cart` },
-          }}
-        >
-          {fa ? "ورود برای تکمیل خرید" : "Sign in to check out"}
-        </Link>
-      )}
-    </section>
+                )}
+              </div>
+              <div className={styles.lineEnd}>
+                {plan?.amount != null && (
+                  <span className={styles.linePrice}>
+                    {formatPrice(plan.amount, plan.currency, locale)}
+                  </span>
+                )}
+                {plan && ["SUPPLIER_STOCK", "ON_REQUEST"].includes(plan.availability) && (
+                  <span className="text-sm">
+                    <IndicativePriceLabel price={plan.indicativePrice} locale={locale} />
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label={fa ? `حذف ${name} از سبد` : `Remove ${name}`}
+                  onClick={() => {
+                    try {
+                      removeGuestCartItem(planId, addedAt);
+                      setRemoveError(false);
+                    } catch {
+                      setRemoveError(true);
+                    }
+                  }}
+                >
+                  <TrashIcon />
+                </button>
+              </div>
+              <div className={styles.lineActions}>
+                <span>
+                  {fa ? "مهلت سبد" : "Cart expires"} ·{" "}
+                  <time dateTime={expiry}>{formatDate(expiry, locale)}</time>
+                </span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

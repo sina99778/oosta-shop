@@ -2,6 +2,7 @@
 
 import type { Request, Response } from "express";
 import * as admin from "./admin.service";
+import { AppError } from "../../utils/httpError";
 import { getAttachment, sendAttachment } from "../tickets/tickets.service";
 import type {
   BulkInventoryInput,
@@ -169,6 +170,12 @@ export async function listOrders(_req: Request, res: Response): Promise<void> {
 }
 export async function getOrder(req: Request, res: Response): Promise<void> {
   res.json({ order: await admin.getOrder(String(req.params.id)) });
+}
+export async function getOrderDeliveryCodes(req: Request, res: Response): Promise<void> {
+  if (req.authMethod === "api-key") {
+    throw new AppError(403, "FORBIDDEN", "An administrator session is required");
+  }
+  res.json({ items: await admin.getOrderDeliveryCodes(String(req.params.id)) });
 }
 
 // Card-to-card receipts
