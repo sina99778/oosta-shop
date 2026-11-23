@@ -30,6 +30,9 @@ const sessions = [
   },
 ];
 let sessionData = { sessions, currentTracked: true };
+let cartData = { lines: [] };
+let guestEntries = [];
+let authState = { token: "synthetic", user: { role: "USER", name: "Synthetic" } };
 const originalLoad = Module._load;
 Module._load = function (request, ...args) {
   if (request.endsWith(".module.css"))
@@ -37,14 +40,30 @@ Module._load = function (request, ...args) {
   if (request === "@/lib/use-api")
     return {
       useApi: (url) => ({
-        data: url === "/auth/sessions" ? sessionData : null,
+        data: url === "/auth/sessions" ? sessionData : url === "/cart" ? cartData : null,
         loading: false,
         error: null,
         refetch: () => {},
       }),
     };
   if (request === "@/lib/auth")
-    return { useAuth: () => ({ token: "synthetic", logoutAll: async () => {} }) };
+    return {
+      useAuth: () => ({
+        ...authState,
+        loading: false,
+        sessionError: null,
+        guestCartTransfer: null,
+        retrySession: () => {},
+        retryGuestCartTransfer: () => {},
+        logoutAll: async () => {},
+      }),
+    };
+  if (request === "@/lib/guest-cart")
+    return {
+      useGuestCart: () => guestEntries,
+      guestCartLifetime: 24 * 60 * 60 * 1000,
+      removeGuestCartItem: () => {},
+    };
   if (request === "next/navigation")
     return { useRouter: () => ({ replace: () => {}, push: () => {} }), useParams: () => ({}) };
   return originalLoad.call(this, request, ...args);
@@ -56,6 +75,7 @@ const { looksPromotional } = require("../apps/web/components/admin/admin-reviews
 const { readExtraFilters } = require("../apps/web/components/products-browser.tsx");
 const { buildPrompt } = require("../apps/web/lib/prompt-lab.ts");
 const { PromptLab } = require("../apps/web/components/prompt-lab.tsx");
+const { ShoppingCart } = require("../apps/web/components/shopping-cart.tsx");
 Module._load = originalLoad;
 
 assert.equal(buildPrompt("   ", "extra", "auto", "fa"), null);
@@ -78,6 +98,57 @@ const labHtml = renderToStaticMarkup(React.createElement(PromptLab, { locale: "f
 assert.match(labHtml, /id="lab-kind"/);
 assert.match(labHtml, /<button[^>]*disabled[^>]*>کپی پرامپت<\/button>/);
 assert(!labHtml.includes("حداکثر ۱۵۰ کلمه"));
+
+// ---------------- Cart (Figma checkout layout) ----------------
+const cartLine = (id, product, amount, extra = {}) => ({
+  id,
+  product,
+  slug: product.toLowerCase(),
+  label: "1 Month",
+  notice: null,
+  currency: "IRR",
+  amount,
+  savedAmount: amount,
+  expiresAt: "2026-11-24T08:00:00Z",
+  supplier: false,
+  ...extra,
+});
+cartData = {
+  lines: [
+    cartLine("line-a", "ChatGPT", "14900000"),
+    cartLine("line-b", "Gemini", "9900000", { notice: "PRICE_INCREASE" }),
+    cartLine("line-s", "Canva", "5000000", { supplier: true }),
+  ],
+};
+const cart = renderToStaticMarkup(React.createElement(ShoppingCart, { locale: "fa" }));
+assert.match(cart, /<li[^>]*aria-current="step"[^>]*>(?:(?!<\/li>)[\s\S])*سبد خرید/);
+assert.match(cart, /۳ قلم/);
+// Store lines of one currency share one invoice; the supplier line keeps its own.
+assert.match(cart, /href="\/fa\/cart\/review\/line-a\?with=line-b"[^>]*>بازبینی فاکتور ۲ کالا/);
+assert.match(cart, /href="\/fa\/cart\/review\/line-s"[^>]*>بازبینی فاکتور جداگانه/);
+assert.match(cart, /۲٬۴۸۰٬۰۰۰ تومان/, "Store subtotal sums only shared-invoice lines");
+assert.match(cart, /aria-label="حذف ChatGPT از سبد"/);
+assert.match(cart, /دست‌کم ۱۰۰ هزار تومان افزایش/);
+assert.doesNotMatch(cart, /ورود برای تکمیل خرید/);
+cartData = { lines: [] };
+const emptyCart = renderToStaticMarkup(React.createElement(ShoppingCart, { locale: "fa" }));
+assert.match(emptyCart, /سبد خریدت خالی است/);
+assert.match(emptyCart, /href="\/fa\/products"[^>]*>رفتن به فروشگاه/);
+assert.doesNotMatch(emptyCart, /\/cart\/review\//);
+// Admins never get a checkout action, even with lines returned.
+authState = { token: "synthetic-admin", user: { role: "ADMIN", name: "Admin" } };
+cartData = { lines: [cartLine("line-a", "ChatGPT", "14900000")] };
+const adminCart = renderToStaticMarkup(React.createElement(ShoppingCart, { locale: "fa" }));
+assert.match(adminCart, /برای خرید وارد حساب مشتری شو/);
+assert.doesNotMatch(adminCart, /\/cart\/review\//);
+// Guests see their saved items with a sign-in step instead of an invoice link.
+authState = { token: null, user: null };
+guestEntries = [{ planId: "plan-a", addedAt: Date.parse("2026-11-23T08:00:00Z") }];
+const guestCart = renderToStaticMarkup(React.createElement(ShoppingCart, { locale: "fa" }));
+assert.match(guestCart, /href="\/fa\/login\?next=%2Ffa%2Fcart"[^>]*>ورود برای تکمیل خرید/);
+assert.doesNotMatch(guestCart, /\/cart\/review\//);
+authState = { token: "synthetic", user: { role: "USER", name: "Synthetic" } };
+guestEntries = [];
 
 // ---------------- Plan comparison ----------------
 const plan = (id, availability, price, extra = {}) => ({
@@ -181,5 +252,5 @@ assert.deepEqual(readExtraFilters({ access: ["TEAM"], delivery: "admin", inStock
 });
 
 console.log(
-  "PASS: plan comparison, device sessions, ticket screenshots, review hints and catalog filters",
+  "PASS: cart layout, plan comparison, device sessions, ticket screenshots, review hints and catalog filters",
 );

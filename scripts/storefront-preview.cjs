@@ -48,6 +48,7 @@ const products = sampleProducts.map(([slug, name, type, categoryIndex, price, in
 const server = http.createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "http://127.0.0.1:3101");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   if (req.method === "OPTIONS") return res.writeHead(204).end();
   const url = new URL(req.url, "http://127.0.0.1:4401");
@@ -57,6 +58,11 @@ const server = http.createServer((req, res) => {
       .writeHead(405)
       .end(JSON.stringify({ error: { code: "PREVIEW_ONLY", message: "Read-only preview" } }));
   let body;
+  // The preview has no accounts: answer as signed out so guest flows render.
+  if (url.pathname === "/auth/me")
+    return res
+      .writeHead(401)
+      .end(JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Signed out" } }));
   if (url.pathname === "/site-settings")
     body = {
       settings: {
@@ -123,6 +129,23 @@ const server = http.createServer((req, res) => {
           ],
         },
       };
+  } else if (url.pathname === "/cart/guest-preview") {
+    // Read-only prices for guest-cart plan IDs saved in this browser (sample data only).
+    const ids = (url.searchParams.get("planIds") || "").split(",").slice(0, 10);
+    body = {
+      items: products
+        .filter((product) => ids.includes(`plan-${product.id}`))
+        .map((product) => ({
+          planId: `plan-${product.id}`,
+          product: product.name,
+          slug: product.slug,
+          label: "پلن نمونه",
+          availability: product.inStock ? "LOCAL_STOCK" : "OUT_OF_STOCK",
+          currency: "IRR",
+          amount: sampleProducts.find(([slug]) => slug === product.slug)[4],
+          indicativePrice: null,
+        })),
+    };
   } else if (url.pathname === "/payments/config")
     body = { online: false, cardToCard: false, card: null };
   else if (url.pathname === "/blog") body = { posts: [] };
